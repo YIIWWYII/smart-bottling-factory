@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "entry_desc", "value": "装瓶产线监控、管理和工位控制" },
+    { "name": "internet_reason", "value": "访问产线后端接口和实时状态通道" }
+  ]
+}

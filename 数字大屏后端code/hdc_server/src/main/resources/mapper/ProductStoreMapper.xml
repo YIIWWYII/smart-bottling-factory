@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.archermind.hdc.mapper.ProductStoreMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.archermind.hdc.entity.ProductStore">
+        <id column="id" property="id" />
+        <result column="bar_code" property="barCode" />
+        <result column="action" property="action" />
+        <result column="seq" property="seq" />
+        <result column="date" property="date" />
+        <result column="device_sn" property="deviceSn" />
+        <result column="group_id" property="groupId" />
+        <result column="create_time" property="createTime" />
+        <result column="update_time" property="updateTime" />
+        <result column="delete_flag" property="deleteFlag" />
+    </resultMap>
+
+    <resultMap id="ResultMapWithTypeAndModel" type="com.archermind.hdc.entity.ProductStore">
+        <id column="id" property="id" />
+        <result column="bar_code" property="barCode" />
+        <result column="action" property="action" />
+        <result column="seq" property="seq" />
+        <result column="date" property="date" />
+        <result column="device_sn" property="deviceSn" />
+        <result column="group_id" property="groupId" />
+        <result column="create_time" property="createTime" />
+        <result column="update_time" property="updateTime" />
+        <result column="delete_flag" property="deleteFlag" />
+        <association property="type">
+            <result column="pt_name" property="name"/>
+            <result column="pt_code" property="code"/>
+        </association>
+        <association property="model">
+            <result column="pm_name" property="name"/>
+            <result column="pm_code" property="code"/>
+        </association>
+    </resultMap>
+
+    <resultMap id="ResultMapWithProduct" type="com.archermind.hdc.entity.ProductStore">
+        <id column="id" property="id" />
+        <result column="bar_code" property="barCode" />
+        <result column="action" property="action" />
+        <result column="seq" property="seq" />
+        <result column="date" property="date" />
+        <result column="device_sn" property="deviceSn" />
+        <result column="group_id" property="groupId" />
+        <result column="create_time" property="createTime" />
+        <result column="update_time" property="updateTime" />
+        <result column="delete_flag" property="deleteFlag" />
+        <association property="product">
+            <result column="type_code" property="typeCode"/>
+            <result column="model_code" property="modelCode"/>
+        </association>
+    </resultMap>
+
+
+    <select id="findProductPage" resultMap="ResultMapWithTypeAndModel">
+        select ps.bar_code , ps.action, ps.seq , ps.date ,
+               pt.name as pt_name, pt.code pt_code,
+               pm.name as pm_name, pm.code pm_code
+        from product_store ps
+        left join product p on ps.bar_code=p.bar_code
+        left join hdc.product_type pt on p.type_code = pt.code
+        left join hdc.product_model pm on p.model_code = pm.code
+        ${ew.customSqlSegment}
+
+    </select>
+
+    <select id="findProductList" resultMap="ResultMapWithProduct">
+        select ps.id, ps.bar_code , ps.action, ps.seq , ps.date ,
+               p.type_code,p.model_code
+#                pt.name as pt_name, pt.code pt_code,
+#                pm.name as pm_name, pm.code pm_code
+        from product_store ps
+        left join product p on ps.bar_code=p.bar_code
+#         left join hdc.product_type pt on p.type_code = pt.code
+#         left join hdc.product_model pm on p.model_code = pm.code
+        ${ew.customSqlSegment}
+
+    </select>
+    <select id="selectByBarCode" resultType="com.archermind.hdc.entity.ProductStore">
+        select ps.bar_code , ps.action, ps.seq , ps.date ,
+        pt.name as pt_name, pt.code pt_code,
+        pm.name as pm_name, pm.code pm_code
+        from product_store ps
+        left join product p on ps.bar_code=p.bar_code
+        left join hdc.product_type pt on p.type_code = pt.code
+        left join hdc.product_model pm on p.model_code = pm.code
+        where p.bar_code = #{barCode}
+    </select>
+
+</mapper>

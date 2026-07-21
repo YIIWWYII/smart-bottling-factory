@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.archermind.hdc.mapper.MachineFailureMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.archermind.hdc.entity.MachineFailure">
+        <id column="id" property="id" />
+        <result column="group_id" property="groupId" />
+        <result column="machine_type" property="machineType" />
+        <result column="machine_name" property="machineName" />
+        <result column="failure_name" property="failureName" />
+        <result column="failure_level" property="failureLevel" />
+        <result column="failure_time" property="failureTime" />
+        <result column="failure_recover_time" property="failureRecoverTime" />
+        <result column="create_time" property="createTime" />
+    </resultMap>
+
+</mapper>

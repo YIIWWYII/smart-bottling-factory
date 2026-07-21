@@ -1,0 +1,6 @@
+export const KEY_TOKEN = 'hdc2024token'
+export const KEY_ID = 'hdc2024Id'
+export const KEY_ROLE = 'keyRole'
+export const KEY_STORE_ID = 'keyStoreId'
+export const KEY_CITY = 'keyCityId'
+export const KEY_REGION = 'keyRegionId'

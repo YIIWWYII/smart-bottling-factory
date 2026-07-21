@@ -1,0 +1,100 @@
+-- create schema ai_check;
+-- create table if not exists product --设备信息表
+-- (
+--     id         serial    not null,
+--     bar_code   text               default null,--条形码编号
+--     type_code  text      not null,--产品类型码
+--     model_code text      not null,--产品型号码
+--     path       text               default null,--最后一次的图片路径
+--     create_at  timestamp not null DEFAULT CURRENT_TIMESTAMP,
+--     PRIMARY KEY (id, bar_code)
+-- );
+-- COMMENT ON COLUMN "hdc"."product"."bar_code" IS '条形码编号';
+-- COMMENT ON COLUMN "hdc"."product"."type_code" IS '产品类型码';
+-- COMMENT ON COLUMN "hdc"."product"."model_code" IS '产品型号码';
+-- COMMENT ON COLUMN "hdc"."product"."path" IS '最后一次图片路径';
+
+
+-- create table if not exists product_type --产品类型信息表
+-- (
+--     code       text      not null,--类型code
+--     name       text               default null,--类型名称
+--     bar_prefix text               default null,--条码前缀
+--     create_at  timestamp not null DEFAULT CURRENT_TIMESTAMP,
+--     PRIMARY KEY (code)
+-- );
+-- COMMENT ON COLUMN "hdc"."product_type"."code" IS '类型code';
+-- COMMENT ON COLUMN "hdc"."product_type"."name" IS '类型名称';
+-- COMMENT ON COLUMN "hdc"."product_type"."bar_prefix" IS '条码前缀';
+
+-- create table if not exists product_model --产品型号信息表
+-- (
+--     code      text      not null,--型号code
+--     name      text               default null,--型号名称
+--     type_code text      not null,--产品类型码
+--     create_at timestamp not null DEFAULT CURRENT_TIMESTAMP,
+--     PRIMARY KEY (code)
+-- );
+-- COMMENT ON COLUMN "hdc"."product_model"."code" IS '型号code';
+-- COMMENT ON COLUMN "hdc"."product_model"."name" IS '型号名称';
+-- COMMENT ON COLUMN "hdc"."product_model"."type_code" IS '产品类型码';
+
+-- create table if not exists product_store --设备信息表
+-- (
+--     id        serial    not null,
+--     bar_code  text               default null,--条形码编号
+--     action    int                default 0,--0出库，1入库
+--     seq       int                default null,--批次，一次保存使用相同的一个值
+--     date      timestamp,                      --扫描时间
+--     create_at timestamp not null DEFAULT CURRENT_TIMESTAMP,
+--     PRIMARY KEY (id)
+-- );
+-- COMMENT ON COLUMN "hdc"."product_store"."bar_code" IS '条形码编号';
+-- COMMENT ON COLUMN "hdc"."product_store"."action" IS '0出库，1入库';
+-- COMMENT ON COLUMN "hdc"."product_store"."seq" IS '批次，一次保存使用相同的一个值';
+-- COMMENT ON COLUMN "hdc"."product_store"."date" IS '扫描时间';
+
+
+-- create table if not exists device --设备信息查询表
+-- (
+--     id             serial    not null,
+--     sn             text      not null,--设备唯一标识
+--     type           text               default null,--设备类型：adapter、pad、pda
+--     state          int                default 0,--0离线，1在线
+--     last_online_at timestamp          default null,--最后一次上报在线的时间
+--     create_at      timestamp not null DEFAULT CURRENT_TIMESTAMP,
+--     PRIMARY KEY (id)
+-- );
+-- COMMENT ON COLUMN "hdc"."device"."sn" IS '设备唯一编码';
+-- COMMENT ON COLUMN "hdc"."device"."type" IS '设备类型：adapter、pad、pda';
+-- COMMENT ON COLUMN "hdc"."device"."state" IS '0：离线；1：在线';
+-- COMMENT ON COLUMN "hdc"."device"."last_online_at" IS '最后一次上报在线时间';
+
+-- CREATE TABLE "hdc"."group" (
+--    "id" int4 NOT NULL,
+--    "name" varchar(255) COLLATE "pg_catalog"."default",
+--    "code" varchar(255) COLLATE "pg_catalog"."default",
+--    "begin_time" timestamp(6),
+--    "end_time" timestamp(6),
+--    "use_flag" int2,
+--    "create_time" timestamp(6),
+--    "update_time" timestamp(6),
+--    CONSTRAINT "group_pkey" PRIMARY KEY ("id")
+-- );
+-- COMMENT ON COLUMN "hdc"."group"."name" IS '分组名称';
+-- COMMENT ON COLUMN "hdc"."group"."code" IS '进组口令';
+-- COMMENT ON COLUMN "hdc"."group"."begin_time" IS '开始时间';
+-- COMMENT ON COLUMN "hdc"."group"."end_time" IS '结束时间';
+-- COMMENT ON COLUMN "hdc"."group"."use_flag" IS '是否有效';
+-- COMMENT ON COLUMN "hdc"."group"."create_time" IS '创建时间';
+-- COMMENT ON COLUMN "hdc"."group"."update_time" IS '更新时间';
+-- COMMENT ON TABLE "hdc"."group" IS '分组，用于多地或多生产线使用';
+
+-- CREATE TABLE "hdc"."group_device" (
+--   "id" int4 NOT NULL,
+--   "group_id" int4,
+--   "device_sn" varchar(40) COLLATE "pg_catalog"."default",
+--   CONSTRAINT "group_device_pkey" PRIMARY KEY ("id")
+-- );
+-- COMMENT ON COLUMN "hdc"."group_device"."group_id" IS '分组id';
+-- COMMENT ON COLUMN "hdc"."group_device"."device_sn" IS '终端设备唯一标识';

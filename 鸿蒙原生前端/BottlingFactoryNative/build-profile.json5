@@ -1,0 +1,8 @@
+{
+  "app": {
+    "signingConfigs": [],
+    "products": [{ "name": "default", "runtimeOS": "HarmonyOS" }],
+    "buildModeSet": [{ "name": "debug" }, { "name": "release" }]
+  },
+  "modules": [{ "name": "entry", "srcPath": "./entry" }]
+}

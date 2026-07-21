@@ -1,0 +1,43 @@
+# Local runtime and browser test data
+.runtime/
+.playwright-cli/
+output/
+
+# Dependencies
+**/node_modules/
+**/oh_modules/
+
+# Build outputs
+**/target/
+**/target-backup-*/
+**/dist/
+**/build/
+**/digitallargescreen/
+**/.hvigor/
+*.jar
+*.war
+*.zip
+
+# IDE and operating system files
+**/.idea/
+**/.vscode/
+*.iml
+.DS_Store
+._*
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.pid
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# Local environment and database files
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3

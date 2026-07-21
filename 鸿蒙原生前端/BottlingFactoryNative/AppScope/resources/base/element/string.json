@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "app_name", "value": "智慧装瓶产线" },
+    { "name": "app_desc", "value": "生产运营与工位控制平台" }
+  ]
+}

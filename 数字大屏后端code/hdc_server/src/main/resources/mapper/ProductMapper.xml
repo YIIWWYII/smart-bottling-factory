@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.archermind.hdc.mapper.ProductMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.archermind.hdc.entity.Product">
+        <id column="id" property="id" />
+        <result column="bar_code" property="barCode" />
+        <result column="type_code" property="typeCode" />
+        <result column="model_code" property="modelCode" />
+        <result column="path" property="path" />
+        <result column="device_sn" property="deviceSn" />
+        <result column="group_id" property="groupId" />
+        <result column="create_time" property="createTime" />
+        <result column="update_time" property="updateTime" />
+        <result column="delete_flag" property="deleteFlag" />
+    </resultMap>
+
+    <resultMap id="ResultMapWithTypeAndModel" type="com.archermind.hdc.entity.Product">
+        <id column="id" property="id" />
+        <result column="bar_code" property="barCode" />
+        <result column="type_code" property="typeCode" />
+        <result column="model_code" property="modelCode" />
+        <result column="path" property="path" />
+        <result column="device_sn" property="deviceSn" />
+        <result column="group_id" property="groupId" />
+        <result column="create_time" property="createTime" />
+        <result column="update_time" property="updateTime" />
+        <result column="delete_flag" property="deleteFlag" />
+        <association property="type">
+            <result column="pt_name" property="name"/>
+        </association>
+        <association property="model">
+            <result column="pm_name" property="name"/>
+        </association>
+    </resultMap>
+
+    <select id="pageByCondition" resultMap="ResultMapWithTypeAndModel">
+        select p.*,pt.name pt_name,pm.name pm_name
+        from product p
+        left join hdc.product_type pt on p.type_code = pt.code
+        left join hdc.product_model pm on p.model_code = pm.code
+        ${ew.customSqlSegment}
+    </select>
+
+</mapper>

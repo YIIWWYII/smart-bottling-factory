@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.archermind.hdc.mapper.GroupDeviceMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.archermind.hdc.entity.GroupDevice">
+        <id column="id" property="id" />
+        <result column="group_id" property="groupId" />
+        <result column="device_sn" property="deviceSn" />
+        <result column="create_time" property="createTime" />
+        <result column="update_time" property="updateTime" />
+        <result column="delete_flag" property="deleteFlag" />
+    </resultMap>
+
+    <resultMap id="DetailResultMap" type="com.archermind.hdc.entity.GroupDevice">
+        <id column="id" property="id" />
+        <result column="group_id" property="groupId" />
+        <result column="device_sn" property="deviceSn" />
+        <result column="create_time" property="createTime" />
+        <result column="update_time" property="updateTime" />
+        <result column="delete_flag" property="deleteFlag" />
+        <association property="groupInfo" javaType="com.archermind.hdc.dto.GroupDto">
+            <id column="g_id" property="id" />
+            <result column="g_name" property="name" />
+            <result column="g_useFlag" property="useFlag" />
+            <result column="g_beginTime" property="beginTime" />
+            <result column="g_endTime" property="endTime" />
+            <result column="g_cityId" property="cityId" />
+            <result column="g_cityName" property="cityName" />
+        </association>
+        <association property="deviceInfo" javaType="com.archermind.hdc.dto.DeviceDto">
+            <result column="d_sn" property="sn" />
+            <result column="d_type" property="type" />
+            <result column="d_state" property="state" />
+        </association>
+    </resultMap>
+    
+    
+    <select id="selectWithDetails" resultMap="DetailResultMap">
+        select gd.*,
+               g.id g_id,g.name g_name, g.use_flag g_useFlag,g.begin_time g_beginTime,g.end_time g_endTime,g.city_id g_cityId,g.city_name g_cityName,
+               d.sn d_sn, d.type d_type, d.state d_state
+        from group_device gd
+        left join hdc.`group` g on g.id = gd.group_id
+        left join hdc.`device` d on d.sn = gd.device_sn
+        where device_sn = #{deviceSn}
+          and g.use_flag = true
+          and g.delete_flag = false
+          and d.delete_flag = false
+          and gd.delete_flag = false
+          and (now() between g.begin_time and g.end_time);
+    </select>
+    <select id="listWithDetails" resultMap="DetailResultMap">
+        select gd.*,
+               g.id g_id,g.name g_name, g.use_flag g_useFlag,g.begin_time g_beginTime,g.end_time g_endTime,g.city_id g_cityId,g.city_name g_cityName,
+               d.sn d_sn, d.type d_type, d.state d_state
+        from group_device gd
+        left join hdc.`group` g on g.id = gd.group_id
+        left join hdc.`device` d on d.sn = gd.device_sn
+        ${ew.customSqlSegment}
+    </select>
+
+</mapper>

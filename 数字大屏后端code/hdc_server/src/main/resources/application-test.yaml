@@ -1,0 +1,50 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/hdc?characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    type: com.zaxxer.hikari.HikariDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: 123456
+    max-lifetime: 600000
+mqtt:
+  url: tcp://localhost
+  port: 31883
+logging:
+  level:
+    #spring根日志级别
+#    root: info
+    #spring web日志级别
+    web: info
+    #项目日志级别
+    #    com.fu.easycode: info
+    #SQL日志打印
+    com/archermind/hdc/mapper: info
+  file:
+    #日志存放路径
+    path: ./logs
+    #日志名称
+    name: 'hdc.log'
+  charset:
+    #控制台编码
+#    console: UTF-8
+    #输出到文件编码
+     file: UTF-8
+  pattern:
+    #控制台日志输出样式
+#    console: '%clr(%d{${LOG_DATEFORMAT_PATTERN:yyyy-MM-dd HH:mm:ss.SSS}}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}'
+    #输出到文件的样式
+    file: '%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd HH:mm:ss.SSS}} ${LOG_LEVEL_PATTERN:-%5p} ${PID:- } --- [%t] %-40.40logger{39} : %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}'
+  logback:
+    rollingpolicy:
+      #重启是否清除日志（推荐测试环境使用）
+      clean-history-on-start: true
+      #切割日志格式
+      file-name-pattern: ${logging.file.name}.%d{yyyy-MM-dd}
+      #单个日志文件最大大小
+      max-file-size: 10MB
+      #全部日志文件最大大小
+      total-size-cap: 10GB
+      #日志存放天数
+      max-history: 15
+
+
