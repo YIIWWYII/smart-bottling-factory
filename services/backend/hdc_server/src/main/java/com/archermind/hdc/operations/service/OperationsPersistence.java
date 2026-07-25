@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,18 @@ public class OperationsPersistence {
     }
 
     public boolean isEnabled() { return enabled; }
+
+    @PostConstruct
+    public void migrateSchema() {
+        if (!enabled) return;
+        addColumnIfMissing("device_command", "client_request_id", "varchar(100) null");
+        addColumnIfMissing("device_command", "operator_name", "varchar(100) null");
+        addColumnIfMissing("device_command", "operator_role", "varchar(50) null");
+        addColumnIfMissing("device_command", "reason", "varchar(500) null");
+        addColumnIfMissing("device_command", "expires_at", "datetime(6) null");
+        addUniqueIndexIfMissing("device_command", "uk_device_command_client_request",
+                "client_request_id");
+    }
 
     public List<SensorReading> loadReadings() {
         if (!enabled) return new ArrayList<>();
@@ -72,19 +85,26 @@ public class OperationsPersistence {
     public List<DeviceCommand> loadCommands() {
         if (!enabled) return new ArrayList<>();
         return jdbcTemplate.query(
-                "select command_id,device_code,command_type,payload,source,trace_code,status,message,created_at,"
+                "select command_id,client_request_id,device_code,command_type,payload,source,trace_code,"
+                        + "operator_name,operator_role,reason,status,message,created_at,expires_at,"
                         + "acknowledged_at from device_command order by created_at desc limit 500",
                 (rs, rowNum) -> {
                     DeviceCommand value = new DeviceCommand();
                     value.setCommandId(rs.getString("command_id"));
+                    value.setClientRequestId(rs.getString("client_request_id"));
                     value.setDeviceCode(rs.getString("device_code"));
                     value.setCommandType(rs.getString("command_type"));
                     value.setPayload(rs.getString("payload"));
                     value.setSource(rs.getString("source"));
                     value.setTraceCode(rs.getString("trace_code"));
+                    value.setOperator(rs.getString("operator_name"));
+                    value.setOperatorRole(rs.getString("operator_role"));
+                    value.setReason(rs.getString("reason"));
                     value.setStatus(rs.getString("status"));
                     value.setMessage(rs.getString("message"));
                     value.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());
+                    Timestamp expiresAt = rs.getTimestamp("expires_at");
+                    value.setExpiresAt(expiresAt == null ? null : expiresAt.toLocalDateTime());
                     Timestamp ack = rs.getTimestamp("acknowledged_at");
                     value.setAcknowledgedAt(ack == null ? null : ack.toLocalDateTime());
                     return value;
@@ -135,13 +155,16 @@ public class OperationsPersistence {
 
     public void save(DeviceCommand value) {
         if (!enabled) return;
-        jdbcTemplate.update("insert into device_command(command_id,device_code,command_type,payload,source,trace_code,"
-                        + "status,message,created_at,acknowledged_at) values(?,?,?,?,?,?,?,?,?,?) "
+        jdbcTemplate.update("insert into device_command(command_id,client_request_id,device_code,command_type,payload,"
+                        + "source,trace_code,operator_name,operator_role,reason,status,message,created_at,expires_at,"
+                        + "acknowledged_at) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         + "on duplicate key update status=values(status),message=values(message),"
                         + "acknowledged_at=values(acknowledged_at)",
-                value.getCommandId(), value.getDeviceCode(), value.getCommandType(), value.getPayload(),
-                value.getSource(), value.getTraceCode(), value.getStatus(), value.getMessage(),
-                Timestamp.valueOf(value.getCreatedAt()), timestamp(value.getAcknowledgedAt()));
+                value.getCommandId(), value.getClientRequestId(), value.getDeviceCode(), value.getCommandType(),
+                value.getPayload(), value.getSource(), value.getTraceCode(), value.getOperator(),
+                value.getOperatorRole(), value.getReason(), value.getStatus(), value.getMessage(),
+                Timestamp.valueOf(value.getCreatedAt()), timestamp(value.getExpiresAt()),
+                timestamp(value.getAcknowledgedAt()));
     }
 
     public void save(AiAuditRecord value) {
@@ -157,5 +180,26 @@ public class OperationsPersistence {
 
     private Timestamp timestamp(java.time.LocalDateTime value) {
         return value == null ? null : Timestamp.valueOf(value);
+    }
+
+    private void addColumnIfMissing(String tableName, String columnName, String definition) {
+        Integer count = jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns where table_schema=database() "
+                        + "and table_name=? and column_name=?",
+                new Object[]{tableName, columnName}, Integer.class);
+        if (count != null && count == 0) {
+            jdbcTemplate.execute("alter table " + tableName + " add column " + columnName + " " + definition);
+        }
+    }
+
+    private void addUniqueIndexIfMissing(String tableName, String indexName, String columnName) {
+        Integer count = jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.statistics where table_schema=database() "
+                        + "and table_name=? and index_name=?",
+                new Object[]{tableName, indexName}, Integer.class);
+        if (count != null && count == 0) {
+            jdbcTemplate.execute("alter table " + tableName + " add unique key " + indexName
+                    + " (" + columnName + ")");
+        }
     }
 }

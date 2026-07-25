@@ -1,7 +1,10 @@
 package com.archermind.hdc.operations;
 
 import com.archermind.hdc.operations.dto.AiDecisionRequest;
+import com.archermind.hdc.operations.dto.CommandAckRequest;
+import com.archermind.hdc.operations.dto.DeviceCommandRequest;
 import com.archermind.hdc.operations.dto.SensorReadingRequest;
+import com.archermind.hdc.operations.model.DeviceCommand;
 import com.archermind.hdc.operations.model.SensorReading;
 import com.archermind.hdc.operations.service.OperationsPersistence;
 import com.archermind.hdc.operations.service.OperationsRealtimePublisher;
@@ -12,9 +15,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class OperationsServiceTest {
     private OperationsService service;
@@ -62,6 +69,62 @@ class OperationsServiceTest {
     }
 
     @Test
+    void commandSafetyGateRequiresControlRoleAndValidRanges() {
+        DeviceCommandRequest viewer = command("CMD-REQ-VIEWER");
+        viewer.setOperatorRole("VIEWER");
+        assertThrows(IllegalArgumentException.class, () -> service.createCommand(viewer));
+
+        DeviceCommandRequest outOfRange = command("CMD-REQ-RANGE");
+        outOfRange.getPayload().put("fillingTemperatureC", 45D);
+        assertThrows(IllegalArgumentException.class, () -> service.createCommand(outOfRange));
+    }
+
+    @Test
+    void commandClientRequestIdIsIdempotentAndAckUsesContractStatus() {
+        DeviceCommand first = service.createCommand(command("CMD-REQ-IDEMPOTENT"));
+        DeviceCommand second = service.createCommand(command("CMD-REQ-IDEMPOTENT"));
+        assertEquals(first.getCommandId(), second.getCommandId());
+
+        CommandAckRequest ack = new CommandAckRequest();
+        ack.setStatus("SUCCEEDED");
+        ack.setMessage("edge applied");
+        DeviceCommand acknowledged = service.acknowledgeCommand(first.getCommandId(), ack);
+
+        assertEquals("ACKNOWLEDGED", acknowledged.getStatus());
+        assertNotNull(acknowledged.getAcknowledgedAt());
+    }
+
+    @Test
+    void openCriticalAlarmBlocksRelatedCommand() {
+        SensorReadingRequest reading = new SensorReadingRequest();
+        reading.setDeviceCode("FIL-PUMP-01");
+        reading.setSensorType("VOC");
+        reading.setStage("FILLING");
+        reading.setTraceCode("BOT-OPS-BLOCKED");
+        reading.setValue(12.5D);
+        service.recordSensor(reading);
+
+        DeviceCommandRequest request = command("CMD-REQ-BLOCKED");
+        request.setTraceCode("BOT-OPS-BLOCKED");
+        assertThrows(IllegalArgumentException.class, () -> service.createCommand(request));
+    }
+
+    @Test
+    void commandTimeoutPreventsLateSuccess() {
+        DeviceCommandRequest request = command("CMD-REQ-TIMEOUT");
+        request.setTimeoutSeconds(1);
+        DeviceCommand command = service.createCommand(request);
+
+        assertEquals(1, service.expirePendingCommands(LocalDateTime.now().plusSeconds(2)));
+        assertEquals("TIMEOUT", service.commands("TIMEOUT").get(0).getStatus());
+
+        CommandAckRequest ack = new CommandAckRequest();
+        ack.setStatus("ACKNOWLEDGED");
+        assertThrows(IllegalArgumentException.class,
+                () -> service.acknowledgeCommand(command.getCommandId(), ack));
+    }
+
+    @Test
     void unknownBottleTypeRequiresManualReview() {
         AiDecisionRequest request = new AiDecisionRequest();
         request.setTraceCode("BOT-OPS-003");
@@ -70,5 +133,27 @@ class OperationsServiceTest {
 
         assertEquals("MANUAL_REVIEW", service.decide(request).getDecision());
         assertEquals("REJECTED", service.decide(request).getValidationStatus());
+    }
+
+    private DeviceCommandRequest command(String requestId) {
+        DeviceCommandRequest request = new DeviceCommandRequest();
+        request.setClientRequestId(requestId);
+        request.setDeviceCode("LINE-CONTROL-01");
+        request.setCommandType("SET_RECIPE");
+        request.setPayload(recipePayload());
+        request.setSource("OPERATOR");
+        request.setOperator("operator01");
+        request.setOperatorRole("OPERATOR");
+        request.setReason("test command safety gate");
+        return request;
+    }
+
+    private Map<String, Object> recipePayload() {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("recipeCode", "PLA-500-DEMO-V1");
+        payload.put("fillingTemperatureC", 25D);
+        payload.put("fillVolumeMl", 500);
+        payload.put("capTorqueNm", .9D);
+        return payload;
     }
 }

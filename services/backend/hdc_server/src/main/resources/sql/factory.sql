@@ -66,18 +66,24 @@ CREATE TABLE IF NOT EXISTS factory_alarm (
 
 CREATE TABLE IF NOT EXISTS device_command (
   command_id VARCHAR(100) NOT NULL,
+  client_request_id VARCHAR(100) NULL,
   device_code VARCHAR(100) NOT NULL,
   command_type VARCHAR(100) NOT NULL,
   payload JSON NOT NULL,
   source VARCHAR(50) NOT NULL,
   trace_code VARCHAR(100) NULL,
+  operator_name VARCHAR(100) NULL,
+  operator_role VARCHAR(50) NULL,
+  reason VARCHAR(500) NULL,
   status VARCHAR(30) NOT NULL,
   message VARCHAR(500) NULL,
   created_at DATETIME(6) NOT NULL,
+  expires_at DATETIME(6) NULL,
   acknowledged_at DATETIME(6) NULL,
   PRIMARY KEY (command_id),
   KEY idx_command_status_time (status, created_at),
-  KEY idx_command_trace (trace_code)
+  KEY idx_command_trace (trace_code),
+  UNIQUE KEY uk_device_command_client_request (client_request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备控制命令及ACK';
 
 CREATE TABLE IF NOT EXISTS ai_decision_audit (

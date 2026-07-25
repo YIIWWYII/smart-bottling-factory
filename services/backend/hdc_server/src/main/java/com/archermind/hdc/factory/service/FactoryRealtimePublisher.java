@@ -20,6 +20,8 @@ public class FactoryRealtimePublisher {
         message.put("status", event.getStatus());
         message.put("message", event.getMessage());
         message.put("occurredAt", event.getOccurredAt());
+        message.put("schemaVersion", 1);
+        message.put("payload", event);
         String json = JSONObject.toJSONString(message);
         DataScreenWebSocketService.sentMessageByGroupId(1L, json);
         CommonWebSocketService.sentMessageByGroupId(1L, json);
