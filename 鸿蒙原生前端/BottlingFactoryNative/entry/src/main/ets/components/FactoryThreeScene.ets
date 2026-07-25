@@ -10,11 +10,6 @@ export struct FactoryThreeScene {
   @State webReady: boolean = false
   private controller: webview.WebviewController = new webview.WebviewController()
 
-  @Watch('payload')
-  onPayloadChanged(): void {
-    this.pushPayload()
-  }
-
   private pushPayload(): void {
     if (!this.webReady) return
     const script = `window.FactoryScene && window.FactoryScene.update(${this.payload})`

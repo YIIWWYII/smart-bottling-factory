@@ -1,11 +1,13 @@
-import { FactoryBundle } from '../model/FactoryModels'
+import { FactoryBundle, RuntimeDevice, RuntimeStage } from '../model/FactoryModels'
 import { FACTORY_STAGES } from '../config/FactoryStages'
 
 const now = '2026-07-21T12:00:00'
 
 export function createMockBundle(): FactoryBundle {
-  const devices = [] as Array<{ deviceCode: string, stageCode: string, state: string, source: string, fallback: boolean, speedMps: number, occurredAt: string }>
+  const devices: Array<RuntimeDevice> = []
   FACTORY_STAGES.forEach(stage => stage.devices.forEach(item => devices.push({ deviceCode: item.code, stageCode: stage.code, state: 'RUNNING', source: 'SIMULATION', fallback: true, speedMps: .12, occurredAt: now })))
+  const stages: Array<RuntimeStage> = []
+  FACTORY_STAGES.forEach(stage => stages.push({ stageCode: stage.code, state: 'RUNNING', bufferLevel: 0, bufferCapacity: 6, upstreamImpact: '无', downstreamImpact: '无', updatedAt: now }))
   return {
     dashboard: {
       total: 16, running: 3, completed: 11, rejected: 2, holding: 3,
@@ -28,7 +30,7 @@ export function createMockBundle(): FactoryBundle {
     },
     runtime: {
       generatedAt: now,
-      stages: FACTORY_STAGES.map(stage => ({ stageCode: stage.code, state: 'RUNNING', bufferLevel: 0, bufferCapacity: 6, upstreamImpact: '无', downstreamImpact: '无', updatedAt: now })),
+      stages: stages,
       devices: devices,
       incidents: []
     },

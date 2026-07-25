@@ -3,7 +3,7 @@ import { Theme, statusColor } from '../common/Theme'
 import { SectionTitle, MetricTile, StateBadge } from '../components/IndustrialComponents'
 import { FACTORY_STAGES } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
-import { FactoryBundle, FactoryRun, RuntimeStage, StageDefinition } from '../model/FactoryModels'
+import { AlarmRecord, FactoryBundle, FactoryRun, RuntimeStage, StageDefinition } from '../model/FactoryModels'
 import { ApiConfig } from '../service/ApiConfig'
 
 @Entry
@@ -30,7 +30,7 @@ struct FactoryOverview {
     if (this.refreshTimer >= 0) clearInterval(this.refreshTimer)
   }
 
-  private get activeCount(): number { return Math.max(0, this.bundle.dashboard.total - this.bundle.dashboard.completed - this.bundle.dashboard.rejected) }
+  private get wipCount(): number { return Math.max(0, this.bundle.dashboard.total - this.bundle.dashboard.completed - this.bundle.dashboard.rejected) }
   private get finishedCount(): number { return this.bundle.dashboard.completed + this.bundle.dashboard.rejected }
   private get passRate(): string { return this.finishedCount > 0 ? (this.bundle.dashboard.completed / this.finishedCount * 100).toFixed(1) + '%' : '--' }
   private get openAlarmCount(): number { return this.bundle.operations.alarms.filter(item => item.status === 'OPEN').length }
@@ -111,7 +111,7 @@ struct FactoryOverview {
           Row({ space: 8 }) {
             MetricTile({ label: '累计投入', value: this.bundle.dashboard.total.toString(), note: '进入产线的追踪批次' })
             MetricTile({ label: '完成入库', value: this.bundle.dashboard.completed.toString(), note: '全流程完成', tone: 'PASS' })
-            MetricTile({ label: '在制品 WIP', value: this.activeCount.toString(), note: '运行或待处理' })
+            MetricTile({ label: '在制品 WIP', value: this.wipCount.toString(), note: '运行或待处理' })
             MetricTile({ label: '检测剔除', value: this.bundle.dashboard.rejected.toString(), note: '不合格品已隔离', tone: 'FAIL' })
             MetricTile({ label: '待人工处理', value: this.bundle.dashboard.holding.toString(), note: '暂停自动放行', tone: 'WAIT' })
             MetricTile({ label: '批次通过率', value: this.passRate, note: '完成 / 已判定批次', tone: 'PASS' })
@@ -139,7 +139,7 @@ struct FactoryOverview {
       Row() { Text('在制品 ' + this.stageProductCount(stage.code)).fontSize(9).fontColor(Theme.muted); Blank(); Text('速度 ' + (stage.code === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s')).fontSize(9).fontColor(Theme.blue) }.width('100%').margin({ top: 7 })
       Blank()
       Button('进入工位').width('100%').height(34).backgroundColor(Theme.blue).borderRadius(2).onClick(() => router.pushUrl({ url: 'pages/StageDetail', params: { stageCode: stage.code } }))
-    }.width(198).height(220).alignItems(HorizontalAlign.Start).padding(13).backgroundColor(Theme.panel).border({ width: { top: 4, left: 1, right: 1, bottom: 2 }, color: statusColor(state) }).borderRadius(3)
+    }.width(198).height(220).alignItems(HorizontalAlign.Start).padding(13).backgroundColor(Theme.panel).border({ width: { top: 4, left: 1, right: 1, bottom: 2 }, color: statusColor(this.stageStatus(stage)) }).borderRadius(3)
   }
 
   @Builder
@@ -183,9 +183,9 @@ struct FactoryOverview {
       if (this.openAlarmCount + this.openIncidentCount === 0) {
         Row({ space: 8 }) { Circle().width(8).height(8).fill(Theme.success); Text('当前无开放异常，所有工位满足连续运行条件').fontSize(11).fontColor(Theme.text) }.width('100%').padding(14).backgroundColor('#EEF7F2').margin({ top: 14 })
       } else {
-        ForEach(this.bundle.operations.alarms.filter(item => item.status === 'OPEN').slice(0, 4), (alarm) => {
+        ForEach(this.bundle.operations.alarms.filter(item => item.status === 'OPEN').slice(0, 4), (alarm: AlarmRecord) => {
           Row({ space: 10 }) { Circle().width(8).height(8).fill(Theme.danger); Column() { Text(alarm.alarmType + ' · ' + alarm.deviceCode).fontSize(10).fontColor(Theme.danger).fontWeight(FontWeight.Bold); Text(alarm.message).fontSize(9).fontColor(Theme.muted).margin({ top: 3 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text(alarm.value === undefined ? '--' : alarm.value.toString()).fontSize(11).fontColor(Theme.danger).fontWeight(FontWeight.Bold) }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
-        }, (alarm) => alarm.alarmId)
+        }, (alarm: AlarmRecord) => alarm.alarmId)
       }
     }.width(390).constraintSize({ minHeight: 220 }).alignItems(HorizontalAlign.Start).padding(17).margin(5).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
   }

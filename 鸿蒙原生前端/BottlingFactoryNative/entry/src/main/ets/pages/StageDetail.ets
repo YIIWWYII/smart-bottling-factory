@@ -4,24 +4,24 @@ import { DeviceStateRow, QualityGateRow, SectionTitle, StateBadge } from '../com
 import { FactoryThreeScene } from '../components/FactoryThreeScene'
 import { FACTORY_STAGES, findStage } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
-import { DeviceDefinition, FactoryBundle, QualityGateView, RuntimeStage, StageDefinition } from '../model/FactoryModels'
+import { AlarmRecord, DeviceDefinition, FactoryBundle, FactoryRun, QualityGateView, RuntimeStage, StageDefinition } from '../model/FactoryModels'
 import { ApiConfig } from '../service/ApiConfig'
 
 interface StageParams { stageCode: string }
 
-interface ThreeDevicePayload {
-  code: string
-  name: string
-  state: string
-  source: string
-  reading: string
+class ThreeDevicePayload {
+  code: string = ''
+  name: string = ''
+  state: string = ''
+  source: string = ''
+  reading: string = ''
 }
 
-interface ThreeProductPayload {
-  traceCode: string
-  bottleType: string
-  status: string
-  defectType: string
+class ThreeProductPayload {
+  traceCode: string = ''
+  bottleType: string = ''
+  status: string = ''
+  defectType: string = ''
 }
 
 interface ThreeScenePayload {
@@ -185,22 +185,28 @@ struct StageDetail {
   }
 
   private scenePayload(): string {
-    const devices: Array<ThreeDevicePayload> = this.stage.devices.map(device => ({
-      code: device.code,
-      name: device.name,
-      state: this.deviceRuntime(device.code),
-      source: this.deviceSource(device.code),
-      reading: this.deviceReading(device.code)
-    }))
-    const products: Array<ThreeProductPayload> = this.bundle.dashboard.runs
+    const devices: Array<ThreeDevicePayload> = []
+    this.stage.devices.forEach((device: DeviceDefinition) => {
+      const item = new ThreeDevicePayload()
+      item.code = device.code
+      item.name = device.name
+      item.state = this.deviceRuntime(device.code)
+      item.source = this.deviceSource(device.code)
+      item.reading = this.deviceReading(device.code)
+      devices.push(item)
+    })
+    const products: Array<ThreeProductPayload> = []
+    this.bundle.dashboard.runs
       .filter(item => item.currentStage === this.stageCode)
       .slice(0, 8)
-      .map(item => ({
-        traceCode: item.traceCode,
-        bottleType: item.bottleType || '待识别',
-        status: item.status,
-        defectType: item.defectType || ''
-      }))
+      .forEach((run: FactoryRun) => {
+        const item = new ThreeProductPayload()
+        item.traceCode = run.traceCode
+        item.bottleType = run.bottleType || '待识别'
+        item.status = run.status
+        item.defectType = run.defectType || ''
+        products.push(item)
+      })
     const payload: ThreeScenePayload = {
       stageCode: this.stageCode,
       stageName: this.stage.name,
@@ -282,7 +288,7 @@ struct StageDetail {
 
         Scroll() { Row({ space: 8 }) { this.metric('当前速度', this.stageCode === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s', '数据驱动画面'); this.metric('缓冲占用', this.runtimeStage.bufferLevel + '/' + this.runtimeStage.bufferCapacity, '工位间解耦缓冲'); this.metric('本站在制品', this.wipCount.toString(), '运行或待处理'); this.metric('设备在线', this.bundle.runtime.devices.filter(item => item.stageCode === this.stageCode && item.state !== 'OFFLINE').length + '/' + this.stage.devices.length, this.bundle.source) } }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 12 })
 
-        Column() { SectionTitle({ code: '02', title: '设备运行清单', description: '点击设备查看其作用、数据源、参数和关联传感器读数。' }); ForEach(this.stage.devices, (device, index) => { Row() { DeviceStateRow({ index: index, device: device, state: this.deviceRuntime(device.code), source: this.deviceSource(device.code), reading: this.deviceReading(device.code) }); Blank() }.width('100%').onClick(() => this.selectedDeviceCode = device.code) }, (device) => device.code) }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
+        Column() { SectionTitle({ code: '02', title: '设备运行清单', description: '点击设备查看其作用、数据源、参数和关联传感器读数。' }); ForEach(this.stage.devices, (device: DeviceDefinition, index: number) => { Row() { DeviceStateRow({ index: index, device: device, state: this.deviceRuntime(device.code), source: this.deviceSource(device.code), reading: this.deviceReading(device.code) }); Blank() }.width('100%').onClick(() => this.selectedDeviceCode = device.code) }, (device: DeviceDefinition) => device.code) }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
 
         if (this.selectedDeviceCode.length > 0) { this.deviceInfoPanel() }
         if (this.selectedTraceCode.length > 0) { this.selectedProductPanel() }
@@ -325,12 +331,12 @@ struct StageDetail {
   selectedProductPanel() {
     Column() {
       SectionTitle({ code: 'PRODUCT PROFILE', title: this.selectedTraceCode, description: '三维场景选中的在制品；详细信息来自产品追踪记录和传感器事件。' })
-      ForEach(this.bundle.dashboard.runs.filter(item => item.traceCode === this.selectedTraceCode), (run) => {
+      ForEach(this.bundle.dashboard.runs.filter(item => item.traceCode === this.selectedTraceCode), (run: FactoryRun) => {
         Row() { Text('瓶型').fontSize(10).fontColor(Theme.muted); Blank(); Text(run.bottleType || '待识别').fontSize(11).fontColor(Theme.navy).fontWeight(FontWeight.Bold) }.width('100%').padding(10)
         Row() { Text('当前工位').fontSize(10).fontColor(Theme.muted); Blank(); Text(run.currentStage).fontSize(11).fontColor(Theme.blue).fontWeight(FontWeight.Bold) }.width('100%').padding(10).backgroundColor(Theme.panelSoft)
         Row() { Text('产品状态').fontSize(10).fontColor(Theme.muted); Blank(); Text(this.statusTextForRun(run.status)).fontSize(11).fontColor(statusColor(run.status)).fontWeight(FontWeight.Bold) }.width('100%').padding(10)
         Row() { Text('最近更新时间').fontSize(10).fontColor(Theme.muted); Blank(); Text(this.formatTime(run.updatedAt)).fontSize(10).fontColor(Theme.text) }.width('100%').padding(10).backgroundColor(Theme.panelSoft)
-      }, (run) => run.traceCode)
+      }, (run: FactoryRun) => run.traceCode)
     }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.accent }).borderRadius(3)
   }
 
@@ -352,12 +358,12 @@ struct StageDetail {
 
   @Builder
   materialPanel() {
-    Column() { SectionTitle({ code: '04', title: '物料与在制品', description: '展示当前工位相关产品的追踪号、瓶型、状态和质量结果。' }); ForEach(this.bundle.dashboard.runs.filter(item => item.currentStage === this.stageCode).slice(0, 6), (run) => { Row({ space: 9 }) { Circle().width(9).height(9).fill(statusColor(run.status)); Column() { Text(run.traceCode).fontSize(10).fontColor(Theme.blue).fontWeight(FontWeight.Bold); Text((run.bottleType || '待识别') + ' · ' + this.statusTextForRun(run.status)).fontSize(9).fontColor(Theme.muted).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text(run.defectType === undefined ? '检测结果待确认' : run.defectType).fontSize(9).fontColor(run.defectType === undefined ? Theme.muted : Theme.danger) }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }) }, (run) => run.traceCode) }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
+    Column() { SectionTitle({ code: '04', title: '物料与在制品', description: '展示当前工位相关产品的追踪号、瓶型、状态和质量结果。' }); ForEach(this.bundle.dashboard.runs.filter(item => item.currentStage === this.stageCode).slice(0, 6), (run: FactoryRun) => { Row({ space: 9 }) { Circle().width(9).height(9).fill(statusColor(run.status)); Column() { Text(run.traceCode).fontSize(10).fontColor(Theme.blue).fontWeight(FontWeight.Bold); Text((run.bottleType || '待识别') + ' · ' + this.statusTextForRun(run.status)).fontSize(9).fontColor(Theme.muted).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text(run.defectType === undefined ? '检测结果待确认' : run.defectType).fontSize(9).fontColor(run.defectType === undefined ? Theme.muted : Theme.danger) }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }) }, (run: FactoryRun) => run.traceCode) }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
   }
 
   @Builder
   tracePanel() {
-    Column() { SectionTitle({ code: '05', title: '工位异常与影响', description: '设备报警、异常策略和上下游影响。' }); if (this.stageAlarms === 0) { Text('当前没有本站开放报警。').fontSize(10).fontColor(Theme.muted).padding(12) } else { ForEach(this.bundle.operations.alarms.filter(item => item.status === 'OPEN' && this.normalizeStage(item.stage || '', item.deviceCode) === this.stageCode), (alarm) => { Row() { Circle().width(8).height(8).fill(Theme.danger); Column() { Text(alarm.alarmType + ' · ' + alarm.deviceCode).fontSize(10).fontColor(Theme.danger).fontWeight(FontWeight.Bold); Text(alarm.message).fontSize(9).fontColor(Theme.muted).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text('需管理端确认').fontSize(9).fontColor(Theme.warning) }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }) }, (alarm) => alarm.alarmId) } }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
+    Column() { SectionTitle({ code: '05', title: '工位异常与影响', description: '设备报警、异常策略和上下游影响。' }); if (this.stageAlarms === 0) { Text('当前没有本站开放报警。').fontSize(10).fontColor(Theme.muted).padding(12) } else { ForEach(this.bundle.operations.alarms.filter(item => item.status === 'OPEN' && this.normalizeStage(item.stage || '', item.deviceCode) === this.stageCode), (alarm: AlarmRecord) => { Row() { Circle().width(8).height(8).fill(Theme.danger); Column() { Text(alarm.alarmType + ' · ' + alarm.deviceCode).fontSize(10).fontColor(Theme.danger).fontWeight(FontWeight.Bold); Text(alarm.message).fontSize(9).fontColor(Theme.muted).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text('需管理端确认').fontSize(9).fontColor(Theme.warning) }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }) }, (alarm: AlarmRecord) => alarm.alarmId) } }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
   }
 
   private statusTextForRun(status: string): string { return status === 'COMPLETED' ? '已入库' : status === 'REJECTED' ? '已剔除' : status === 'HOLD' ? '待处理' : '运行中' }

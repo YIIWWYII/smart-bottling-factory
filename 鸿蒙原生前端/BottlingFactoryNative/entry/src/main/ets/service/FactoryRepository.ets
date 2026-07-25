@@ -4,6 +4,12 @@ import { FactoryRealtime } from './FactoryRealtime'
 import { createMockBundle } from './MockFactoryData'
 import { FactoryBundle, FactoryDashboard, FactoryIncident, LogisticsOverview, OperationsOverview, RuntimeSnapshot } from '../model/FactoryModels'
 
+interface IncidentResolveRequest {
+  action: string
+  targetStage: string
+  note: string
+}
+
 class FactoryRepositoryImpl {
   bundle: FactoryBundle = createMockBundle()
   realtimeOnline: boolean = false
@@ -55,7 +61,8 @@ class FactoryRepositoryImpl {
   }
 
   async resolveIncident(incidentId: string, strategy: string): Promise<void> {
-    await this.client.request<Object>(`/factory/runtime/incidents/${incidentId}/resolve`, http.RequestMethod.POST, { action: strategy, targetStage: '', note: 'HarmonyOS 管理端人工确认' })
+    const payload: IncidentResolveRequest = { action: strategy, targetStage: '', note: 'HarmonyOS 管理端人工确认' }
+    await this.client.request<Object>(`/factory/runtime/incidents/${incidentId}/resolve`, http.RequestMethod.POST, JSON.stringify(payload))
     await this.refresh()
   }
 

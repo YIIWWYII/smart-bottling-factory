@@ -3,6 +3,22 @@ import { ApiConfig } from './ApiConfig'
 import { ApiEnvelope, AuthUser, LoginResult } from '../model/FactoryModels'
 import { SessionStore } from './SessionStore'
 
+interface RequestHeaders {
+  'Content-Type': string
+  Authorization?: string
+}
+
+interface LoginPayload {
+  username: string
+  password: string
+}
+
+interface RegisterPayload {
+  username: string
+  displayName: string
+  password: string
+}
+
 export class ApiError extends Error {
   code: number
 
@@ -13,16 +29,16 @@ export class ApiError extends Error {
 }
 
 export class ApiClient {
-  async request<T>(path: string, method: http.RequestMethod = http.RequestMethod.GET, body?: Object): Promise<T> {
+  async request<T>(path: string, method: http.RequestMethod = http.RequestMethod.GET, body?: string): Promise<T> {
     const client = http.createHttp()
-    const headers: Object = SessionStore.token.length > 0
+    const headers: RequestHeaders = SessionStore.token.length > 0
       ? { 'Content-Type': 'application/json;charset=UTF-8', 'Authorization': SessionStore.token }
       : { 'Content-Type': 'application/json;charset=UTF-8' }
     try {
       const response = await client.request(ApiConfig.API_BASE + path, {
         method: method,
         header: headers,
-        extraData: body === undefined ? undefined : JSON.stringify(body),
+        extraData: body,
         expectDataType: http.HttpDataType.STRING,
         connectTimeout: ApiConfig.requestTimeoutMs,
         readTimeout: ApiConfig.requestTimeoutMs
@@ -39,11 +55,13 @@ export class ApiClient {
   }
 
   async login(username: string, password: string): Promise<LoginResult> {
-    return await this.request<LoginResult>('/auth/login', http.RequestMethod.POST, { username, password })
+    const payload: LoginPayload = { username: username, password: password }
+    return await this.request<LoginResult>('/auth/login', http.RequestMethod.POST, JSON.stringify(payload))
   }
 
   async register(username: string, displayName: string, password: string): Promise<AuthUser> {
-    return await this.request<AuthUser>('/auth/register', http.RequestMethod.POST, { username, displayName, password })
+    const payload: RegisterPayload = { username: username, displayName: displayName, password: password }
+    return await this.request<AuthUser>('/auth/register', http.RequestMethod.POST, JSON.stringify(payload))
   }
 
   async me(): Promise<AuthUser> {

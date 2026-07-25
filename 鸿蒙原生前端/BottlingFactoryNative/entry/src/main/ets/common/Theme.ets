@@ -1,4 +1,20 @@
-export const Theme = {
+export interface ThemeConfig {
+  navy: string
+  blue: string
+  accent: string
+  page: string
+  panel: string
+  panelSoft: string
+  line: string
+  text: string
+  muted: string
+  success: string
+  warning: string
+  danger: string
+  neutral: string
+}
+
+export const Theme: ThemeConfig = {
   navy: '#123A5B',
   blue: '#145DA0',
   accent: '#1F7ACB',
