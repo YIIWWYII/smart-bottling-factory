@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "app_name", "value": "智慧工厂数字展板" },
+    { "name": "app_desc", "value": "装瓶产线全局与工位可视化展板" }
+  ]
+}

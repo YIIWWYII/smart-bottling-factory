@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "entry_desc", "value": "装瓶产线运营、异常、设备、物料和权限管理" },
+    { "name": "internet_reason", "value": "访问产线后端接口和实时状态通道" }
+  ]
+}

@@ -1,0 +1,53 @@
+import { webSocket } from '@kit.NetworkKit'
+import { BusinessError } from '@kit.BasicServicesKit'
+import { ApiConfig } from './ApiConfig'
+
+export type RealtimeCallback = (payload: string) => void
+export type RealtimeStatusCallback = (online: boolean) => void
+
+export class FactoryRealtime {
+  private socket: webSocket.WebSocket | undefined
+  private stopped: boolean = true
+  private retryTimer: number = -1
+  private onEvent: RealtimeCallback | undefined
+  private onStatus: RealtimeStatusCallback | undefined
+
+  connect(onEvent: RealtimeCallback, onStatus: RealtimeStatusCallback): void {
+    this.onEvent = onEvent
+    this.onStatus = onStatus
+    this.stopped = false
+    this.open()
+  }
+
+  private open(): void {
+    if (this.stopped) return
+    this.reportStatus(false)
+    const socket = webSocket.createWebSocket()
+    this.socket = socket
+    socket.on('open', () => this.reportStatus(true))
+    socket.on('message', (error: BusinessError, value: string | ArrayBuffer) => {
+      if (!error && typeof value === 'string' && value !== 'pong' && this.onEvent !== undefined) this.onEvent(value)
+    })
+    socket.on('error', () => this.reportStatus(false))
+    socket.on('close', () => {
+      this.reportStatus(false)
+      if (!this.stopped) this.retryTimer = setTimeout(() => this.open(), 2000)
+    })
+    socket.connect(ApiConfig.WS_BASE, (error: BusinessError) => {
+      if (error) this.reportStatus(false)
+    })
+  }
+
+  close(): void {
+    this.stopped = true
+    if (this.retryTimer >= 0) clearTimeout(this.retryTimer)
+    this.retryTimer = -1
+    const socket = this.socket
+    this.socket = undefined
+    if (socket) socket.close()
+  }
+
+  private reportStatus(value: boolean): void {
+    if (this.onStatus !== undefined) this.onStatus(value)
+  }
+}

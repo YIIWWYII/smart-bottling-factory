@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="color-scheme" content="light">
+  <title>Factory 3D</title>
+  <link rel="stylesheet" href="./scene.css">
+</head>
+<body>
+  <main id="scene-host" aria-label="三维工位实时场景"></main>
+  <section class="hud hud-left">
+    <span class="live-dot"></span>
+    <strong id="stage-name">FACTORY STAGE</strong>
+    <span id="data-source">LOCAL DEMO</span>
+  </section>
+  <section class="hud hud-right">
+    <span><i class="legend running"></i>运行</span>
+    <span><i class="legend warning"></i>待机</span>
+    <span><i class="legend alarm"></i>异常</span>
+  </section>
+  <section id="selection" class="selection hidden"></section>
+  <section id="fallback" class="fallback hidden">
+    <strong>当前设备无法启动 WebGL</strong>
+    <span>请关闭坚盾守护模式，或切换到原生二维工艺图。</span>
+  </section>
+  <script src="./vendor/three.min.js"></script>
+  <script src="./scene.js"></script>
+</body>
+</html>
