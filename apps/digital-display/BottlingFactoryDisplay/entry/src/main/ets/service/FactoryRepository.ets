@@ -2,7 +2,7 @@ import { http } from '@kit.NetworkKit'
 import { ApiClient, apiClient } from './ApiClient'
 import { FactoryRealtime } from './FactoryRealtime'
 import { createMockBundle } from './MockFactoryData'
-import { FactoryBundle, FactoryDashboard, FactoryIncident, LogisticsOverview, OperationsOverview, RuntimeSnapshot } from '../model/FactoryModels'
+import { FactoryBundle, FactoryDashboard, FactoryIncident, LineSnapshotMeta, LogisticsOverview, OperationsOverview, RuntimeSnapshot } from '../model/FactoryModels'
 
 interface IncidentResolveRequest {
   action: string
@@ -70,8 +70,17 @@ class FactoryRepositoryImpl {
     }
   }
 
+  private normalizeLineSnapshot(value: LineSnapshotMeta | undefined): LineSnapshotMeta {
+    if (value === undefined) return { stateVersion: this.bundle.stateVersion, generatedAt: this.bundle.updatedAt }
+    return {
+      stateVersion: value.stateVersion === undefined ? this.bundle.stateVersion : value.stateVersion,
+      generatedAt: value.generatedAt
+    }
+  }
+
   async refresh(): Promise<void> {
     try {
+      const lineSnapshot: LineSnapshotMeta = this.normalizeLineSnapshot(await this.client.request<LineSnapshotMeta>('/factory/line-snapshot'))
       const dashboard: FactoryDashboard = this.normalizeDashboard(await this.client.request<FactoryDashboard>('/factory/dashboard'))
       const operations: OperationsOverview = this.normalizeOperations(await this.client.request<OperationsOverview>('/operations/overview'))
       const logistics: LogisticsOverview = this.normalizeLogistics(await this.client.request<LogisticsOverview>('/logistics/overview'))
@@ -81,10 +90,10 @@ class FactoryRepositoryImpl {
         operations,
         logistics,
         runtime,
-        stateVersion: this.bundle.stateVersion + 1,
+        stateVersion: lineSnapshot.stateVersion === undefined ? this.bundle.stateVersion : lineSnapshot.stateVersion,
         source: 'BACKEND',
         online: true,
-        updatedAt: runtime.generatedAt || new Date().toISOString(),
+        updatedAt: lineSnapshot.generatedAt || runtime.generatedAt || new Date().toISOString(),
         errorMessage: ''
       }
     } catch (error) {
@@ -105,7 +114,7 @@ class FactoryRepositoryImpl {
 
   connectRealtime(): void {
     this.realtime.connect((payload: string) => {
-      if (payload.indexOf('factory.') >= 0) void this.refresh()
+      if (payload.indexOf('factory.') >= 0 || payload.indexOf('stateVersion') >= 0) void this.refresh()
     }, (online: boolean) => {
       this.realtimeOnline = online
       this.notify()
