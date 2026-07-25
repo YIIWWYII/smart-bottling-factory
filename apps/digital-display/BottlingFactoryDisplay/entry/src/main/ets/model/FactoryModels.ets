@@ -202,6 +202,7 @@ export interface FactoryBundle {
   operations: OperationsOverview
   runtime: RuntimeSnapshot
   logistics: LogisticsOverview
+  stateVersion: number
   source: string
   online: boolean
   updatedAt: string

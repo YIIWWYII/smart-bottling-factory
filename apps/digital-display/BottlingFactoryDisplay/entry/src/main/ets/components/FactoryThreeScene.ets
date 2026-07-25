@@ -5,14 +5,31 @@ import { Theme } from '../common/Theme'
 @Component
 export struct FactoryThreeScene {
   @Prop payload: string = '{}'
+  @Prop viewMode: string = 'THREE'
+  @Prop caption: string = '本地 Three.js 场景'
+  @Prop heightValue: number = 360
   @Link selectedDeviceCode: string
   @Link selectedTraceCode: string
   @State webReady: boolean = false
   private controller: webview.WebviewController = new webview.WebviewController()
+  private syncTimer: number = -1
+
+  aboutToAppear(): void {
+    this.syncTimer = setInterval(() => this.pushPayload(), 350)
+  }
+
+  aboutToDisappear(): void {
+    if (this.syncTimer >= 0) clearInterval(this.syncTimer)
+    this.syncTimer = -1
+    if (this.webReady) {
+      this.controller.runJavaScript('window.FactoryScene && window.FactoryScene.dispose && window.FactoryScene.dispose()')
+        .catch((error: BusinessError) => console.error(`Factory scene dispose failed: ${error.code} ${error.message}`))
+    }
+  }
 
   private pushPayload(): void {
     if (!this.webReady) return
-    const script = `window.FactoryScene && window.FactoryScene.update(${this.payload})`
+    const script = `window.FactoryScene && window.FactoryScene.update(Object.assign({}, ${this.payload}, { viewMode: '${this.viewMode}' }))`
     this.controller.runJavaScript(script)
       .catch((error: BusinessError) => console.error(`Factory 3D sync failed: ${error.code} ${error.message}`))
   }
@@ -47,22 +64,22 @@ export struct FactoryThreeScene {
           return false
         })
         .width('100%')
-        .height(360)
+        .height(this.heightValue)
         .backgroundColor('#DFEAF1')
 
       if (!this.webReady) {
         Column({ space: 8 }) {
           LoadingProgress().width(28).height(28).color(Theme.accent)
-          Text('正在初始化本地 Three.js 场景').fontSize(10).fontColor(Theme.muted)
+          Text('正在初始化' + this.caption).fontSize(10).fontColor(Theme.muted)
         }
         .width('100%')
-        .height(360)
+        .height(this.heightValue)
         .justifyContent(FlexAlign.Center)
         .backgroundColor('#DFEAF1')
       }
     }
     .width('100%')
-    .height(360)
+    .height(this.heightValue)
     .border({ width: 1, color: Theme.line })
   }
 }

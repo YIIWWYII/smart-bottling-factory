@@ -31,9 +31,12 @@
   };
 
   var state = {
+    viewMode: 'THREE',
     stageCode: 'PRETREATMENT',
     stageName: '预处理',
+    stateVersion: 0,
     source: 'LOCAL DEMO',
+    errorMessage: '',
     paused: false,
     statusColors: true,
     layoutEdit: false,
@@ -60,6 +63,17 @@
   var cameraOrbit = { yaw: -0.65, pitch: 0.62, distance: 19 };
   var isPointerDown = false;
   var resizeObserver;
+  var testProbe = {
+    ready: false,
+    mode: 'THREE',
+    stateVersion: 0,
+    rendererInfo: { render: { calls: 0, frame: 0, triangles: 0, points: 0, lines: 0 }, memory: { geometries: 0, textures: 0 } },
+    deviceCount: 0,
+    productCount: 0,
+    paused: false,
+    lastError: '',
+    source: 'LOCAL DEMO'
+  };
 
   function material(color, metalness, roughness) {
     return new THREE.MeshStandardMaterial({
@@ -95,7 +109,7 @@
       scene.background = new THREE.Color(0xdfeaf1);
       scene.fog = new THREE.Fog(0xdfeaf1, 22, 42);
 
-      camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+      createCameraForMode();
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
       renderer.shadowMap.enabled = true;
@@ -125,10 +139,21 @@
       resize();
       resizeObserver = new ResizeObserver(resize);
       resizeObserver.observe(host);
+      updateProbe();
       requestAnimationFrame(renderLoop);
     } catch (error) {
       fallback.classList.remove('hidden');
       sourceLabel.textContent = 'WEBGL UNAVAILABLE';
+      state.lastError = error && error.message ? error.message : 'WEBGL UNAVAILABLE';
+      updateProbe();
+    }
+  }
+
+  function createCameraForMode() {
+    if (state.viewMode === 'PLANAR') {
+      camera = new THREE.OrthographicCamera(-12, 12, 8, -8, 0.1, 80);
+    } else {
+      camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
     }
   }
 
@@ -188,11 +213,17 @@
     });
     rebuildProducts();
     applyRuntimeState();
-    stageLabel.textContent = state.stageName + ' / ' + state.stageCode;
-    sourceLabel.textContent = state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
+    stageLabel.textContent = (state.viewMode === 'PLANAR' ? '2D ' : '3D ') + state.stageName + ' / ' + state.stageCode + ' · v' + String(state.stateVersion || 0);
+    sourceLabel.textContent = buildSourceLabel();
+    updateProbe();
   }
 
   function createStageEnvironment(stageCode) {
+    if (state.viewMode === 'PLANAR') {
+      createPlanarEnvironment(stageCode);
+      return;
+    }
+
     if (stageCode === 'AGV_TRANSPORT') {
       var path = box(17, 0.08, 4.6, 0x647887);
       path.position.set(0, 0.02, 0);
@@ -224,6 +255,46 @@
     var conveyor = createConveyor(state.stageCode === 'PACKING' ? 14 : 17);
     conveyor.position.set(0, 0, 0);
     stageRoot.add(conveyor);
+  }
+
+  function createPlanarEnvironment(stageCode) {
+    var pathColor = stageCode === 'AGV_TRANSPORT' ? 0x758997 : COLORS.accent;
+    var bed = box(16.8, 0.06, stageCode === 'WAREHOUSE_INBOUND' ? 5.4 : 2.2, 0xd5e3ec);
+    bed.position.set(0, 0.03, 0);
+    stageRoot.add(bed);
+
+    var center = box(15.8, 0.08, 0.14, pathColor);
+    center.position.set(0, 0.09, 0);
+    stageRoot.add(center);
+
+    for (var i = -7; i <= 7; i += 2) {
+      var arrow = new THREE.Group();
+      var body = box(0.72, 0.08, 0.08, 0xf0b13a);
+      body.position.set(i, 0.14, 0);
+      arrow.add(body);
+      var head = mesh(new THREE.ConeGeometry(0.18, 0.34, 3), 0xf0b13a, 0.2, 0.45);
+      head.rotation.z = -Math.PI / 2;
+      head.rotation.y = Math.PI / 2;
+      head.position.set(i + 0.47, 0.14, 0);
+      arrow.add(head);
+      stageRoot.add(arrow);
+    }
+
+    if (stageCode === 'WAREHOUSE_INBOUND') {
+      [-5.8, 0, 5.8].forEach(function (x) {
+        var zone = box(2.7, 0.08, 3.2, 0xc7d6df);
+        zone.position.set(x, 0.12, 2.1);
+        stageRoot.add(zone);
+      });
+    }
+
+    if (stageCode === 'AGV_TRANSPORT') {
+      [-5.6, 0, 5.6].forEach(function (x) {
+        var marker = box(1.2, 0.09, 0.12, 0xf0b13a);
+        marker.position.set(x, 0.16, -1.3);
+        stageRoot.add(marker);
+      });
+    }
   }
 
   function createConveyor(length) {
@@ -305,6 +376,8 @@
   }
 
   function createDevice(device, index, count) {
+    if (state.viewMode === 'PLANAR') return createPlanarDevice(device, index, count);
+
     var kind = kindForDevice(device.code);
     var group = new THREE.Group();
     var x = count <= 1 ? 0 : -6.2 + index * (12.4 / (count - 1));
@@ -341,6 +414,91 @@
       }
     });
     return group;
+  }
+
+  function createPlanarDevice(device, index, count) {
+    var kind = kindForDevice(device.code);
+    var group = new THREE.Group();
+    var x = count <= 1 ? 0 : -6.6 + index * (13.2 / (count - 1));
+    var z = index % 2 === 0 ? -2.45 : 2.45;
+    if (state.stageCode === 'BEVERAGE_READY') z = index % 2 === 0 ? -2.2 : 1.9;
+    if (state.stageCode === 'AGV_TRANSPORT') z = index === 0 ? 0 : index === 1 ? -3.2 : 3.1;
+    if (state.stageCode === 'WAREHOUSE_INBOUND') z = index < 2 ? -2.6 : 2.7;
+    group.position.set(x, 0, z);
+
+    var baseColor = kind === 'sensor' ? 0xeff7fb : kind === 'robot' ? 0xd7e8f4 : kind === 'agv' ? 0xc7dcef : 0xf7fbfd;
+    var shape = box(kind === 'agv' ? 2.35 : 1.95, 0.16, kind === 'agv' ? 1.1 : 1.25, baseColor);
+    shape.position.y = 0.18;
+    group.add(shape);
+
+    if (kind === 'camera') {
+      var lens = cylinder(0.28, 0.12, COLORS.navy, 18);
+      lens.position.set(0, 0.34, 0.43);
+      group.add(lens);
+    } else if (kind === 'sensor') {
+      var pulse = cylinder(0.38, 0.1, COLORS.accent, 24);
+      pulse.position.set(0, 0.34, 0);
+      group.add(pulse);
+      movingParts.push({ object: pulse, type: 'pulse', deviceCode: device.code });
+    } else if (kind === 'robot') {
+      var arm = box(1.18, 0.14, 0.24, COLORS.accent);
+      arm.position.set(0.2, 0.36, 0);
+      group.add(arm);
+      movingParts.push({ object: arm, type: 'reject', deviceCode: device.code });
+    } else if (kind === 'reject') {
+      var gate = box(1.35, 0.14, 0.18, COLORS.warning);
+      gate.position.set(0, 0.36, 0);
+      group.add(gate);
+      movingParts.push({ object: gate, type: 'reject', deviceCode: device.code });
+    } else if (kind === 'agv') {
+      var deck = box(1.45, 0.14, 0.78, COLORS.blue);
+      deck.position.y = 0.36;
+      group.add(deck);
+      movingParts.push({ object: group, type: 'agv', deviceCode: device.code, originX: group.position.x });
+    } else {
+      var core = box(1.15, 0.14, 0.62, COLORS.blue);
+      core.position.y = 0.34;
+      group.add(core);
+    }
+
+    var label = createLabelSprite(device.name || device.code, '#173247');
+    label.userData.deviceOwner = group;
+    label.position.set(0, 0.42, 1.02);
+    group.add(label);
+
+    group.userData.deviceCode = device.code;
+    group.userData.selectType = 'device';
+    group.userData.label = device.name || device.code;
+    group.traverse(function (child) {
+      if (child.isMesh) {
+        child.userData.deviceOwner = group;
+        child.userData.baseColor = child.material.color.getHex();
+      }
+    });
+    return group;
+  }
+
+  function createLabelSprite(text, color) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    var context = canvas.getContext('2d');
+    context.fillStyle = 'rgba(249,251,253,.92)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = 'rgba(21,94,149,.55)';
+    context.lineWidth = 4;
+    context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+    context.fillStyle = color || '#173247';
+    context.font = '24px Microsoft YaHei, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    var label = text.length > 9 ? text.slice(0, 9) : text;
+    context.fillText(label, canvas.width / 2, canvas.height / 2);
+    var texture = new THREE.CanvasTexture(canvas);
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+    sprite.scale.set(1.55, 0.38, 1);
+    sprite.userData.isLabel = true;
+    return sprite;
   }
 
   function createMachine(group) {
@@ -570,6 +728,15 @@
   function createProduct(product) {
     var group = new THREE.Group();
     var productColor = colorForState(product.status, COLORS.product);
+    if (state.viewMode === 'PLANAR') {
+      var token = cylinder(state.stageCode === 'PACKING' || state.stageCode === 'AGV_TRANSPORT' || state.stageCode === 'WAREHOUSE_INBOUND' ? 0.36 : 0.26, 0.16, state.statusColors ? productColor : COLORS.product, 20);
+      token.position.y = 0.48;
+      group.add(token);
+      var mark = box(0.52, 0.12, 0.08, COLORS.navy);
+      mark.position.y = 0.59;
+      group.add(mark);
+      return group;
+    }
     if (state.stageCode === 'PACKING' || state.stageCode === 'AGV_TRANSPORT' || state.stageCode === 'WAREHOUSE_INBOUND') {
       var carton = box(1.0, 0.78, 0.82, state.statusColors ? productColor : COLORS.box);
       carton.position.y = 1.45;
@@ -618,6 +785,24 @@
     });
   }
 
+  function buildSourceLabel() {
+    if (state.layoutEdit) return 'LAYOUT EDIT · DRAG DEVICE · v' + String(state.stateVersion || 0)
+    return state.source + ' · v' + String(state.stateVersion || 0) + (state.paused ? ' · PAUSED' : ' · LIVE');
+  }
+
+  function updateProbe() {
+    testProbe.ready = Boolean(renderer && scene && camera);
+    testProbe.mode = state.viewMode;
+    testProbe.stateVersion = Number(state.stateVersion || 0);
+    testProbe.rendererInfo = renderer ? renderer.info : testProbe.rendererInfo;
+    testProbe.deviceCount = state.devices.length;
+    testProbe.productCount = state.products.length;
+    testProbe.paused = Boolean(state.paused);
+    testProbe.lastError = state.lastError || '';
+    testProbe.source = state.source;
+    window.__factoryTest__ = testProbe;
+  }
+
   function positionProducts(elapsed) {
     if (!productRoot) return;
     var baseProgress = Number(state.progress || 0) / 100;
@@ -627,7 +812,7 @@
       if (state.stageCode === 'AGV_TRANSPORT') {
         product.position.set(-6.4 + t * 12.8, 0, 0.1 + index * 0.08);
       } else if (state.stageCode === 'WAREHOUSE_INBOUND') {
-        product.position.set(-7 + t * 7.5, 0, 0);
+        product.position.set(state.viewMode === 'PLANAR' ? -7 + t * 14 : -7 + t * 7.5, 0, state.viewMode === 'PLANAR' ? 1.25 : 0);
       } else if (state.stageCode === 'BEVERAGE_READY') {
         product.position.set(-6 + t * 12, 0, 2.8);
       } else if (state.stageCode === 'PACKING') {
@@ -670,9 +855,16 @@
     animateEquipment(elapsed, delta);
     positionProducts(elapsed);
     renderer.render(scene, camera);
+    updateProbe();
   }
 
   function updateCamera() {
+    if (state.viewMode === 'PLANAR') {
+      camera.position.set(0, 24, 0);
+      camera.up.set(0, 0, -1);
+      camera.lookAt(0, 0, 0);
+      return;
+    }
     var cosPitch = Math.cos(cameraOrbit.pitch);
     camera.position.set(
       Math.sin(cameraOrbit.yaw) * cosPitch * cameraOrbit.distance,
@@ -683,6 +875,10 @@
   }
 
   function resetCamera() {
+    if (state.viewMode === 'PLANAR') {
+      updateCamera();
+      return;
+    }
     cameraOrbit = { yaw: -0.65, pitch: 0.62, distance: 19 };
     if (state.stageCode === 'WAREHOUSE_INBOUND') cameraOrbit.distance = 22;
     updateCamera();
@@ -693,7 +889,16 @@
     var width = Math.max(1, host.clientWidth);
     var height = Math.max(1, host.clientHeight);
     renderer.setSize(width, height, false);
-    camera.aspect = width / height;
+    if (camera.isOrthographicCamera) {
+      var aspect = width / height;
+      var frustum = 15;
+      camera.left = -frustum * aspect;
+      camera.right = frustum * aspect;
+      camera.top = frustum;
+      camera.bottom = -frustum;
+    } else {
+      camera.aspect = width / height;
+    }
     camera.updateProjectionMatrix();
   }
 
@@ -739,7 +944,7 @@
           draggedDevice.position.x = Math.max(-8, Math.min(8, point.x));
           draggedDevice.position.z = Math.max(-5, Math.min(5, point.z));
         }
-      } else {
+      } else if (state.viewMode !== 'PLANAR') {
         cameraOrbit.yaw -= dx * 0.007;
         cameraOrbit.pitch = Math.max(0.22, Math.min(1.15, cameraOrbit.pitch + dy * 0.006));
         updateCamera();
@@ -778,7 +983,7 @@
   }
 
   function positionStorageKey(code) {
-    return 'factory3d.layout.' + state.stageCode + '.' + code;
+    return 'factory3d.layout.' + state.stageCode + '.' + state.viewMode + '.' + code;
   }
 
   function applySavedPosition(group) {
@@ -812,6 +1017,7 @@
       try {
         var next = normalizePayload(payload);
         var stageChanged = next.stageCode && next.stageCode !== state.stageCode;
+        var modeChanged = next.viewMode && next.viewMode !== state.viewMode;
         var statusColorsChanged = next.statusColors !== undefined && next.statusColors !== state.statusColors;
         var productSignature = JSON.stringify((next.products || []).map(function (item) {
           return item.traceCode + ':' + item.status;
@@ -820,39 +1026,59 @@
           return item.traceCode + ':' + item.status;
         }));
         Object.keys(next).forEach(function (key) { state[key] = next[key]; });
-        if (stageChanged) {
+        if (next.errorMessage !== undefined) state.lastError = next.errorMessage;
+        if (modeChanged) {
+          createCameraForMode();
+          rebuildStage();
+          resetCamera();
+          resize();
+        } else if (stageChanged) {
           rebuildStage();
           resetCamera();
         } else {
           if (productSignature !== oldProductSignature || statusColorsChanged) rebuildProducts();
           applyRuntimeState();
         }
-        stageLabel.textContent = state.stageName + ' / ' + state.stageCode;
-        sourceLabel.textContent = state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
+        stageLabel.textContent = (state.viewMode === 'PLANAR' ? '2D ' : '3D ') + state.stageName + ' / ' + state.stageCode + ' · v' + String(state.stateVersion || 0);
+        sourceLabel.textContent = buildSourceLabel();
+        updateProbe();
       } catch (error) {
+        state.lastError = error && error.message ? error.message : 'DATA ERROR';
         sourceLabel.textContent = 'DATA ERROR';
+        updateProbe();
       }
     },
     setPaused: function (paused) {
       state.paused = Boolean(paused);
-      sourceLabel.textContent = state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
+      sourceLabel.textContent = buildSourceLabel();
+      updateProbe();
     },
     setStatusColors: function (enabled) {
       state.statusColors = Boolean(enabled);
       rebuildProducts();
       applyRuntimeState();
+      updateProbe();
     },
     setLayoutEdit: function (enabled) {
       state.layoutEdit = Boolean(enabled);
-      sourceLabel.textContent = state.layoutEdit ? 'LAYOUT EDIT · DRAG DEVICE' : state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
+      sourceLabel.textContent = state.layoutEdit ? 'LAYOUT EDIT · DRAG DEVICE' : buildSourceLabel();
+      updateProbe();
     },
     resetCamera: resetCamera,
     dispose: function () {
       if (resizeObserver) resizeObserver.disconnect();
       clearObject(stageRoot);
       if (renderer) renderer.dispose();
+      state.lastError = '';
+      testProbe.ready = false;
+      updateProbe();
     }
   };
+
+  window.addEventListener('error', function (event) {
+    state.lastError = event && event.message ? event.message : 'WINDOW ERROR';
+    updateProbe();
+  });
 
   init();
 }());
