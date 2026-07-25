@@ -6,9 +6,9 @@ export interface ApiConfigValues {
 }
 
 export const ApiConfig: ApiConfigValues = {
-  // 真机请改成运行 Spring Boot 电脑的局域网地址，不能使用 localhost。
-  API_BASE: 'http://192.168.0.105:8088/hdc/api',
-  WS_BASE: 'ws://192.168.0.105:8088/hdc/api/dataScreen/1',
+  // 集成环境通过本机端口访问当前 Spring Boot 服务。
+  API_BASE: 'http://127.0.0.1:8088/hdc/api',
+  WS_BASE: 'ws://127.0.0.1:8088/hdc/api/dataScreen/1',
   requestTimeoutMs: 8000,
   refreshIntervalMs: 2000
 }
