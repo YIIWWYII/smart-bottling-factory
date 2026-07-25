@@ -3,6 +3,7 @@ import {
   FactoryBundle,
   FactoryIncident,
   FactoryRun,
+  QualityGateView,
   RuntimeDevice,
   RuntimeStage,
   SensorReading,
@@ -74,7 +75,7 @@ export function normalizeStageSnapshot(snapshot: StageSnapshot, stage: StageDefi
   const buffer: StageBufferSnapshot = snapshot.buffer === undefined
     ? { inputLevel: 0, outputLevel: 0, capacity: 0, blockedReason: '等待缓冲数据' }
     : snapshot.buffer
-  const qualityGates = (snapshot.qualityGates || []).map((gate) => ({
+  const qualityGates: Array<QualityGateView> = (snapshot.qualityGates || []).map((gate: QualityGateView): QualityGateView => ({
     label: gate.label || '质量门',
     standard: gate.standard || '--',
     actual: gate.actual || '--',
