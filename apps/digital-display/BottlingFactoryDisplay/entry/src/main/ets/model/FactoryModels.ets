@@ -157,6 +157,11 @@ export interface RuntimeSnapshot {
   incidents: Array<FactoryIncident>
 }
 
+export interface LineSnapshotMeta {
+  stateVersion?: number
+  generatedAt?: string
+}
+
 export interface AgvTask {
   taskId: string
   agvCode: string
