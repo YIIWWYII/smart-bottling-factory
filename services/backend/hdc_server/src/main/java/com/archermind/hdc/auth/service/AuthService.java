@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 @Service
 public class AuthService {
     private static final Pattern USERNAME = Pattern.compile("^[A-Za-z0-9_]{3,32}$");
-    private static final List<String> ROLES = Arrays.asList("ADMIN", "OPERATOR", "VIEWER");
+    private static final List<String> ROLES = Arrays.asList("ADMIN", "ENGINEER", "OPERATOR", "VIEWER");
     private static final List<String> STATUSES = Arrays.asList("ACTIVE", "DISABLED");
     private static final int SESSION_HOURS = 12;
 

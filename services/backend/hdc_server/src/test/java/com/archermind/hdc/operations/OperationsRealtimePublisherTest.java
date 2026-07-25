@@ -20,8 +20,11 @@ class OperationsRealtimePublisherTest {
 
         assertTrue(String.valueOf(envelope.get("eventId")).startsWith("EVT-"));
         assertEquals("operations.command.changed", envelope.get("type"));
+        assertEquals("LINE-01", envelope.get("lineId"));
+        assertEquals(1L, envelope.get("stateVersion"));
         assertEquals(1, envelope.get("schemaVersion"));
         assertNotNull(envelope.get("occurredAt"));
+        assertTrue(String.valueOf(envelope.get("occurredAt")).contains("T"));
         assertNotNull(envelope.get("payload"));
     }
 }

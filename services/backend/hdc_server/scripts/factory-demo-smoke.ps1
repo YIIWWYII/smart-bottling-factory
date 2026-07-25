@@ -29,19 +29,43 @@ function Invoke-Json {
 
 function Test-WebSocket {
   $socket = [System.Net.WebSockets.ClientWebSocket]::new()
-  $socket.ConnectAsync([Uri]$WsUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+  $socket.ConnectAsync([Uri]$WsUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult() | Out-Null
   $bytes = [Text.Encoding]::UTF8.GetBytes('ping')
   $sendSegment = [ArraySegment[byte]]::new($bytes)
   $socket.SendAsync($sendSegment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true,
-    [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    [Threading.CancellationToken]::None).GetAwaiter().GetResult() | Out-Null
   $buffer = New-Object byte[] 4096
   $receiveSegment = [ArraySegment[byte]]::new($buffer)
   $result = $socket.ReceiveAsync($receiveSegment, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
-  $message = [Text.Encoding]::UTF8.GetString($buffer, 0, $result.Count)
+  $initialMessage = [Text.Encoding]::UTF8.GetString($buffer, 0, $result.Count)
+  Invoke-Json POST '/factory/runtime/telemetry' @{
+    stageCode = 'GAS_INSPECTION'
+    deviceCode = 'GAS-VERIFY-01'
+    state = 'RUNNING'
+    source = 'MQTT'
+    speedMps = 0.1
+    progress = 0.25
+  } | Out-Null
+  $message = $null
+  $deadline = [DateTime]::UtcNow.AddSeconds(5)
+  while ([DateTime]::UtcNow -lt $deadline -and [string]::IsNullOrWhiteSpace($message)) {
+    $receiveCts = [Threading.CancellationTokenSource]::new(1000)
+    try {
+      $eventResult = $socket.ReceiveAsync($receiveSegment, $receiveCts.Token).GetAwaiter().GetResult()
+      $candidate = [Text.Encoding]::UTF8.GetString($buffer, 0, $eventResult.Count)
+      try {
+        $candidateJson = $candidate | ConvertFrom-Json
+        if ($null -ne $candidateJson.eventId -and $null -ne $candidateJson.stateVersion -and $null -ne $candidateJson.lineId) {
+          $message = $candidate
+        }
+      } catch { }
+    } catch [System.OperationCanceledException] { }
+    finally { $receiveCts.Dispose() }
+  }
   $socket.CloseOutputAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, 'smoke done',
-    [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    [Threading.CancellationToken]::None).GetAwaiter().GetResult() | Out-Null
   if ([string]::IsNullOrWhiteSpace($message)) {
-    throw 'WebSocket connected but no message was received'
+    throw "WebSocket connected but no unified event was received; initial=$initialMessage"
   }
   $message
 }
@@ -95,11 +119,13 @@ if ($runtime.success -ne $true -and $runtime.code -ne 0 -and $runtime.code -ne 1
 
 $group = Ensure-DemoGroup
 $groupId = $group.id
-$WsUrl = "ws://127.0.0.1:8089/hdc/api/dataScreen/$groupId"
+$baseUri = [Uri]$BaseUrl
+$WsUrl = "ws://$($baseUri.Host):$($baseUri.Port)/hdc/api/dataScreen/$groupId"
 
 Write-Host "WebSocket ping: $WsUrl"
 $wsMessage = Test-WebSocket
 Write-Host "WebSocket first message: $wsMessage"
+try { $wsJson = $wsMessage | ConvertFrom-Json } catch { throw 'WebSocket message is not valid JSON' }
 
 Write-Host 'External telemetry smoke'
 $reading = Invoke-Json POST '/operations/sensors/readings' @{
@@ -142,6 +168,32 @@ $command = Invoke-Json POST '/operations/commands' @{
 } $headers
 if ($command.data.status -ne 'PENDING') {
   throw "command was not accepted as PENDING: $($command.data.status)"
+}
+
+Write-Host 'Contract snapshot smoke'
+$topology = Invoke-Json GET '/factory/topology'
+if ($topology.success -ne $true -or $topology.data.stages.Count -ne 9) {
+  throw 'topology contract smoke failed'
+}
+if (($topology.data.stages[0].upstream -ne $null) -or
+    ($topology.data.stages[0].downstream -ne 'GAS_INSPECTION') -or
+    ($topology.data.stages[1].upstream -ne 'PRETREATMENT')) {
+  throw 'topology stage links are inconsistent'
+}
+$line = Invoke-Json GET '/factory/line-snapshot'
+$stage = Invoke-Json GET '/factory/stages/FILLING/snapshot'
+if ($line.success -ne $true -or $stage.success -ne $true) {
+  throw 'contract snapshot smoke failed'
+}
+if ($stage.data.devices.Count -eq 0 -or $stage.data.products.Count -eq 0) {
+  throw 'stage snapshot did not contain device and product runtime data'
+}
+if ([string]::IsNullOrWhiteSpace([string]$stage.data.stateVersion)) {
+  throw 'stage snapshot stateVersion is missing'
+}
+$capability = Invoke-Json GET '/devices/FIL-PUMP-01/capabilities'
+if ($capability.data.capabilityVersion -ne 'capability-2026.1') {
+  throw 'device capability contract smoke failed'
 }
 
 Write-Host 'factory-demo smoke passed'

@@ -1,6 +1,7 @@
 package com.archermind.hdc.operations.controller;
 
 import com.archermind.hdc.api.result.Result;
+import com.archermind.hdc.auth.model.AdminUser;
 import com.archermind.hdc.operations.dto.AiDecisionRequest;
 import com.archermind.hdc.operations.dto.AiDecisionResponse;
 import com.archermind.hdc.operations.dto.CommandAckRequest;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import javax.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/operations")
@@ -59,7 +61,14 @@ public class OperationsController {
     }
 
     @PostMapping("/commands")
-    public Result<DeviceCommand> createCommand(@RequestBody DeviceCommandRequest request) {
+    public Result<DeviceCommand> createCommand(@RequestBody DeviceCommandRequest request,
+                                               HttpServletRequest servletRequest) {
+        Object authenticated = servletRequest.getAttribute("authUser");
+        if (authenticated instanceof AdminUser) {
+            AdminUser user = (AdminUser) authenticated;
+            request.setOperator(user.getUsername());
+            request.setOperatorRole(user.getRole());
+        }
         return call(() -> service.createCommand(request));
     }
 

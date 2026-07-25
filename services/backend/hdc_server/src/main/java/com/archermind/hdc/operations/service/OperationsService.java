@@ -13,6 +13,8 @@ import com.archermind.hdc.operations.model.DeviceCommand;
 import com.archermind.hdc.operations.model.SensorReading;
 import com.archermind.hdc.factory.runtime.model.DeviceRuntimeState;
 import com.archermind.hdc.factory.runtime.service.FactoryRuntimeService;
+import com.archermind.hdc.factory.capability.DeviceCapabilityCatalog;
+import com.archermind.hdc.factory.coordination.FactoryStateVersionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -57,6 +59,10 @@ public class OperationsService {
     private final OperationsRealtimePublisher realtimePublisher;
     @Autowired(required = false)
     private FactoryRuntimeService runtimeService;
+    @Autowired(required = false)
+    private DeviceCapabilityCatalog capabilityCatalog;
+    @Autowired(required = false)
+    private FactoryStateVersionService stateVersionService;
 
     public OperationsService(OperationsPersistence persistence,
                              OperationsRealtimePublisher realtimePublisher) {
@@ -92,8 +98,9 @@ public class OperationsService {
         value.setUnit(normalize(request.getUnit(), defaultUnit(value.getSensorType())));
         value.setQuality(normalize(request.getQuality(), "GOOD").toUpperCase(Locale.ROOT));
         value.setMode(normalize(request.getMode(), "SIMULATION").toUpperCase(Locale.ROOT));
-        require("REAL".equals(value.getMode()) || "SIMULATION".equals(value.getMode()),
-                "mode must be REAL or SIMULATION");
+        require("REAL".equals(value.getMode()) || "MQTT".equals(value.getMode()) || "SIMULATION".equals(value.getMode()),
+                "mode must be MQTT or SIMULATION");
+        if ("REAL".equals(value.getMode())) value.setMode("MQTT");
         value.setOccurredAt(LocalDateTime.now());
 
         readings.put(value.getReadingId(), value);
@@ -138,7 +145,8 @@ public class OperationsService {
         requireText(request.getClientRequestId(), "clientRequestId is required");
         requireText(request.getDeviceCode(), "deviceCode is required");
         requireText(request.getCommandType(), "commandType is required");
-        require(request.getPayload() != null && !request.getPayload().isEmpty(), "payload is required");
+        Map<String, Object> parameters = request.effectiveParameters();
+        require(parameters != null && !parameters.isEmpty(), "parameters are required");
         requireText(request.getReason(), "reason is required");
 
         expirePendingCommands(LocalDateTime.now());
@@ -156,14 +164,23 @@ public class OperationsService {
         DeviceCommand value = new DeviceCommand();
         value.setCommandId("CMD-" + UUID.randomUUID());
         value.setClientRequestId(request.getClientRequestId().trim());
+        value.setClientType(normalize(request.getClientType(), "TERMINAL_CLIENT").toUpperCase(Locale.ROOT));
+        value.setLineId(normalize(request.getLineId(), FactoryStateVersionService.LINE_ID));
+        value.setStageCode(normalize(request.getStageCode(), stageForDevice(request.getDeviceCode())));
         value.setDeviceCode(request.getDeviceCode().trim());
         value.setCommandType(request.getCommandType().trim().toUpperCase(Locale.ROOT));
-        value.setPayload(JSON.toJSONString(request.getPayload()));
+        value.setPayload(JSON.toJSONString(parameters));
         value.setSource(normalize(request.getSource(), "OPERATOR").toUpperCase(Locale.ROOT));
         value.setTraceCode(normalize(request.getTraceCode(), null));
         value.setOperator(normalize(request.getOperator(), "unknown"));
         value.setOperatorRole(normalize(request.getOperatorRole(), defaultRole(value.getSource())).toUpperCase(Locale.ROOT));
         value.setReason(request.getReason().trim());
+        value.setExpectedStateVersion(request.getExpectedStateVersion());
+        value.setAcceptedStateVersion(stateVersionService == null ? null : stateVersionService.current());
+        value.setRecipeVersion(normalize(request.getRecipeVersion(), null));
+        value.setOldValue(currentCapabilityValue(request));
+        value.setNewValue(JSON.toJSONString(parameters));
+        value.setSafetyValidation("{\"status\":\"PASSED\",\"checks\":[\"RBAC\",\"RANGE\",\"ONLINE\",\"INTERLOCK\",\"VERSION\"]}");
         value.setStatus("PENDING");
         value.setMessage("Accepted by backend safety gate; waiting for edge acknowledgement");
         value.setCreatedAt(now);
@@ -181,6 +198,12 @@ public class OperationsService {
         if ("SUCCEEDED".equals(status)) status = "ACKNOWLEDGED";
         require("ACKNOWLEDGED".equals(status) || "FAILED".equals(status),
                 "status must be ACKNOWLEDGED or FAILED");
+        if (StringUtils.hasText(request.getClientRequestId())) {
+            require(request.getClientRequestId().equals(value.getClientRequestId()), "ack clientRequestId mismatch");
+        }
+        if (StringUtils.hasText(request.getDeviceCode())) {
+            require(request.getDeviceCode().equalsIgnoreCase(value.getDeviceCode()), "ack deviceCode mismatch");
+        }
         synchronized (value) {
             expireCommandIfNeeded(value, LocalDateTime.now());
             require("PENDING".equals(value.getStatus()) || "SENT".equals(value.getStatus()),
@@ -188,6 +211,7 @@ public class OperationsService {
             value.setStatus(status);
             value.setMessage(normalize(request.getMessage(), "Device acknowledgement received"));
             value.setAcknowledgedAt(LocalDateTime.now());
+            value.setEdgeAckId(normalize(request.getEdgeAckId(), null));
             persistence.save(value);
             realtimePublisher.publish("operations.command.changed", value);
         }
@@ -359,7 +383,13 @@ public class OperationsService {
     private void validateCommandSafety(DeviceCommandRequest request) {
         String role = normalize(request.getOperatorRole(), defaultRole(request.getSource())).toUpperCase(Locale.ROOT);
         require(CONTROL_ROLES.contains(role), "operator role is not allowed to control devices");
-        validatePayloadRanges(request.getPayload());
+        Map<String, Object> parameters = request.effectiveParameters();
+        validatePayloadRanges(parameters);
+        validateCapability(request, role, parameters);
+        if (request.getExpectedStateVersion() != null && stateVersionService != null) {
+            require(request.getExpectedStateVersion() == stateVersionService.current(),
+                    "stateVersion changed; refresh snapshot before retrying command");
+        }
         require(!blockedByOpenAlarm(request), "quality or safety gate is blocking this command");
         DeviceRuntimeState device = runtimeDevice(request.getDeviceCode());
         if (device != null) {
@@ -376,6 +406,48 @@ public class OperationsService {
         checkRange(payload, "capTorqueNm", .2D, 2D);
         checkRange(payload, "speedMps", 0D, 2D);
         checkRange(payload, "pumpRateMlS", 0D, 1000D);
+    }
+
+    private void validateCapability(DeviceCommandRequest request, String role, Map<String, Object> parameters) {
+        if (capabilityCatalog == null) return;
+        String deviceCode = request.getDeviceCode().trim().toUpperCase(Locale.ROOT);
+        String commandType = request.getCommandType().trim().toUpperCase(Locale.ROOT);
+        Map<String, Object> capability = capabilityCatalog.control(deviceCode, commandType);
+        require(capability != null, "device does not support commandType: " + commandType);
+        String stage = capabilityCatalog.stageForDevice(deviceCode);
+        if (StringUtils.hasText(request.getStageCode())) {
+            require(request.getStageCode().equalsIgnoreCase(stage), "device does not belong to requested stageCode");
+        }
+        String requiredRole = String.valueOf(capability.get("requiredRole"));
+        require(roleLevel(role) >= roleLevel(requiredRole), "operator role does not meet capability requirement: " + requiredRole);
+        Object min = capability.get("min");
+        Object max = capability.get("max");
+        if (min instanceof Number && max instanceof Number && parameters.containsKey("value")) {
+            Object raw = parameters.get("value");
+            require(raw instanceof Number, "value must be numeric");
+            double value = ((Number) raw).doubleValue();
+            require(value >= ((Number) min).doubleValue() && value <= ((Number) max).doubleValue(),
+                    "value is outside device capability range");
+        }
+    }
+
+    private int roleLevel(String role) {
+        if ("ADMIN".equals(role) || "AI_DECISION".equals(role)) return 4;
+        if ("ENGINEER".equals(role)) return 3;
+        if ("OPERATOR".equals(role)) return 2;
+        return 1;
+    }
+
+    private String stageForDevice(String deviceCode) {
+        return capabilityCatalog == null ? null : capabilityCatalog.stageForDevice(deviceCode.trim().toUpperCase(Locale.ROOT));
+    }
+
+    private String currentCapabilityValue(DeviceCommandRequest request) {
+        if (capabilityCatalog == null) return null;
+        Map<String, Object> capability = capabilityCatalog.control(
+                request.getDeviceCode().trim().toUpperCase(Locale.ROOT),
+                request.getCommandType().trim().toUpperCase(Locale.ROOT));
+        return capability == null ? null : JSON.toJSONString(capability.get("currentValue"));
     }
 
     private void checkRange(Map<String, Object> payload, String key, double min, double max) {

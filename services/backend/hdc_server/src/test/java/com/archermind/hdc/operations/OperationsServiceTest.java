@@ -9,6 +9,8 @@ import com.archermind.hdc.operations.model.SensorReading;
 import com.archermind.hdc.operations.service.OperationsPersistence;
 import com.archermind.hdc.operations.service.OperationsRealtimePublisher;
 import com.archermind.hdc.operations.service.OperationsService;
+import com.archermind.hdc.factory.capability.DeviceCapabilityCatalog;
+import com.archermind.hdc.factory.coordination.FactoryStateVersionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,6 +37,9 @@ class OperationsServiceTest {
         ReflectionTestUtils.setField(service, "temperatureMin", 20.0D);
         ReflectionTestUtils.setField(service, "temperatureMax", 30.0D);
         ReflectionTestUtils.setField(service, "agvDistanceMin", 20.0D);
+        ReflectionTestUtils.setField(service, "capabilityCatalog", new DeviceCapabilityCatalog());
+        ReflectionTestUtils.setField(service, "stateVersionService",
+                new FactoryStateVersionService(new JdbcTemplate()));
     }
 
     @Test
@@ -122,6 +127,18 @@ class OperationsServiceTest {
         ack.setStatus("ACKNOWLEDGED");
         assertThrows(IllegalArgumentException.class,
                 () -> service.acknowledgeCommand(command.getCommandId(), ack));
+    }
+
+    @Test
+    void commandRejectsWrongStageAndStaleVersion() {
+        DeviceCommandRequest wrongStage = command("CMD-REQ-STAGE");
+        wrongStage.setDeviceCode("FIL-PUMP-01");
+        wrongStage.setStageCode("GAS_INSPECTION");
+        assertThrows(IllegalArgumentException.class, () -> service.createCommand(wrongStage));
+
+        DeviceCommandRequest stale = command("CMD-REQ-VERSION");
+        stale.setExpectedStateVersion(99L);
+        assertThrows(IllegalArgumentException.class, () -> service.createCommand(stale));
     }
 
     @Test

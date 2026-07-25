@@ -54,7 +54,9 @@ public class ManagementAuthFilter extends OncePerRequestFilter {
     }
 
     private boolean requiresAdministrator(HttpServletRequest request) {
-        return request.getServletPath().startsWith("/auth/users");
+        String path = request.getServletPath();
+        return path.startsWith("/auth/users") || path.startsWith("/simulation/")
+                || path.startsWith("/config/thresholds") || path.startsWith("/quality/rules");
     }
 
     private boolean requiresOperator(HttpServletRequest request) {
@@ -69,6 +71,9 @@ public class ManagementAuthFilter extends OncePerRequestFilter {
         if (path.matches("/factory/runs/[^/]+/disposition") || path.equals("/factory/runtime/incidents")
                 || path.matches("/factory/runtime/incidents/[^/]+/resolve")) return true;
         if (path.matches("/operations/alarms/[^/]+/ack") || path.equals("/operations/commands") || path.equals("/operations/ai/decide")) return true;
+        if (path.equals("/production/orders") || path.matches("/production/orders/[^/]+")) return true;
+        if (path.startsWith("/config/recipes") || path.startsWith("/config/thresholds")
+                || path.startsWith("/quality/rules") || path.startsWith("/simulation/")) return true;
         return path.equals("/logistics/agv/tasks") || path.equals("/logistics/warehouse/inbound");
     }
 
@@ -77,6 +82,7 @@ public class ManagementAuthFilter extends OncePerRequestFilter {
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType("application/json;charset=UTF-8");
         String safeMessage = message == null ? "认证失败" : message.replace("\\", "\\\\").replace("\"", "\\\"");
-        response.getWriter().write("{\"code\":" + code + ",\"message\":\"" + safeMessage + "\",\"data\":null}");
+        response.getWriter().write("{\"code\":" + code + ",\"message\":\"" + safeMessage
+                + "\",\"data\":null,\"success\":false}");
     }
 }
