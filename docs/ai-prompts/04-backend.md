@@ -1,10 +1,14 @@
-# Spring Boot 后端开发对话提示词
-满足后端 P0。运行 `mvn test`，增加服务单元测试、持久化重启测试、命令安全门/幂等/超时测试、模拟与 MQTT 切换测试、WebSocket 契约测试。使用 `factory-demo` 启动并提供可复现的 HTTP/WebSocket 冒烟脚本。提交并推送 `codex/backend`，报告提交号、数据库迁移、接口变化、测试、风险和契约提案，不推 `main`。
+# Spring Boot 后端补救开发对话提示词
+
 你负责唯一 Spring Boot 后端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-backend`，分支是 `codex/backend`，唯一业务写入范围是 `services/backend/hdc_server`。不要修改三个鸿蒙 App。后端不使用 ArkTS，也不使用 `devecocli` 构建。
+
+## 当前阶段
+
+后端已经完成一轮开发且可能存在未提交修改。先审计现有 Controller、Service、持久化、实时发布和测试，再做补救，不重新搭骨架。检查 `git diff`、数据库脚本和配置，保护已有代码与数据；禁止硬重置、覆盖工作树或用内存实现替换已经存在的持久化。先输出 P0 已完成、缺失、证据不足和兼容风险清单。
 
 ## 先做
 
-阅读根 README、`contracts/`、开发标准和后端 README；检查 Git、Java、Maven、配置和现有测试。不得把数据库、Maven 缓存或运行文件新增到 C 盘；保护现有配置和用户数据。
+阅读根 README、`contracts/`、开发标准、`docs/engineering/TESTING_TOOLCHAIN.md` 和后端 README；检查 Git、Java、Maven、配置和现有测试。后端使用 Maven/JUnit/Spring Boot Test，不调用 `devecocli`；HTTP 冒烟可用 PowerShell/curl，WebSocket 冒烟使用可复现 Node/Java 客户端，Swagger 辅助页可调用 `$playwright` 或 `$browser-harness`。不得把数据库、Maven 缓存或运行文件新增到 C 盘；保护现有配置和用户数据。
 
 ## 目标
 
@@ -19,6 +23,15 @@
 7. 按 `contracts` 提供 HTTP 快照和 WebSocket 事件；首屏不依赖 WebSocket。兼容现有事件后再迁移到统一信封。
 8. AI 决策中枢通过清晰的外部端口接 RAG/MCP/模型：记录输入、知识版本、召回依据、数据库校验、建议、审批、设备命令和回执。AI 不得绕过后端安全门直接控制硬件。
 
+## 补救顺序
+
+1. 对照 `client-capability-matrix.md` 检查每个前端功能是否有真实数据源或命令接收端。
+2. 对照 API 契约区分当前兼容接口和 P0 目标接口；先保持旧端兼容，再补快照、能力、工单、规则、配置、审计、报表和中央模拟接口。
+3. 统一生成 `LineSnapshot`、`StageSnapshot` 和单调递增 `stateVersion`；三个前端不得从不同随机源得到位置、速度和 KPI。
+4. 按实时契约统一事件信封，并在迁移期兼容旧事件；补物流、仓储、产品、质量门、工单、配置、模拟和 AI 事件消费者所需字段。
+5. 按控制契约补客户端身份、角色、安全阈值只读边界、设备能力和命令最终状态；HTTP 受理只返回 `PENDING`。
+6. 先补自动化测试再修实现，确保失败用例能够重现问题；不把 Docker/Testcontainers 强行设为前置条件。
+
 ## 禁止
 
 - 不把前端模拟数据当事实写入生产库，不静默吞错，不返回假成功。
@@ -28,4 +41,4 @@
 
 ## 验收与交付
 
-满足后端 P0。运行 `mvn test`，增加服务单元测试、持久化重启测试、命令安全门/幂等/超时测试、模拟与 MQTT 切换测试、WebSocket 契约测试。使用 `factory-demo` 启动并提供可复现的 HTTP/WebSocket 冒烟脚本。提交并推送 `codex/backend`，报告提交号、数据库迁移、接口变化、测试、风险和契约提案，不推 `main`。
+满足后端 P0。运行 `mvn test`，增加服务单元测试、持久化重启测试、命令安全门/幂等/超时/回执测试、模拟与 MQTT 切换测试、快照和 WebSocket 契约测试。使用 `factory-demo` 启动并提供可复现的 HTTP/WebSocket 冒烟脚本。提交并推送 `codex/backend`，报告提交号、数据库迁移、接口变化、测试命令与计数、失败证据、风险和契约提案，不推 `main`。

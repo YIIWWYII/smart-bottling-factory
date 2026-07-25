@@ -12,6 +12,9 @@
 {
   "eventId": "evt-unique-id",
   "type": "factory.stage.changed",
+  "lineId": "LINE-01",
+  "stageCode": "FILLING",
+  "stateVersion": 1024,
   "occurredAt": "2026-07-25T12:00:00+08:00",
   "schemaVersion": 1,
   "payload": {}
@@ -27,8 +30,15 @@
 | `operations.sensor.recorded` | 三前端 | 更新读数和质量门 |
 | `operations.alarm.changed` | 三前端 | 更新颜色、报警和联锁 |
 | `operations.command.changed` | 终端、管理 | 更新命令最终结果 |
-| `logistics.changed` | 展板、管理 | 更新 AGV、仓区和库存 |
-| `ai.decision.changed` | 终端、管理 | 更新建议、校验和执行状态 |
+| `product.changed` | 三前端 | 更新产品位置、状态、质量和追踪链 |
+| `quality.gate.changed` | 三前端 | 更新质量门判定、依据和规则版本 |
+| `production.order.changed` | 三前端 | 更新工单、批次、计划和实际进度 |
+| `logistics.changed` | 三前端 | 更新 AGV 运力、任务、速度和避障 |
+| `warehouse.changed` | 三前端 | 更新仓区安全、库位和箱级库存 |
+| `config.recipe.changed` | 终端、管理；展板只读刷新 | 更新批准配方、参数来源和版本 |
+| `config.threshold.changed` | 三前端 | 只读刷新安全阈值版本和相关质量门 |
+| `simulation.changed` | 三前端 | 更新中央模拟场景、时钟、运行状态和来源 |
+| `ai.decision.changed` | 三前端 | 更新建议、知识版本、校验、审批和执行状态 |
 
 ## 客户端规则
 
@@ -37,3 +47,5 @@
 3. 断线退避重连并显示状态；重连后立即 HTTP 全量刷新。
 4. 暂停动画只冻结画面；恢复直接跳到当前实时状态，不回放积压动画。
 5. Three.js 2D/3D 使用同一份快照。速度、进度、设备状态、产品位置和颜色不得各自随机生成。
+6. 事件至少携带 `lineId` 和 `stateVersion`；工位事件还要携带 `stageCode`。客户端只应用比当前版本新的事件。
+7. 同一业务变化可以触发多个主题，但后端必须使用稳定 `eventId`/关联号，客户端不得重复累计 KPI。

@@ -9,6 +9,8 @@
 
 ## 当前核心端点
 
+下表是当前后端已经存在或已有兼容实现的接口。前端补救时先通过 Repository/ApiClient 适配这些接口，不得把尚未实现的目标接口当作成功返回。
+
 | 方法 | 路径 | 使用端 | 用途 |
 | --- | --- | --- | --- |
 | POST | `/auth/register`、`/auth/login` | 后台管理 | 注册、登录 |
@@ -27,11 +29,38 @@
 | POST/GET | `/operations/commands` | 终端、管理 | 创建设备命令、查询状态 |
 | POST | `/operations/commands/{id}/ack` | 外部控制接口 | 边缘层回执命令 |
 | POST/GET | `/operations/ai/decide`、`/operations/ai/audits` | AI、管理 | AI 决策与审计 |
-| GET | `/logistics/overview` | 展板、管理 | AGV、仓区安全和库存 |
+| GET | `/logistics/overview` | 三前端 | AGV、仓区安全和库存 |
 | POST | `/logistics/agv/tasks` | 后端/管理 | 创建物流任务 |
 | POST | `/logistics/agv/tasks/{id}/telemetry` | 外部设备接口 | AGV 速度、路程、负载、避障 |
 | POST | `/logistics/warehouse/zones/{code}/telemetry` | 外部设备接口 | 仓区气体、烟雾和温度 |
 | POST | `/logistics/warehouse/inbound` | 后端/管理 | 箱级入库 |
+
+## P0 目标端点
+
+下表是四端最终对齐所需的目标契约。标记为目标不代表当前已经实现；后端对话负责逐项落地并提供迁移说明，前端在端点可用前只能显示明确的不可用/只读状态，不能伪造数据或成功。
+
+| 方法 | 路径 | 使用端 | 用途 |
+| --- | --- | --- | --- |
+| GET | `/factory/topology` | 三前端 | 产线、九工位、设备归属和拓扑版本 |
+| GET | `/factory/line-snapshot` | 三前端 | 唯一 `LineSnapshot` 首屏快照 |
+| GET | `/factory/stages/{stageCode}/snapshot` | 展板、终端、管理 | 唯一 `StageSnapshot` |
+| GET | `/factory/stages/{stageCode}/capabilities` | 终端、管理 | 工位可用动作、权限和联锁 |
+| GET | `/devices/{deviceCode}/capabilities` | 终端、管理 | 设备参数类型、范围、步长和角色 |
+| GET | `/devices/{deviceCode}/parameters` | 三前端 | 当前参数、来源、配方和版本 |
+| GET/POST | `/production/orders` | 管理；其他端只读 | 查询或创建生产任务/工单 |
+| GET/PATCH | `/production/orders/{id}` | 管理 | 查看、排产、暂停、结束生产任务 |
+| GET | `/quality/gates` | 三前端 | 质量门状态和规则版本 |
+| GET/POST | `/quality/rules` | 管理 | 质量规则查询与版本化创建 |
+| GET/POST | `/config/recipes` | 终端只读、管理 | 参数模板查询、创建和版本管理 |
+| POST | `/config/recipes/{id}/approve` | 管理 | 审批/发布批准配方 |
+| GET/POST | `/config/thresholds` | 三端只读、管理写 | 安全阈值查询和版本化创建 |
+| POST | `/config/thresholds/{id}/publish` | 管理 | 发布/回滚安全阈值版本 |
+| GET | `/audit/operations` | 管理 | 操作、命令和配置审计检索 |
+| GET | `/reports/production` | 管理 | 生产、质量、物流和仓储报表 |
+| GET | `/simulation/scenarios` | 管理 | 可复现中央模拟场景 |
+| POST | `/simulation/start`、`/simulation/stop`、`/simulation/reset` | 管理 | 统一控制后端模拟时钟和场景 |
+
+目标快照字段遵循 `shared-snapshot-contract.md`，控制权限与命令遵循 `control-security-contract.md`。若现有组合接口暂时承载同等数据，必须在适配层记录字段映射和废弃计划。
 
 ## 写操作标准
 

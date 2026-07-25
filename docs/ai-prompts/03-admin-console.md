@@ -1,10 +1,14 @@
-# 后台管理端开发对话提示词
-满足后台管理 P0，至少测试未登录、VIEWER、OPERATOR、ADMIN 四类路径和后端失败路径。使用 `D:\HarmonyOS-Dev\Build\BottlingFactoryAdmin` 构建并在模拟器验证。提交并推送 `codex/admin`，报告提交号、角色矩阵、测试、风险和契约提案，不推 `main`。
+# 后台管理端补救开发对话提示词
+
 你负责鸿蒙后台管理端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-admin`，分支是 `codex/admin`，唯一业务写入范围是 `apps/admin-console/BottlingFactoryAdmin`。不要修改另两个 App 或后端。
+
+## 当前阶段
+
+该工程已经完成一轮开发且可能存在未提交修改。先审计现有认证、导航、页面、ApiClient 和状态管理，再做补救，不删除重写。检查 `git diff` 并保护已有改动；禁止硬重置、覆盖工作树或把后台重新做成大屏。先列 P0 已完成、缺失、证据不足和后端接口阻塞项。
 
 ## 先做
 
-阅读 README、`contracts/`、开发标准和本工程 README；检查 Git。使用 `deveco-cli` Skill 和 D 盘构建环境，错误先查本地开发知识再查官方。
+阅读 README、`contracts/`、开发标准、`docs/engineering/TESTING_TOOLCHAIN.md` 和本工程 README；检查 Git。必须调用 `$deveco-cli`，会话可见时优先使用官方 `deveco-cli` MCP，并使用 D 盘构建环境。仅在 CLI 无法完成 Test Runner/模拟器 UI 时调用 `$computer-use:computer-use`；`$playwright` 只可验证后端 Swagger/辅助 Web 页面，不能代替鸿蒙后台模拟器测试。错误先查本地开发知识再查官方。
 
 ## 目标
 
@@ -14,6 +18,14 @@
 
 列表必须有搜索、筛选、分页/分段加载、详情、空/错/加载状态。写操作有确认、鉴权、失败反馈和审计；危险权限不能只靠前端隐藏。演示账号严格只读。HTTP/WebSocket 遵守契约，令牌安全保存和过期处理清楚。
 
+## 补救顺序
+
+1. 先核对所有侧边导航是否有真实可操作页面，清理假按钮、死链接和大屏式重复模块。
+2. 按 `control-security-contract.md` 补未登录拦截、会话恢复、token 过期以及 VIEWER/OPERATOR/ENGINEER/ADMIN 角色矩阵。
+3. 对照 `client-capability-matrix.md` 补生产任务、异常、设备、产品物料、物流仓储、AI 审计、用户权限、系统配置和操作审计，但不复制小屏现场调参。
+4. 对照 API 契约区分“当前端点”和“P0 目标端点”。后端未实现时显示明确的不可用/只读状态并提交阻塞清单，禁止假成功或仅在前端写入临时数据。
+5. 每个写操作核对确认、后端鉴权、失败反馈、审计号和刷新后的事实状态。
+
 ## 禁止
 
 - 不复制数字展板的 2D/3D 动画，不复制小屏的现场调参界面。
@@ -22,4 +34,4 @@
 
 ## 验收与交付
 
-满足后台管理 P0，至少测试未登录、VIEWER、OPERATOR、ADMIN 四类路径和后端失败路径。使用 `D:\HarmonyOS-Dev\Build\BottlingFactoryAdmin` 构建并在模拟器验证。提交并推送 `codex/admin`，报告提交号、角色矩阵、测试、风险和契约提案，不推 `main`。
+满足后台管理 P0，至少测试未登录、VIEWER、OPERATOR、ENGINEER、ADMIN 五类路径、token 过期和后端失败路径。按 `TESTING_TOOLCHAIN.md` 补 Local Test、Test Kit/模拟器证据，使用 `D:\HarmonyOS-Dev\Build\BottlingFactoryAdmin` 构建。提交并推送 `codex/admin`，报告提交号、角色矩阵、测试命令与计数、截图/日志、接口阻塞、风险和契约提案，不推 `main`。
