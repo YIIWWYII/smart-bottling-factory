@@ -37,34 +37,32 @@ foreach ($file in $etsFiles) {
     }
 }
 
-$threeRoot = Join-Path $root 'entry\src\main\resources\rawfile\factory3d'
-$threeFiles = @(
-    'index.html',
-    'scene.css',
-    'scene.js',
-    'vendor\three.min.js',
-    'vendor\THREE-LICENSE.txt'
-)
-$threeFiles | ForEach-Object {
-    $path = Join-Path $threeRoot $_
-    if (-not (Test-Path -LiteralPath $path)) { $errors.Add("Missing Three.js resource: $_") }
-}
-
 $threeComponent = Join-Path $root 'entry\src\main\ets\components\FactoryThreeScene.ets'
 if (Test-Path -LiteralPath $threeComponent) {
+    $threeRoot = Join-Path $root 'entry\src\main\resources\rawfile\factory3d'
+    $threeFiles = @(
+        'index.html',
+        'scene.css',
+        'scene.js',
+        'vendor\three.min.js',
+        'vendor\THREE-LICENSE.txt'
+    )
+    $threeFiles | ForEach-Object {
+        $path = Join-Path $threeRoot $_
+        if (-not (Test-Path -LiteralPath $path)) { $errors.Add("Missing Three.js resource: $_") }
+    }
     $componentText = Get-Content -Raw -Encoding UTF8 $threeComponent
     @("from '@kit.ArkWeb'", "`$rawfile('factory3d/index.html')", 'runJavaScript', 'factory://device/', 'factory://product/') | ForEach-Object {
         if (-not $componentText.Contains($_)) { $errors.Add("Missing ArkWeb bridge contract: $_") }
     }
-}
-
-$sceneFile = Join-Path $threeRoot 'scene.js'
-if (Test-Path -LiteralPath $sceneFile) {
-    $sceneText = Get-Content -Raw -Encoding UTF8 $sceneFile
-    @('THREE.WebGLRenderer', 'window.FactoryScene', 'setLayoutEdit', 'setStatusColors') | ForEach-Object {
-        if (-not $sceneText.Contains($_)) { $errors.Add("Missing Three.js scene contract: $_") }
+    $sceneFile = Join-Path $threeRoot 'scene.js'
+    if (Test-Path -LiteralPath $sceneFile) {
+        $sceneText = Get-Content -Raw -Encoding UTF8 $sceneFile
+        @('THREE.WebGLRenderer', 'window.FactoryScene', 'setLayoutEdit', 'setStatusColors') | ForEach-Object {
+            if (-not $sceneText.Contains($_)) { $errors.Add("Missing Three.js scene contract: $_") }
+        }
+        if ($sceneText -match 'https?://|cdn\.') { $errors.Add('Three.js scene contains an external runtime dependency') }
     }
-    if ($sceneText -match 'https?://|cdn\.') { $errors.Add('Three.js scene contains an external runtime dependency') }
 }
 
 $serviceText = ($etsFiles | Where-Object { $_.DirectoryName -like '*\service' } | ForEach-Object { Get-Content -Raw -Encoding UTF8 $_.FullName }) -join "`n"
@@ -72,6 +70,42 @@ $requiredContracts = @('/auth/login', '/auth/register', '/factory/dashboard', '/
 $requiredContracts | ForEach-Object {
     if (-not $serviceText.Contains($_)) { $errors.Add("Missing API contract: $_") }
 }
+
+$adminConsoleFile = Join-Path $root 'entry\src\main\ets\pages\AdminConsole.ets'
+$adminConsoleText = Get-Content -Raw -Encoding UTF8 $adminConsoleFile
+$requiredMenus = @('DASHBOARD', 'PRODUCTION', 'INCIDENTS', 'DEVICES', 'MATERIALS', 'LOGISTICS', 'AI_AUDIT', 'USERS', 'SETTINGS', 'AUDIT')
+$requiredMenus | ForEach-Object {
+    if (-not $adminConsoleText.Contains($_)) { $errors.Add("Missing admin navigation: $_") }
+}
+
+$requiredListStates = @('loadingState()', 'emptyState(', 'pager(', 'nextFilter()', 'detailPanel()')
+$requiredListStates | ForEach-Object {
+    if (-not $adminConsoleText.Contains($_)) { $errors.Add("Missing list state: $_") }
+}
+
+$requiredWriteGuards = @('confirmAction(', 'writeDisabledReason(', 'appendClientActivity(', 'SessionStore.isDemo', '/audit/operations')
+$requiredWriteGuards | ForEach-Object {
+    if (-not $adminConsoleText.Contains($_)) { $errors.Add("Missing write safety evidence: $_") }
+}
+
+$rolePolicyFile = Join-Path $root 'entry\src\main\ets\service\AdminAccessPolicy.ets'
+if (-not (Test-Path -LiteralPath $rolePolicyFile)) {
+    $errors.Add('Missing AdminAccessPolicy.ets')
+} else {
+    $rolePolicyText = Get-Content -Raw -Encoding UTF8 $rolePolicyFile
+    @('VIEWER', 'OPERATOR', 'ENGINEER', 'ADMIN', 'INCIDENT_DISPOSE', 'THRESHOLD_MANAGE', 'USER_MANAGE') | ForEach-Object {
+        if (-not $rolePolicyText.Contains($_)) { $errors.Add("Missing RBAC role or permission: $_") }
+    }
+}
+
+$sessionText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\SessionStore.ets')
+@('expiresAt', 'isExpired()', "token === 'LOCAL-DEMO'") | ForEach-Object {
+    if (-not $sessionText.Contains($_)) { $errors.Add("Missing session expiry evidence: $_") }
+}
+
+$apiClientText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\ApiClient.ets')
+if (-not ($apiClientText -match 'responseCode\s*===\s*401[\s\S]*SessionStore\.clear\(\)')) { $errors.Add('HTTP 401 must clear the session') }
+if ($apiClientText -match 'responseCode\s*===\s*403[\s\S]{0,100}SessionStore\.clear\(\)') { $errors.Add('HTTP 403 must not clear a valid session') }
 
 if ($errors.Count -gt 0) {
     $errors | ForEach-Object { Write-Host "[FAIL] $_" -ForegroundColor Red }
@@ -82,5 +116,12 @@ Write-Host '[PASS] JSON/JSON5 files parse' -ForegroundColor Green
 Write-Host "[PASS] $($pages.Count) pages exist and are registered" -ForegroundColor Green
 Write-Host "[PASS] $($etsFiles.Count) ArkTS files pass import and brace checks" -ForegroundColor Green
 Write-Host '[PASS] no Vue runtime dependency found in ArkTS business code' -ForegroundColor Green
-Write-Host '[PASS] local ArkWeb + Three.js scene and bridge contracts are present' -ForegroundColor Green
+if (Test-Path -LiteralPath $threeComponent) {
+    Write-Host '[PASS] local ArkWeb + Three.js scene and bridge contracts are present' -ForegroundColor Green
+} else {
+    Write-Host '[PASS] admin console has no Three.js dependency' -ForegroundColor Green
+}
 Write-Host '[PASS] core backend API contracts are covered' -ForegroundColor Green
+Write-Host "[PASS] $($requiredMenus.Count) real admin navigation entries are present" -ForegroundColor Green
+Write-Host '[PASS] VIEWER/OPERATOR/ENGINEER/ADMIN RBAC and session expiry guards are present' -ForegroundColor Green
+Write-Host '[PASS] list states and write confirmation/failure/audit evidence are present' -ForegroundColor Green
