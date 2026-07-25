@@ -94,7 +94,8 @@ class FactoryRepositoryImpl {
         const event: RealtimeEnvelope = JSON.parse(payload) as RealtimeEnvelope
         const relevant: boolean = event.type.indexOf('factory.') === 0 || event.type === 'operations.sensor.recorded' ||
           event.type === 'operations.alarm.changed' || event.type === 'operations.command.changed' ||
-          event.type === 'product.changed' || event.type === 'quality.gate.changed' || event.type === 'config.recipe.changed'
+          event.type === 'product.changed' || event.type === 'quality.gate.changed' || event.type === 'config.recipe.changed' ||
+          event.type === 'simulation.changed'
         const sameStage: boolean = event.stageCode === undefined || event.stageCode === this.activeStageCode
         if (relevant && sameStage) void this.refresh(this.activeStageCode)
       } catch (error) {
