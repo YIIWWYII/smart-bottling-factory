@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
   <meta name="color-scheme" content="light">
-  <title>Factory 3D</title>
+  <title>Factory Visual Scene</title>
   <link rel="stylesheet" href="./scene.css">
 </head>
 <body>
-  <main id="scene-host" aria-label="三维工位实时场景"></main>
+  <main id="scene-host" aria-label="数字展板工位实时场景"></main>
   <section class="hud hud-left">
     <span class="live-dot"></span>
     <strong id="stage-name">FACTORY STAGE</strong>
@@ -21,8 +21,8 @@
   </section>
   <section id="selection" class="selection hidden"></section>
   <section id="fallback" class="fallback hidden">
-    <strong>当前设备无法启动 WebGL</strong>
-    <span>请关闭坚盾守护模式，或切换到原生二维工艺图。</span>
+    <strong>当前设备无法启动本地 WebGL 场景</strong>
+    <span>请确认 ArkWeb WebGL 可用，或暂时关闭该视图。</span>
   </section>
   <script src="./vendor/three.min.js"></script>
   <script src="./scene.js"></script>

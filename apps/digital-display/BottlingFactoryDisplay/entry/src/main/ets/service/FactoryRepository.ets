@@ -29,12 +29,53 @@ class FactoryRepositoryImpl {
     this.listeners.forEach(listener => listener())
   }
 
+  private normalizeDashboard(value: FactoryDashboard | undefined): FactoryDashboard {
+    if (value === undefined) return createMockBundle().dashboard
+    return {
+      total: value.total || 0,
+      running: value.running || 0,
+      completed: value.completed || 0,
+      rejected: value.rejected || 0,
+      holding: value.holding || 0,
+      runs: value.runs || []
+    }
+  }
+
+  private normalizeOperations(value: OperationsOverview | undefined): OperationsOverview {
+    if (value === undefined) return createMockBundle().operations
+    return {
+      latestReadings: value.latestReadings || [],
+      alarms: value.alarms || [],
+      commands: value.commands || [],
+      aiAudits: value.aiAudits || []
+    }
+  }
+
+  private normalizeLogistics(value: LogisticsOverview | undefined): LogisticsOverview {
+    if (value === undefined) return createMockBundle().logistics
+    return {
+      tasks: value.tasks || [],
+      zones: value.zones || [],
+      stock: value.stock || []
+    }
+  }
+
+  private normalizeRuntime(value: RuntimeSnapshot | undefined): RuntimeSnapshot {
+    if (value === undefined) return createMockBundle().runtime
+    return {
+      generatedAt: value.generatedAt,
+      devices: value.devices || [],
+      stages: value.stages || [],
+      incidents: value.incidents || []
+    }
+  }
+
   async refresh(): Promise<void> {
     try {
-      const dashboard: FactoryDashboard = await this.client.request<FactoryDashboard>('/factory/dashboard')
-      const operations: OperationsOverview = await this.client.request<OperationsOverview>('/operations/overview')
-      const logistics: LogisticsOverview = await this.client.request<LogisticsOverview>('/logistics/overview')
-      const runtime: RuntimeSnapshot = await this.client.request<RuntimeSnapshot>('/factory/runtime')
+      const dashboard: FactoryDashboard = this.normalizeDashboard(await this.client.request<FactoryDashboard>('/factory/dashboard'))
+      const operations: OperationsOverview = this.normalizeOperations(await this.client.request<OperationsOverview>('/operations/overview'))
+      const logistics: LogisticsOverview = this.normalizeLogistics(await this.client.request<LogisticsOverview>('/logistics/overview'))
+      const runtime: RuntimeSnapshot = this.normalizeRuntime(await this.client.request<RuntimeSnapshot>('/factory/runtime'))
       this.bundle = { dashboard, operations, logistics, runtime, source: 'BACKEND', online: true, updatedAt: runtime.generatedAt || new Date().toISOString(), errorMessage: '' }
     } catch (error) {
       this.bundle = { dashboard: this.bundle.dashboard, operations: this.bundle.operations, logistics: this.bundle.logistics, runtime: this.bundle.runtime, source: 'LOCAL DEMO', online: false, updatedAt: this.bundle.updatedAt, errorMessage: error instanceof Error ? error.message : '后端请求失败' }
