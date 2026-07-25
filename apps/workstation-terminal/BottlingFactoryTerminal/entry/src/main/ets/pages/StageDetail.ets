@@ -119,11 +119,54 @@ struct StageDetail {
   private sessionListener: () => void = () => this.sessionRevision++
 
   get stage(): StageDefinition {
-    return findStage(this.stageCode)
+    const match = findStage(this.stageCode)
+    return match === undefined ? FACTORY_STAGES[0] : match
   }
 
   get stageIndex(): number {
-    return FACTORY_STAGES.findIndex((item: StageDefinition) => item.code === this.stageCode)
+    return this.currentStageIndex()
+  }
+
+  private currentStageIndex(): number {
+    const index = FACTORY_STAGES.findIndex((item: StageDefinition) => item.code === this.stageCode)
+    return index < 0 ? 0 : index
+  }
+
+  private controlsValue(): WorkstationStageControls {
+    return controlsForStage(this.stageCode)
+  }
+
+  private runtimeStageValue(): RuntimeStage {
+    return {
+      stageCode: this.snapshot.stageCode,
+      state: this.snapshot.state,
+      bufferLevel: this.snapshot.buffer.inputLevel,
+      bufferCapacity: this.snapshot.buffer.capacity,
+      upstreamImpact: this.snapshot.upstream.length > 0 ? this.snapshot.upstream[0].materialFlow : '等待数据',
+      downstreamImpact: this.snapshot.downstream.length > 0 ? this.snapshot.downstream[0].materialFlow : '等待数据',
+      updatedAt: this.snapshot.generatedAt
+    }
+  }
+
+  private stationRunsValue(): Array<FactoryRun> {
+    return this.snapshot.products
+  }
+
+  private stationReadingsValue(): Array<SensorReading> {
+    return this.snapshot.sensors
+  }
+
+  private stationAlarmsValue(): Array<AlarmRecord> {
+    return this.snapshot.alarms.filter((item: AlarmRecord) => item.status === 'OPEN')
+  }
+
+  private stationIncidentsValue(): Array<FactoryIncident> {
+    return this.snapshot.incidents.filter((item: FactoryIncident) => item.status !== 'RESOLVED')
+  }
+
+  private stationCommandsValue(): Array<DeviceCommand> {
+    const stage = this.currentStage()
+    return this.bundle.operations.commands.filter((item: DeviceCommand) => stage.devices.some((device: DeviceDefinition) => device.code === item.deviceCode)).slice(0, 5)
   }
 
   get controls(): WorkstationStageControls {
@@ -159,7 +202,8 @@ struct StageDetail {
   }
 
   get stationCommands(): Array<DeviceCommand> {
-    return this.bundle.operations.commands.filter((item: DeviceCommand) => this.stage.devices.some((device: DeviceDefinition) => device.code === item.deviceCode)).slice(0, 5)
+    const stage = this.currentStage()
+    return this.bundle.operations.commands.filter((item: DeviceCommand) => stage.devices.some((device: DeviceDefinition) => device.code === item.deviceCode)).slice(0, 5)
   }
 
   aboutToAppear(): void {
@@ -197,12 +241,27 @@ struct StageDetail {
   }
 
   private findRuntimeStage(code: string): RuntimeStage {
-    let value: RuntimeStage = { stageCode: code, state: 'RUNNING', bufferLevel: 0, bufferCapacity: 6, upstreamImpact: '等待数据', downstreamImpact: '等待数据' }
-    this.bundle.runtime.stages.forEach((item: RuntimeStage) => {
-      if (item.stageCode === code) {
+    let value: RuntimeStage = {
+      stageCode: code,
+      state: 'STANDBY',
+      bufferLevel: 0,
+      bufferCapacity: 6,
+      upstreamImpact: '等待数据',
+      downstreamImpact: '等待数据'
+    }
+    const stages: Array<RuntimeStage> = this.bundle.runtime === undefined || this.bundle.runtime.stages === undefined ? [] : this.bundle.runtime.stages
+    stages.forEach((item: RuntimeStage) => {
+      if (item !== undefined && item.stageCode === code) {
         value = item
       }
     })
+    return value
+  }
+
+  private currentStage(): StageDefinition {
+    let value: StageDefinition = FACTORY_STAGES[0]
+    const match = findStage(this.stageCode)
+    if (match !== undefined) value = match
     return value
   }
 
@@ -219,7 +278,7 @@ struct StageDetail {
   }
 
   private stageStateValue(): string {
-    if (this.stationAlarms.length > 0) return 'ALARM'
+    if (this.stationAlarmsValue().length > 0) return 'ALARM'
     if (this.snapshot.state.length > 0) return this.snapshot.state
     return 'UNKNOWN'
   }
@@ -251,7 +310,7 @@ struct StageDetail {
     if (reading !== undefined) return reading.value.toString() + ' ' + reading.unit
     const type = this.sensorTypeForDevice(code)
     if (type.length > 0) {
-      const typed = this.stationReadings.find((item: SensorReading) => item.sensorType === type)
+      const typed = this.stationReadingsValue().find((item: SensorReading) => item.sensorType === type)
       if (typed !== undefined) return typed.value.toString() + ' ' + typed.unit
     }
     return '等待读数'
@@ -304,7 +363,7 @@ struct StageDetail {
   private scenePayload(viewMode: string): string {
     const payload = new ThreeScenePayload()
     payload.stageCode = this.stageCode
-    payload.stageName = this.stage.name
+    payload.stageName = this.currentStage().name
     payload.source = this.snapshot.dataMode + ' · ' + FactoryRepository.snapshotMode
     payload.viewMode = viewMode
     payload.paused = this.paused
@@ -313,7 +372,7 @@ struct StageDetail {
     payload.speed = this.sceneSpeed()
     payload.progress = this.sceneProgress()
     payload.stateVersion = this.snapshot.stateVersion
-    this.stage.devices.forEach((device: DeviceDefinition) => {
+    this.currentStage().devices.forEach((device: DeviceDefinition) => {
       const item = new ThreeDevicePayload()
       item.code = device.code
       item.name = device.name
@@ -322,7 +381,7 @@ struct StageDetail {
       item.reading = this.deviceReading(device.code)
       payload.devices.push(item)
     })
-    this.stationRuns.slice(0, 8).forEach((run: FactoryRun) => {
+    this.stationRunsValue().slice(0, 8).forEach((run: FactoryRun) => {
       const item = new ThreeProductPayload()
       item.traceCode = run.traceCode
       item.bottleType = run.bottleType || '待识别'
@@ -420,7 +479,7 @@ struct StageDetail {
       if (!capability.writable) return capability.disabledReason || '后端能力标记为只读'
     }
     if (this.stageStateValue() === 'OFFLINE') return '本站离线'
-    if (controlDangerous && this.stationAlarms.length > 0) return '存在开放报警，危险操作禁用'
+    if (controlDangerous && this.stationAlarmsValue().length > 0) return '存在开放报警，危险操作禁用'
     if (controlDangerous && this.qualitySummary() === '禁止自动放行') return '质量门失败，危险操作禁用'
     return ''
   }
@@ -602,7 +661,7 @@ struct StageDetail {
   }
 
   private navigateStage(offset: number): void {
-    const next = this.stageIndex + offset
+    const next = this.currentStageIndex() + offset
     if (next >= 0 && next < FACTORY_STAGES.length) {
       router.replaceUrl({ url: 'pages/StageDetail', params: { stageCode: FACTORY_STAGES[next].code } })
     }
@@ -660,16 +719,16 @@ struct StageDetail {
     Column() {
       Row() {
         Column() {
-          Text(this.stage.code + ' · 工位 ' + (this.stageIndex + 1).toString() + ' / ' + FACTORY_STAGES.length.toString())
+          Text(this.currentStage().code + ' · 工位 ' + (this.currentStageIndex() + 1).toString() + ' / ' + FACTORY_STAGES.length.toString())
             .fontSize(10)
             .fontColor(Theme.accent)
             .fontWeight(FontWeight.Bold)
-          Text(this.stage.name + '工位')
+          Text(this.currentStage().name + '工位')
             .fontSize(30)
             .fontColor(Theme.navy)
             .fontWeight(FontWeight.Bold)
             .margin({ top: 7 })
-          Text(this.stage.description)
+          Text(this.currentStage().description)
             .fontSize(12)
             .fontColor(Theme.muted)
             .lineHeight(18)
@@ -689,10 +748,10 @@ struct StageDetail {
 
       Scroll() {
         Row({ space: 8 }) {
-          this.metric('运行状态', this.stageStateText(), this.formatTime(this.runtimeStage.updatedAt), this.stageStateValue())
-          this.metric('在制品', this.stationRuns.length.toString(), '本站正在处理', 'RUNNING')
-          this.metric('缓冲', this.runtimeStage.bufferLevel.toString() + '/' + this.runtimeStage.bufferCapacity.toString(), '输入/输出缓冲', this.runtimeStage.bufferLevel >= this.runtimeStage.bufferCapacity ? 'WARNING' : 'RUNNING')
-          this.metric('报警', this.stationAlarms.length.toString(), '开放报警', this.stationAlarms.length > 0 ? 'ALARM' : 'RUNNING')
+          this.metric('运行状态', this.stageStateText(), this.formatTime(this.runtimeStageValue().updatedAt), this.stageStateValue())
+          this.metric('在制品', this.stationRunsValue().length.toString(), '本站正在处理', 'RUNNING')
+          this.metric('缓冲', this.runtimeStageValue().bufferLevel.toString() + '/' + this.runtimeStageValue().bufferCapacity.toString(), '输入/输出缓冲', this.runtimeStageValue().bufferLevel >= this.runtimeStageValue().bufferCapacity ? 'WARNING' : 'RUNNING')
+          this.metric('报警', this.stationAlarmsValue().length.toString(), '开放报警', this.stationAlarmsValue().length > 0 ? 'ALARM' : 'RUNNING')
           this.metric('数据源', this.bundle.source, this.bundle.online ? '后端快照' : '只读演示', this.bundle.online ? 'RUNNING' : 'WAIT')
         }
         .padding({ top: 16 })
@@ -706,14 +765,14 @@ struct StageDetail {
           .type(ButtonType.Normal)
           .fontColor(Theme.blue)
           .backgroundColor(Color.Transparent)
-          .enabled(this.stageIndex > 0)
+          .enabled(this.currentStageIndex() > 0)
           .onClick(() => this.navigateStage(-1))
         Blank()
         Button('下一工位 →')
           .type(ButtonType.Normal)
           .fontColor(Theme.blue)
           .backgroundColor(Color.Transparent)
-          .enabled(this.stageIndex < FACTORY_STAGES.length - 1)
+          .enabled(this.currentStageIndex() < FACTORY_STAGES.length - 1)
           .onClick(() => this.navigateStage(1))
       }
       .width('100%')
@@ -819,7 +878,7 @@ struct StageDetail {
   deviceSection() {
     Column() {
       SectionTitle({ code: '02 DEVICES', title: '设备运行清单', description: '本站直接相关设备，点击设备可查看角色、来源和读数。' })
-      ForEach(this.stage.devices, (device: DeviceDefinition, index: number) => {
+      ForEach(this.currentStage().devices, (device: DeviceDefinition, index: number) => {
         Row() {
           DeviceStateRow({ index: index, device: device, state: this.deviceRuntime(device.code), source: this.deviceSource(device.code), reading: this.deviceReading(device.code) })
         }
@@ -838,10 +897,10 @@ struct StageDetail {
   sensorSection() {
     Column() {
       SectionTitle({ code: '03 SENSORS', title: '传感器读数', description: '只展示本站相关读数，缺失字段显示等待数据。' })
-      if (this.stationReadings.length === 0) {
+      if (this.stationReadingsValue().length === 0) {
         Text('等待本站传感器上报。').fontSize(10).fontColor(Theme.muted).padding(12)
       } else {
-        ForEach(this.stationReadings, (reading: SensorReading) => {
+        ForEach(this.stationReadingsValue(), (reading: SensorReading) => {
           Row({ space: 10 }) {
             Circle().width(8).height(8).fill(reading.quality === 'GOOD' ? Theme.success : Theme.warning)
             Column() {
@@ -869,10 +928,10 @@ struct StageDetail {
   materialSection() {
     Column() {
       SectionTitle({ code: '04 MATERIALS', title: '在制品与物料', description: '当前工位产品追踪号、瓶型、批次、质量事件和更新时间。' })
-      if (this.stationRuns.length === 0) {
+      if (this.stationRunsValue().length === 0) {
         Text('本站当前没有在制品，可能处于首批未到达或上游缺料状态。').fontSize(10).fontColor(Theme.muted).padding(12)
       } else {
-        ForEach(this.stationRuns.slice(0, 8), (run: FactoryRun) => {
+        ForEach(this.stationRunsValue().slice(0, 8), (run: FactoryRun) => {
           Row({ space: 9 }) {
             Circle().width(9).height(9).fill(statusColor(run.status))
             Column() {
@@ -925,9 +984,9 @@ struct StageDetail {
     Column() {
       SectionTitle({ code: '06 BUFFER', title: '缓冲与上下游影响', description: '本站通过缓冲与上下游解耦，异常不默认整线停机。' })
       Row({ space: 10 }) {
-        this.impactCard('输入/输出缓冲', this.runtimeStage.bufferLevel.toString() + '/' + this.runtimeStage.bufferCapacity.toString(), '当前占用')
-        this.impactCard('上游影响', this.runtimeStage.upstreamImpact || '等待数据', '来自 RuntimeStage')
-        this.impactCard('下游影响', this.runtimeStage.downstreamImpact || '等待数据', '来自 RuntimeStage')
+        this.impactCard('输入/输出缓冲', this.runtimeStageValue().bufferLevel.toString() + '/' + this.runtimeStageValue().bufferCapacity.toString(), '当前占用')
+        this.impactCard('上游影响', this.runtimeStageValue().upstreamImpact || '等待数据', '来自 RuntimeStage')
+        this.impactCard('下游影响', this.runtimeStageValue().downstreamImpact || '等待数据', '来自 RuntimeStage')
       }
       .width('100%')
       .padding({ top: 12 })
@@ -943,10 +1002,10 @@ struct StageDetail {
   alarmSection() {
     Column() {
       SectionTitle({ code: '07 ALARMS', title: '报警与异常策略', description: '本站只展示和本站有关的报警、异常和处理策略。' })
-      if (this.stationAlarms.length === 0 && this.stationIncidents.length === 0) {
+      if (this.stationAlarmsValue().length === 0 && this.stationIncidentsValue().length === 0) {
         Text('当前没有本站开放报警或待处理异常。').fontSize(10).fontColor(Theme.muted).padding(12)
       }
-      ForEach(this.stationAlarms, (alarm: AlarmRecord) => {
+      ForEach(this.stationAlarmsValue(), (alarm: AlarmRecord) => {
         Row({ space: 10 }) {
           Circle().width(8).height(8).fill(Theme.danger)
           Column() {
@@ -961,7 +1020,7 @@ struct StageDetail {
         .padding(11)
         .border({ width: { bottom: 1 }, color: Theme.line })
       }, (alarm: AlarmRecord) => alarm.alarmId)
-      ForEach(this.stationIncidents, (incident: FactoryIncident) => {
+      ForEach(this.stationIncidentsValue(), (incident: FactoryIncident) => {
         Row({ space: 10 }) {
           Circle().width(8).height(8).fill(Theme.warning)
           Column() {
@@ -993,10 +1052,10 @@ struct StageDetail {
         .fontSize(10)
         .fontColor(this.commandBlockReason(false).length > 0 ? Theme.warning : Theme.muted)
         .margin({ top: 10, bottom: 8 })
-      ForEach(this.controls.parameters, (control: ParameterControlDefinition) => {
+      ForEach(this.controlsValue().parameters, (control: ParameterControlDefinition) => {
         this.parameterControl(control)
       }, (control: ParameterControlDefinition) => control.parameterCode)
-      ForEach(this.controls.actions, (control: ActionControlDefinition) => {
+      ForEach(this.controlsValue().actions, (control: ActionControlDefinition) => {
         this.actionControl(control)
       }, (control: ActionControlDefinition) => control.commandType + control.deviceCode)
       this.pendingConfirmPanel()
@@ -1171,10 +1230,10 @@ struct StageDetail {
   commandHistoryPanel() {
     Column() {
       Text('最近本站命令').fontSize(12).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
-      if (this.stationCommands.length === 0) {
+      if (this.stationCommandsValue().length === 0) {
         Text('暂无命令记录。').fontSize(9).fontColor(Theme.muted).margin({ top: 8 })
       } else {
-        ForEach(this.stationCommands, (command: DeviceCommand) => {
+        ForEach(this.stationCommandsValue(), (command: DeviceCommand) => {
           Row() {
             Column() {
               Text(command.commandType + ' · ' + command.deviceCode).fontSize(10).fontColor(Theme.text).fontWeight(FontWeight.Bold)
@@ -1227,7 +1286,7 @@ struct StageDetail {
   productProfile() {
     Column() {
       SectionTitle({ code: 'PRODUCT PROFILE', title: this.selectedTraceCode, description: '选中物料的追踪信息。' })
-      ForEach(this.stationRuns.filter((item: FactoryRun) => item.traceCode === this.selectedTraceCode), (run: FactoryRun) => {
+      ForEach(this.stationRunsValue().filter((item: FactoryRun) => item.traceCode === this.selectedTraceCode), (run: FactoryRun) => {
         this.keyValue('瓶型', run.bottleType || '待识别')
         this.keyValue('批次', run.batchCode || '待绑定')
         this.keyValue('当前工位', run.currentStage)
@@ -1244,7 +1303,7 @@ struct StageDetail {
 
   private selectedDeviceRole(): string {
     let role: string = '设备作用等待数据'
-    this.stage.devices.forEach((item: DeviceDefinition) => {
+    this.currentStage().devices.forEach((item: DeviceDefinition) => {
       if (item.code === this.selectedDeviceCode) role = item.name + ' · ' + item.role
     })
     return role
