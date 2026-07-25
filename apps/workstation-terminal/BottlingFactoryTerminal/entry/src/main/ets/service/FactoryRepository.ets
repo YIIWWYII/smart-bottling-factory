@@ -2,7 +2,7 @@ import { http } from '@kit.NetworkKit'
 import { ApiClient, apiClient } from './ApiClient'
 import { FactoryRealtime } from './FactoryRealtime'
 import { createMockBundle } from './MockFactoryData'
-import { FactoryBundle, FactoryDashboard, FactoryIncident, LogisticsOverview, OperationsOverview, RuntimeSnapshot } from '../model/FactoryModels'
+import { DeviceCommand, DeviceCommandRequestPayload, FactoryBundle, FactoryDashboard, FactoryIncident, LogisticsOverview, OperationsOverview, RuntimeSnapshot } from '../model/FactoryModels'
 
 interface IncidentResolveRequest {
   action: string
@@ -64,6 +64,17 @@ class FactoryRepositoryImpl {
     const payload: IncidentResolveRequest = { action: strategy, targetStage: '', note: 'HarmonyOS 管理端人工确认' }
     await this.client.request<Object>(`/factory/runtime/incidents/${incidentId}/resolve`, http.RequestMethod.POST, JSON.stringify(payload))
     await this.refresh()
+  }
+
+  async createCommand(request: DeviceCommandRequestPayload): Promise<DeviceCommand> {
+    const command: DeviceCommand = await this.client.request<DeviceCommand>('/operations/commands', http.RequestMethod.POST, JSON.stringify(request))
+    await this.refresh()
+    return command
+  }
+
+  async listCommands(status: string = ''): Promise<Array<DeviceCommand>> {
+    const path = status.length > 0 ? `/operations/commands?status=${status}` : '/operations/commands'
+    return await this.client.request<Array<DeviceCommand>>(path)
   }
 
   async listIncidents(status: string = 'OPEN'): Promise<Array<FactoryIncident>> {

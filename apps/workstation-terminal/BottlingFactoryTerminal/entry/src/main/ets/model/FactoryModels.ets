@@ -88,12 +88,32 @@ export interface DeviceCommand {
   commandId: string
   deviceCode: string
   commandType: string
+  payload?: string
   source: string
   traceCode?: string
   status: string
   message?: string
   createdAt?: string
   acknowledgedAt?: string
+}
+
+export class DeviceCommandPayload {
+  stageCode: string = ''
+  parameterCode: string = ''
+  value: number = 0
+  unit: string = ''
+  intent: string = ''
+  risk: string = ''
+  interlock: string = ''
+  clientRequestNo: string = ''
+}
+
+export class DeviceCommandRequestPayload {
+  deviceCode: string = ''
+  commandType: string = ''
+  payload: DeviceCommandPayload = new DeviceCommandPayload()
+  source: string = 'WORKSTATION_TERMINAL'
+  traceCode: string = ''
 }
 
 export interface AiAudit {

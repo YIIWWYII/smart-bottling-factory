@@ -34,6 +34,7 @@
     stageCode: 'PRETREATMENT',
     stageName: '预处理',
     source: 'LOCAL DEMO',
+    viewMode: 'THREE',
     paused: false,
     statusColors: true,
     layoutEdit: false,
@@ -178,7 +179,9 @@
     createStageEnvironment(state.stageCode);
     var devices = state.devices.length ? state.devices : demoDevices(state.stageCode);
     devices.forEach(function (device, index) {
-      var group = createDevice(device, index, devices.length);
+      var group = state.viewMode === 'PLANAR'
+        ? createPlanarDevice(device, index, devices.length)
+        : createDevice(device, index, devices.length);
       group.userData.deviceCode = device.code;
       group.userData.selectType = 'device';
       group.userData.label = device.name || device.code;
@@ -188,11 +191,16 @@
     });
     rebuildProducts();
     applyRuntimeState();
+    resetCamera();
     stageLabel.textContent = state.stageName + ' / ' + state.stageCode;
     sourceLabel.textContent = state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
   }
 
   function createStageEnvironment(stageCode) {
+    if (state.viewMode === 'PLANAR') {
+      createPlanarEnvironment(stageCode);
+      return;
+    }
     if (stageCode === 'AGV_TRANSPORT') {
       var path = box(17, 0.08, 4.6, 0x647887);
       path.position.set(0, 0.02, 0);
@@ -224,6 +232,43 @@
     var conveyor = createConveyor(state.stageCode === 'PACKING' ? 14 : 17);
     conveyor.position.set(0, 0, 0);
     stageRoot.add(conveyor);
+  }
+
+  function createPlanarEnvironment(stageCode) {
+    var laneColor = stageCode === 'AGV_TRANSPORT' || stageCode === 'WAREHOUSE_INBOUND' ? 0x9fb2bd : 0x6f8796;
+    var lane = box(16.5, 0.04, 1.35, laneColor);
+    lane.position.set(0, 0.04, 0);
+    stageRoot.add(lane);
+    for (var i = -7; i <= 7; i += 2) {
+      var arrow = createPlanarArrow();
+      arrow.position.set(i, 0.08, 0);
+      stageRoot.add(arrow);
+    }
+    if (stageCode === 'WAREHOUSE_INBOUND') {
+      [-5.5, 0, 5.5].forEach(function (x) {
+        var zone = box(2.8, 0.06, 3.2, 0xc7d5df);
+        zone.position.set(x, 0.06, 2.7);
+        stageRoot.add(zone);
+      });
+    }
+    if (stageCode === 'BEVERAGE_READY') {
+      var pipe = box(13.5, 0.05, 0.22, COLORS.accent);
+      pipe.position.set(0, 0.1, -2.4);
+      stageRoot.add(pipe);
+    }
+  }
+
+  function createPlanarArrow() {
+    var group = new THREE.Group();
+    var body = box(0.62, 0.04, 0.08, 0xf1c34a);
+    body.position.x = -0.08;
+    group.add(body);
+    var head = mesh(new THREE.ConeGeometry(0.16, 0.35, 3), 0xf1c34a, 0.1, 0.4);
+    head.rotation.z = -Math.PI / 2;
+    head.rotation.y = Math.PI / 2;
+    head.position.x = 0.32;
+    group.add(head);
+    return group;
   }
 
   function createConveyor(length) {
@@ -340,6 +385,72 @@
         child.userData.baseColor = child.material.color.getHex();
       }
     });
+    return group;
+  }
+
+  function createPlanarDevice(device, index, count) {
+    var group = new THREE.Group();
+    var x = count <= 1 ? 0 : -6.6 + index * (13.2 / (count - 1));
+    var z = index % 2 === 0 ? -2.35 : 2.35;
+    if (state.stageCode === 'AGV_TRANSPORT') z = index === 0 ? 0 : index === 1 ? -3 : 3;
+    if (state.stageCode === 'WAREHOUSE_INBOUND') z = -2.55 + index * 0.35;
+    group.position.set(x, 0, z);
+
+    var kind = kindForDevice(device.code);
+    var base = box(1.55, 0.08, 1.05, COLORS.white);
+    base.position.y = 0.18;
+    group.add(base);
+    var band = box(1.55, 0.09, 0.16, COLORS.blue);
+    band.position.set(0, 0.25, -0.45);
+    group.add(band);
+    var marker = cylinder(0.24, 0.08, colorForState(device.state || 'RUNNING', COLORS.accent), 24);
+    marker.position.set(-0.47, 0.34, 0.08);
+    group.add(marker);
+    var symbol = createPlanarSymbol(kind);
+    symbol.position.set(0.25, 0.35, 0.12);
+    group.add(symbol);
+    movingParts.push({ object: marker, type: 'pulse', deviceCode: device.code });
+    group.traverse(function (child) {
+      if (child.isMesh) {
+        child.userData.deviceOwner = group;
+        child.userData.baseColor = child.material.color.getHex();
+      }
+    });
+    return group;
+  }
+
+  function createPlanarSymbol(kind) {
+    var group = new THREE.Group();
+    if (kind === 'robot') {
+      var armA = box(0.1, 0.08, 0.66, COLORS.accent);
+      armA.rotation.y = 0.55;
+      group.add(armA);
+      var armB = box(0.1, 0.08, 0.54, COLORS.blue);
+      armB.rotation.y = -0.55;
+      armB.position.x = 0.22;
+      group.add(armB);
+    } else if (kind === 'agv') {
+      var car = box(0.78, 0.08, 0.48, COLORS.blue);
+      group.add(car);
+      [-0.25, 0.25].forEach(function (x) {
+        var wheel = cylinder(0.08, 0.06, COLORS.navy, 14);
+        wheel.position.set(x, 0.06, -0.32);
+        group.add(wheel);
+      });
+    } else if (kind === 'sensor' || kind === 'camera') {
+      var eye = cylinder(0.22, 0.08, COLORS.accent, 24);
+      group.add(eye);
+      var ray = box(0.08, 0.05, 0.62, 0x9bc4dc);
+      ray.position.z = 0.38;
+      group.add(ray);
+    } else if (kind === 'reject') {
+      var gate = box(0.72, 0.08, 0.12, COLORS.warning);
+      gate.rotation.y = 0.45;
+      group.add(gate);
+    } else {
+      var core = box(0.64, 0.08, 0.44, COLORS.accent);
+      group.add(core);
+    }
     return group;
   }
 
@@ -570,7 +681,14 @@
   function createProduct(product) {
     var group = new THREE.Group();
     var productColor = colorForState(product.status, COLORS.product);
-    if (state.stageCode === 'PACKING' || state.stageCode === 'AGV_TRANSPORT' || state.stageCode === 'WAREHOUSE_INBOUND') {
+    if (state.viewMode === 'PLANAR') {
+      var dot = cylinder(0.23, 0.1, state.statusColors ? productColor : COLORS.product, 24);
+      dot.position.y = 0.42;
+      group.add(dot);
+      var tail = box(0.42, 0.06, 0.08, COLORS.navy);
+      tail.position.set(-0.3, 0.44, 0);
+      group.add(tail);
+    } else if (state.stageCode === 'PACKING' || state.stageCode === 'AGV_TRANSPORT' || state.stageCode === 'WAREHOUSE_INBOUND') {
       var carton = box(1.0, 0.78, 0.82, state.statusColors ? productColor : COLORS.box);
       carton.position.y = 1.45;
       group.add(carton);
@@ -624,7 +742,9 @@
     if (!state.paused) baseProgress += elapsed * Math.max(0.02, state.speed) * 0.035;
     productRoot.children.forEach(function (product, index) {
       var t = (baseProgress + index * 0.19) % 1;
-      if (state.stageCode === 'AGV_TRANSPORT') {
+      if (state.viewMode === 'PLANAR') {
+        product.position.set(-7.3 + t * 14.6, 0, index % 2 ? 0.34 : -0.34);
+      } else if (state.stageCode === 'AGV_TRANSPORT') {
         product.position.set(-6.4 + t * 12.8, 0, 0.1 + index * 0.08);
       } else if (state.stageCode === 'WAREHOUSE_INBOUND') {
         product.position.set(-7 + t * 7.5, 0, 0);
@@ -673,6 +793,11 @@
   }
 
   function updateCamera() {
+    if (state.viewMode === 'PLANAR') {
+      camera.position.set(0, 24, 0.01);
+      camera.lookAt(0, 0, 0);
+      return;
+    }
     var cosPitch = Math.cos(cameraOrbit.pitch);
     camera.position.set(
       Math.sin(cameraOrbit.yaw) * cosPitch * cameraOrbit.distance,
@@ -683,6 +808,11 @@
   }
 
   function resetCamera() {
+    if (state.viewMode === 'PLANAR') {
+      cameraOrbit = { yaw: 0, pitch: 1.2, distance: 24 };
+      updateCamera();
+      return;
+    }
     cameraOrbit = { yaw: -0.65, pitch: 0.62, distance: 19 };
     if (state.stageCode === 'WAREHOUSE_INBOUND') cameraOrbit.distance = 22;
     updateCamera();
@@ -739,7 +869,7 @@
           draggedDevice.position.x = Math.max(-8, Math.min(8, point.x));
           draggedDevice.position.z = Math.max(-5, Math.min(5, point.z));
         }
-      } else {
+      } else if (state.viewMode !== 'PLANAR') {
         cameraOrbit.yaw -= dx * 0.007;
         cameraOrbit.pitch = Math.max(0.22, Math.min(1.15, cameraOrbit.pitch + dy * 0.006));
         updateCamera();
@@ -756,6 +886,10 @@
     });
 
     canvas.addEventListener('wheel', function (event) {
+      if (state.viewMode === 'PLANAR') {
+        event.preventDefault();
+        return;
+      }
       cameraOrbit.distance = Math.max(10, Math.min(32, cameraOrbit.distance + event.deltaY * 0.015));
       updateCamera();
       event.preventDefault();
@@ -812,6 +946,7 @@
       try {
         var next = normalizePayload(payload);
         var stageChanged = next.stageCode && next.stageCode !== state.stageCode;
+        var viewModeChanged = next.viewMode && next.viewMode !== state.viewMode;
         var statusColorsChanged = next.statusColors !== undefined && next.statusColors !== state.statusColors;
         var productSignature = JSON.stringify((next.products || []).map(function (item) {
           return item.traceCode + ':' + item.status;
@@ -820,9 +955,8 @@
           return item.traceCode + ':' + item.status;
         }));
         Object.keys(next).forEach(function (key) { state[key] = next[key]; });
-        if (stageChanged) {
+        if (stageChanged || viewModeChanged) {
           rebuildStage();
-          resetCamera();
         } else {
           if (productSignature !== oldProductSignature || statusColorsChanged) rebuildProducts();
           applyRuntimeState();
