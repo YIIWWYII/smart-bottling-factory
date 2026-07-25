@@ -1,12 +1,32 @@
 import { router } from '@kit.ArkUI'
 import { Theme } from '../common/Theme'
+import { apiClient } from '../service/ApiClient'
 import { SessionStore } from '../service/SessionStore'
 
 @Entry
 @Component
 struct Index {
   aboutToAppear(): void {
-    router.replaceUrl({ url: SessionStore.isAuthenticated ? 'pages/AdminConsole' : 'pages/Login' })
+    void this.restoreSession()
+  }
+
+  private async restoreSession(): Promise<void> {
+    if (!SessionStore.isAuthenticated) {
+      router.replaceUrl({ url: 'pages/Login' })
+      return
+    }
+    if (SessionStore.isDemo) {
+      router.replaceUrl({ url: 'pages/AdminConsole' })
+      return
+    }
+    try {
+      const user = await apiClient.me()
+      SessionStore.setSession(SessionStore.token, user)
+      router.replaceUrl({ url: 'pages/AdminConsole' })
+    } catch (error) {
+      SessionStore.clear()
+      router.replaceUrl({ url: 'pages/Login' })
+    }
   }
 
   build() {

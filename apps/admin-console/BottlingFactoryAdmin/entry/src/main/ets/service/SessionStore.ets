@@ -29,6 +29,10 @@ class SessionStoreImpl {
     return this.user !== undefined && (this.user.role === 'ADMIN' || this.user.role === 'OPERATOR')
   }
 
+  get isDemo(): boolean {
+    return this.token === 'LOCAL-DEMO'
+  }
+
   get isAdmin(): boolean {
     return this.user !== undefined && this.user.role === 'ADMIN'
   }

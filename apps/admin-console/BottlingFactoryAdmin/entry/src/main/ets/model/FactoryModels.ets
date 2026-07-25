@@ -115,6 +115,26 @@ export interface OperationsOverview {
   aiAudits: Array<AiAudit>
 }
 
+export interface AdminAuditRecord {
+  auditId: string
+  actor: string
+  action: string
+  target: string
+  result: string
+  message: string
+  occurredAt: string
+}
+
+export interface SystemPolicy {
+  policyCode: string
+  name: string
+  value: string
+  unit: string
+  version: string
+  status: string
+  updatedAt: string
+}
+
 export interface RuntimeDevice {
   deviceCode: string
   stageCode: string

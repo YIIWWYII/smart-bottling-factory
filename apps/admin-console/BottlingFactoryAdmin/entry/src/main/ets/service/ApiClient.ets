@@ -43,9 +43,18 @@ export class ApiClient {
         connectTimeout: ApiConfig.requestTimeoutMs,
         readTimeout: ApiConfig.requestTimeoutMs
       })
+      if (response.responseCode < 200 || response.responseCode >= 300) {
+        if (response.responseCode === 401 || response.responseCode === 403) {
+          SessionStore.clear()
+        }
+        throw new ApiError('HTTP ' + response.responseCode + '：后端拒绝或不可达', response.responseCode)
+      }
       const raw: string = response.result as string
       const envelope: ApiEnvelope<T> = JSON.parse(raw) as ApiEnvelope<T>
       if (envelope.code !== 0 && envelope.code !== 1) {
+        if (envelope.code === 401 || envelope.code === 403) {
+          SessionStore.clear()
+        }
         throw new ApiError(envelope.message || '后端接口返回错误', envelope.code)
       }
       return envelope.data
@@ -66,6 +75,10 @@ export class ApiClient {
 
   async me(): Promise<AuthUser> {
     return await this.request<AuthUser>('/auth/me')
+  }
+
+  async logout(): Promise<void> {
+    await this.request<Object>('/auth/logout', http.RequestMethod.POST)
   }
 }
 
