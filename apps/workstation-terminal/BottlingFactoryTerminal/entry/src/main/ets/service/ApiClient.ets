@@ -5,6 +5,7 @@ import { SessionStore } from './SessionStore'
 
 interface RequestHeaders {
   'Content-Type': string
+  'X-Client-Type': string
   Authorization?: string
 }
 
@@ -32,8 +33,8 @@ export class ApiClient {
   async request<T>(path: string, method: http.RequestMethod = http.RequestMethod.GET, body?: string): Promise<T> {
     const client = http.createHttp()
     const headers: RequestHeaders = SessionStore.token.length > 0
-      ? { 'Content-Type': 'application/json;charset=UTF-8', 'Authorization': SessionStore.token }
-      : { 'Content-Type': 'application/json;charset=UTF-8' }
+      ? { 'Content-Type': 'application/json;charset=UTF-8', 'X-Client-Type': 'TERMINAL_CLIENT', 'Authorization': SessionStore.token }
+      : { 'Content-Type': 'application/json;charset=UTF-8', 'X-Client-Type': 'TERMINAL_CLIENT' }
     try {
       const response = await client.request(ApiConfig.API_BASE + path, {
         method: method,
@@ -43,6 +44,13 @@ export class ApiClient {
         connectTimeout: ApiConfig.requestTimeoutMs,
         readTimeout: ApiConfig.requestTimeoutMs
       })
+      if (response.responseCode === 401) {
+        SessionStore.clear()
+        throw new ApiError('操作员登录已过期，终端已恢复只读', 401)
+      }
+      if (response.responseCode < 200 || response.responseCode >= 300) {
+        throw new ApiError('HTTP ' + response.responseCode.toString() + '：后端接口不可用', response.responseCode)
+      }
       const raw: string = response.result as string
       const envelope: ApiEnvelope<T> = JSON.parse(raw) as ApiEnvelope<T>
       if (envelope.code !== 0 && envelope.code !== 1) {

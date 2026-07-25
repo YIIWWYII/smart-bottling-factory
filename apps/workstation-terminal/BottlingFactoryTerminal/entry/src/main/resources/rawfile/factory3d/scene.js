@@ -40,8 +40,10 @@
     layoutEdit: false,
     speed: 0.12,
     progress: 0,
+    stateVersion: 0,
     devices: [],
-    products: []
+    products: [],
+    latestError: ''
   };
 
   var scene;
@@ -60,6 +62,8 @@
   var previousPointer = { x: 0, y: 0 };
   var cameraOrbit = { yaw: -0.65, pitch: 0.62, distance: 19 };
   var isPointerDown = false;
+  var renderFrameId = 0;
+  var disposed = false;
   var resizeObserver;
 
   function material(color, metalness, roughness) {
@@ -126,8 +130,9 @@
       resize();
       resizeObserver = new ResizeObserver(resize);
       resizeObserver.observe(host);
-      requestAnimationFrame(renderLoop);
+      renderFrameId = requestAnimationFrame(renderLoop);
     } catch (error) {
+      state.latestError = String(error);
       fallback.classList.remove('hidden');
       sourceLabel.textContent = 'WEBGL UNAVAILABLE';
     }
@@ -655,7 +660,13 @@
     if (!productRoot) return;
     while (productRoot.children.length) {
       var child = productRoot.children.pop();
-      if (child.geometry) child.geometry.dispose();
+      child.traverse(function (part) {
+        if (part.geometry) part.geometry.dispose();
+        if (part.material) {
+          if (Array.isArray(part.material)) part.material.forEach(function (item) { item.dispose(); });
+          else part.material.dispose();
+        }
+      });
     }
     clickable = clickable.filter(function (item) { return item.userData.selectType !== 'product'; });
     var products = state.products.length ? state.products : [
@@ -783,7 +794,8 @@
   }
 
   function renderLoop() {
-    requestAnimationFrame(renderLoop);
+    if (disposed) return;
+    renderFrameId = requestAnimationFrame(renderLoop);
     if (!renderer || !scene || !camera) return;
     var delta = Math.min(clock.getDelta(), 0.05);
     var elapsed = clock.elapsedTime;
@@ -964,6 +976,7 @@
         stageLabel.textContent = state.stageName + ' / ' + state.stageCode;
         sourceLabel.textContent = state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
       } catch (error) {
+        state.latestError = String(error);
         sourceLabel.textContent = 'DATA ERROR';
       }
     },
@@ -982,11 +995,35 @@
     },
     resetCamera: resetCamera,
     dispose: function () {
+      disposed = true;
+      if (renderFrameId) cancelAnimationFrame(renderFrameId);
       if (resizeObserver) resizeObserver.disconnect();
       clearObject(stageRoot);
-      if (renderer) renderer.dispose();
+      if (renderer) {
+        renderer.dispose();
+        if (renderer.forceContextLoss) renderer.forceContextLoss();
+        if (renderer.domElement && renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
+      }
     }
   };
+
+  Object.defineProperty(window, '__factoryTest__', {
+    configurable: true,
+    get: function () {
+      var canvas = renderer ? renderer.domElement : null;
+      return {
+        ready: Boolean(renderer && scene && camera && !disposed),
+        mode: state.viewMode,
+        stateVersion: state.stateVersion,
+        rendererInfo: renderer ? { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles } : { calls: 0, triangles: 0 },
+        canvas: { width: canvas ? canvas.width : 0, height: canvas ? canvas.height : 0 },
+        deviceCount: state.devices.length,
+        productCount: state.products.length,
+        paused: state.paused,
+        latestError: state.latestError
+      };
+    }
+  });
 
   init();
 }());

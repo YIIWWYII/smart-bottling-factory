@@ -11,12 +11,13 @@ export class ParameterControlDefinition {
   targetValue: number
   source: string
   role: string
+  requiredRole: string
   interlock: string
   risk: string
 
   constructor(deviceCode: string, label: string, parameterCode: string, commandType: string, unit: string,
     min: number, max: number, step: number, currentValue: number, targetValue: number,
-    source: string, role: string, interlock: string, risk: string) {
+    source: string, role: string, requiredRole: string, interlock: string, risk: string) {
     this.deviceCode = deviceCode
     this.label = label
     this.parameterCode = parameterCode
@@ -29,6 +30,7 @@ export class ParameterControlDefinition {
     this.targetValue = targetValue
     this.source = source
     this.role = role
+    this.requiredRole = requiredRole
     this.interlock = interlock
     this.risk = risk
   }
@@ -42,9 +44,10 @@ export class ActionControlDefinition {
   risk: string
   interlock: string
   dangerous: boolean
+  requiredRole: string
 
   constructor(deviceCode: string, label: string, commandType: string, intent: string, risk: string,
-    interlock: string, dangerous: boolean) {
+    interlock: string, dangerous: boolean, requiredRole: string) {
     this.deviceCode = deviceCode
     this.label = label
     this.commandType = commandType
@@ -52,6 +55,7 @@ export class ActionControlDefinition {
     this.risk = risk
     this.interlock = interlock
     this.dangerous = dangerous
+    this.requiredRole = requiredRole
   }
 }
 
@@ -71,12 +75,12 @@ function parameter(deviceCode: string, label: string, parameterCode: string, com
   min: number, max: number, step: number, currentValue: number, targetValue: number,
   role: string, interlock: string, risk: string): ParameterControlDefinition {
   return new ParameterControlDefinition(deviceCode, label, parameterCode, commandType, unit, min, max, step,
-    currentValue, targetValue, '设备能力/后端契约', role, interlock, risk)
+    currentValue, targetValue, '本地能力映射，需后端能力版本校验', role, 'OPERATOR', interlock, risk)
 }
 
 function action(deviceCode: string, label: string, commandType: string, intent: string, risk: string,
-  interlock: string, dangerous: boolean): ActionControlDefinition {
-  return new ActionControlDefinition(deviceCode, label, commandType, intent, risk, interlock, dangerous)
+  interlock: string, dangerous: boolean, requiredRole: string = 'OPERATOR'): ActionControlDefinition {
+  return new ActionControlDefinition(deviceCode, label, commandType, intent, risk, interlock, dangerous, requiredRole)
 }
 
 export function controlsForStage(stageCode: string): WorkstationStageControls {
@@ -92,8 +96,7 @@ export function controlsForStage(stageCode: string): WorkstationStageControls {
       ])
     case 'GAS_INSPECTION':
       return new WorkstationStageControls(stageCode, [
-        parameter('GAS-PUMP-01', '采样时长', 'sampleSeconds', 'SET_SAMPLE_SECONDS', 's', 5, 45, 1, 12, 15, '稳定抽取密封舱气体', '检测舱关闭且采样泵在线', '过短会造成读数不稳定'),
-        parameter('GAS-VERIFY-01', 'VOC 阈值', 'vocLimit', 'SET_VOC_LIMIT', 'ppm', 2, 15, 0.5, 10, 10, '安全放行阈值', '仅工艺员允许调整', '调高阈值会影响安全放行')
+        parameter('GAS-PUMP-01', '采样时长', 'sampleSeconds', 'SET_SAMPLE_SECONDS', 's', 5, 45, 1, 12, 15, '稳定抽取密封舱气体', '检测舱关闭且采样泵在线', '过短会造成读数不稳定')
       ], [
         action('GAS-PUMP-01', '重新采样', 'RESAMPLE_GAS', '对当前密封样本重新采样', '当前产品会停留在气检缓冲', 'VOC 传感器在线', false),
         action('GAS-LAMP-01', '保持待检', 'HOLD_STAGE', '禁止本站自动放行', '下游外观检测可能缺料', '质量门 WAIT/FAIL 时可用', true)
@@ -121,7 +124,7 @@ export function controlsForStage(stageCode: string): WorkstationStageControls {
         parameter('FIL-HEAD-01', '灌装节拍', 'fillBeat', 'SET_FILL_BEAT', '瓶/min', 8, 36, 1, 18, 20, '控制整站产能', '下游二检未阻塞', '节拍过快会影响液位稳定')
       ], [
         action('FIL-HEAD-01', '启动灌装循环', 'START_FILLING_CYCLE', '对到位瓶体执行定量灌装', '错误执行会造成撒漏或不合格液位', '气检/外观检测均已通过', true),
-        action('FIL-POS-01', '定位复位', 'RESET_POSITIONER', '复位瓶体定位机构', '当前瓶体会停留等待', '无机械卡滞报警', false)
+        action('FIL-POS-01', '定位复位', 'RESET_POSITIONER', '复位瓶体定位机构', '当前瓶体会停留等待', '无机械卡滞报警', false, 'ENGINEER')
       ])
     case 'SECONDARY_INSPECTION':
       return new WorkstationStageControls(stageCode, [
@@ -145,12 +148,11 @@ export function controlsForStage(stageCode: string): WorkstationStageControls {
         parameter('AGV-LOAD-01', '负载上限', 'agvLoadLimit', 'SET_AGV_LOAD_LIMIT', 'kg', 5, 30, 1, 25, 25, '限制成品箱负载', '负载传感器有效', '错误上限会影响小车安全')
       ], [
         action('AGV-DISPATCH-01', '请求调度', 'REQUEST_AGV_DISPATCH', '向后端申请运输任务', '会占用车辆运力', '目标仓区可用且无安全报警', false),
-        action('AGV-01', '本站急停', 'EMERGENCY_STOP', '立即暂停当前 AGV 任务', '会阻塞运输路径并需要人工确认', '障碍距离 FAIL 或人工确认', true)
+        action('AGV-01', '请求任务暂停', 'REQUEST_AGV_HOLD', '请求后端暂停当前 AGV 任务', '会占用运输通道并等待边缘层回执', '障碍距离 FAIL 或人工确认；不能替代物理急停', true)
       ])
     case 'WAREHOUSE_INBOUND':
       return new WorkstationStageControls(stageCode, [
-        parameter('WH-WMS-01', '目标库位列', 'targetColumn', 'SET_TARGET_COLUMN', '列', 1, 12, 1, 3, 4, '分配入库库位', '仓区安全 SAFE', '错误库位会影响库存追踪'),
-        parameter('WH-VOC-01', '仓区 VOC 阈值', 'warehouseVocLimit', 'SET_WAREHOUSE_VOC_LIMIT', 'ppm', 2, 15, 0.5, 10, 10, '仓储安全阈值', '仅安全员允许调整', '调高阈值会降低安全余量')
+        parameter('WH-WMS-01', '目标库位列', 'targetColumn', 'SET_TARGET_COLUMN', '列', 1, 12, 1, 3, 4, '分配入库库位', '仓区安全 SAFE', '错误库位会影响库存追踪')
       ], [
         action('WH-WMS-01', '确认入库', 'CONFIRM_WAREHOUSE_INBOUND', '登记箱码和库位库存', '会生成库存事实记录', '仓区安全且箱码有效', true),
         action('WH-LAMP-01', '点亮库位', 'LIGHT_WAREHOUSE_SLOT', '提示当前目标库位', '仅影响库位指示', '库位已分配', false)

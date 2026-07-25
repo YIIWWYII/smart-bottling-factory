@@ -6,12 +6,16 @@ import { FACTORY_STAGES, findStage } from '../config/FactoryStages'
 import { ActionControlDefinition, controlsForStage, ParameterControlDefinition, WorkstationStageControls } from '../config/WorkstationControls'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { ApiConfig } from '../service/ApiConfig'
+import { apiClient } from '../service/ApiClient'
+import { SessionStore } from '../service/SessionStore'
+import { isFinalCommandStatus } from '../service/WorkstationPolicy'
 import {
   AgvTask,
   AiAudit,
   AlarmRecord,
   DeviceCommand,
-  DeviceCommandPayload,
+  DeviceCapability,
+  DeviceCommandParameters,
   DeviceCommandRequestPayload,
   DeviceDefinition,
   FactoryBundle,
@@ -22,6 +26,7 @@ import {
   RuntimeStage,
   SensorReading,
   StageDefinition,
+  StageSnapshot,
   WarehouseZone
 } from '../model/FactoryModels'
 
@@ -54,6 +59,7 @@ class ThreeScenePayload {
   layoutEdit: boolean = false
   speed: number = 0.12
   progress: number = 0
+  stateVersion: number = 0
   devices: Array<ThreeDevicePayload> = []
   products: Array<ThreeProductPayload> = []
 }
@@ -74,6 +80,7 @@ class PendingCommandDraft {
   risk: string = ''
   interlock: string = ''
   dangerous: boolean = false
+  requiredRole: string = 'OPERATOR'
 }
 
 @Entry
@@ -81,6 +88,7 @@ class PendingCommandDraft {
 struct StageDetail {
   @State stageCode: string = 'PRETREATMENT'
   @State bundle: FactoryBundle = FactoryRepository.bundle
+  @State snapshot: StageSnapshot = FactoryRepository.stageSnapshot
   @State selectedDeviceCode: string = ''
   @State selectedTraceCode: string = ''
   @State planarEnabled: boolean = true
@@ -88,7 +96,11 @@ struct StageDetail {
   @State statusColorsEnabled: boolean = true
   @State layoutEditEnabled: boolean = false
   @State paused: boolean = false
-  @State motion: number = 20
+  @State sessionRevision: number = 0
+  @State username: string = ''
+  @State password: string = ''
+  @State loginBusy: boolean = false
+  @State loginMessage: string = '未登录时终端保持只读'
   @State edits: Array<ParameterEdit> = []
   @State pendingDraft: PendingCommandDraft = new PendingCommandDraft()
   @State commandBusy: boolean = false
@@ -97,12 +109,14 @@ struct StageDetail {
   @State auditNo: string = '--'
   @State activeCommandId: string = ''
   private refreshTimer: number = -1
-  private motionTimer: number = -1
   private commandTimer: number = -1
+  private commandPollCount: number = 0
   private listener: () => void = () => {
     this.bundle = FactoryRepository.bundle
+    this.snapshot = FactoryRepository.stageSnapshot
     this.syncCommandFromSnapshot()
   }
+  private sessionListener: () => void = () => this.sessionRevision++
 
   get stage(): StageDefinition {
     return findStage(this.stageCode)
@@ -117,23 +131,31 @@ struct StageDetail {
   }
 
   get runtimeStage(): RuntimeStage {
-    return this.findRuntimeStage(this.stageCode)
+    return {
+      stageCode: this.snapshot.stageCode,
+      state: this.snapshot.state,
+      bufferLevel: this.snapshot.buffer.inputLevel,
+      bufferCapacity: this.snapshot.buffer.capacity,
+      upstreamImpact: this.snapshot.upstream.length > 0 ? this.snapshot.upstream[0].materialFlow : '等待数据',
+      downstreamImpact: this.snapshot.downstream.length > 0 ? this.snapshot.downstream[0].materialFlow : '等待数据',
+      updatedAt: this.snapshot.generatedAt
+    }
   }
 
   get stationRuns(): Array<FactoryRun> {
-    return this.bundle.dashboard.runs.filter((item: FactoryRun) => item.currentStage === this.stageCode)
+    return this.snapshot.products
   }
 
   get stationReadings(): Array<SensorReading> {
-    return this.bundle.operations.latestReadings.filter((item: SensorReading) => this.normalizeStage(item.stage || '', item.deviceCode) === this.stageCode)
+    return this.snapshot.sensors
   }
 
   get stationAlarms(): Array<AlarmRecord> {
-    return this.bundle.operations.alarms.filter((item: AlarmRecord) => item.status === 'OPEN' && this.normalizeStage(item.stage || '', item.deviceCode) === this.stageCode)
+    return this.snapshot.alarms.filter((item: AlarmRecord) => item.status === 'OPEN')
   }
 
   get stationIncidents(): Array<FactoryIncident> {
-    return this.bundle.runtime.incidents.filter((item: FactoryIncident) => item.stageCode === this.stageCode && item.status !== 'RESOLVED')
+    return this.snapshot.incidents.filter((item: FactoryIncident) => item.status !== 'RESOLVED')
   }
 
   get stationCommands(): Array<DeviceCommand> {
@@ -147,21 +169,18 @@ struct StageDetail {
     }
     this.resetControlTargets()
     FactoryRepository.subscribe(this.listener)
-    void FactoryRepository.refresh()
+    SessionStore.subscribe(this.sessionListener)
+    void FactoryRepository.refresh(this.stageCode)
+    if (SessionStore.isAuthenticated) void this.validateSession()
     FactoryRepository.connectRealtime()
-    this.refreshTimer = setInterval(() => void FactoryRepository.refresh(), ApiConfig.refreshIntervalMs)
-    this.motionTimer = setInterval(() => {
-      if (!this.paused && (this.planarEnabled || this.threeEnabled)) {
-        this.motion = (this.motion + Math.max(2, Math.round(this.sceneSpeed() * 30))) % 100
-      }
-    }, 300)
+    this.refreshTimer = setInterval(() => void FactoryRepository.refresh(this.stageCode), ApiConfig.refreshIntervalMs)
   }
 
   aboutToDisappear(): void {
     FactoryRepository.unsubscribe(this.listener)
+    SessionStore.unsubscribe(this.sessionListener)
     FactoryRepository.closeRealtime()
     if (this.refreshTimer >= 0) clearInterval(this.refreshTimer)
-    if (this.motionTimer >= 0) clearInterval(this.motionTimer)
     if (this.commandTimer >= 0) clearTimeout(this.commandTimer)
   }
 
@@ -188,7 +207,7 @@ struct StageDetail {
   }
 
   private runtimeDevice(code: string): RuntimeDevice | undefined {
-    return this.bundle.runtime.devices.find((item: RuntimeDevice) => item.deviceCode === code)
+    return this.snapshot.devices.find((item: RuntimeDevice) => item.deviceCode === code)
   }
 
   private normalizeStage(stage: string, deviceCode: string): string {
@@ -201,7 +220,7 @@ struct StageDetail {
 
   private stageStateValue(): string {
     if (this.stationAlarms.length > 0) return 'ALARM'
-    if (this.runtimeStage.state.length > 0) return this.runtimeStage.state
+    if (this.snapshot.state.length > 0) return this.snapshot.state
     return 'UNKNOWN'
   }
 
@@ -250,9 +269,11 @@ struct StageDetail {
   }
 
   private sceneSpeed(): number {
-    let speed: number = this.stageCode === 'AGV_TRANSPORT' ? 1 : 0.12
-    this.bundle.runtime.devices.forEach((item: RuntimeDevice) => {
-      if (item.stageCode === this.stageCode && item.speedMps !== undefined) {
+    let speed: number = 0
+    this.snapshot.devices.forEach((item: RuntimeDevice) => {
+      if (item.speed !== undefined) {
+        speed = item.speed
+      } else if (item.speedMps !== undefined) {
         speed = item.speedMps
       }
     })
@@ -262,9 +283,14 @@ struct StageDetail {
   }
 
   private sceneProgress(): number {
-    let progress: number = this.motion
-    this.bundle.runtime.devices.forEach((item: RuntimeDevice) => {
-      if (item.stageCode === this.stageCode && item.progress !== undefined) {
+    let progress: number = 0
+    this.snapshot.products.forEach((item: FactoryRun) => {
+      if (item.stageProgressPct !== undefined) progress = item.stageProgressPct
+    })
+    this.snapshot.devices.forEach((item: RuntimeDevice) => {
+      if (item.cycleProgressPct !== undefined) {
+        progress = item.cycleProgressPct
+      } else if (item.progress !== undefined) {
         progress = item.progress
       }
     })
@@ -279,13 +305,14 @@ struct StageDetail {
     const payload = new ThreeScenePayload()
     payload.stageCode = this.stageCode
     payload.stageName = this.stage.name
-    payload.source = this.bundle.source
+    payload.source = this.snapshot.dataMode + ' · ' + FactoryRepository.snapshotMode
     payload.viewMode = viewMode
     payload.paused = this.paused
     payload.statusColors = this.statusColorsEnabled
     payload.layoutEdit = this.layoutEditEnabled
     payload.speed = this.sceneSpeed()
     payload.progress = this.sceneProgress()
+    payload.stateVersion = this.snapshot.stateVersion
     this.stage.devices.forEach((device: DeviceDefinition) => {
       const item = new ThreeDevicePayload()
       item.code = device.code
@@ -307,63 +334,14 @@ struct StageDetail {
   }
 
   private qualityGates(): Array<QualityGateView> {
-    const eventFail = this.bundle.dashboard.runs.some((run: FactoryRun) => run.events.some(event => event.stage === this.stageCode && event.status === 'FAILED'))
-    const eventPass = this.bundle.dashboard.runs.some((run: FactoryRun) => run.events.some(event => event.stage === this.stageCode && event.status === 'PASSED'))
-    const interlock: QualityGateView = {
-      label: '设备联锁',
-      standard: '设备在线、无开放报警、缓冲未阻塞',
-      actual: this.stageStateText(),
-      status: this.stationAlarms.length > 0 || this.runtimeStage.state === 'BLOCKED' || this.runtimeStage.state === 'OFFLINE' ? 'FAIL' : this.runtimeStage.state === 'RUNNING' ? 'PASS' : 'WAIT',
-      source: '工位运行态'
-    }
-    const eventGate: QualityGateView = {
-      label: '工序事件判定',
-      standard: '产品事件链 PASSED',
-      actual: eventFail ? '存在失败事件' : eventPass ? '最近记录通过' : '等待产品判定',
-      status: eventFail ? 'FAIL' : eventPass ? 'PASS' : 'WAIT',
-      source: '产品追踪'
-    }
-    if (this.stageCode === 'GAS_INSPECTION') {
-      const reading = this.stationReadings.find((item: SensorReading) => item.sensorType === 'VOC')
-      return [{
-        label: 'VOC 安全浓度',
-        standard: '<= 10 ppm',
-        actual: reading === undefined ? '等待传感器上报' : reading.value.toString() + ' ' + reading.unit,
-        status: reading === undefined ? 'WAIT' : reading.value <= 10 ? 'PASS' : 'FAIL',
-        source: reading === undefined ? 'VOC 传感器' : reading.mode
-      }, interlock]
-    }
-    if (this.stageCode === 'BEVERAGE_READY') {
-      const reading = this.stationReadings.find((item: SensorReading) => item.sensorType === 'TEMPERATURE')
-      return [{
-        label: '饮料温度',
-        standard: '20-30 °C',
-        actual: reading === undefined ? '等待温度读数' : reading.value.toString() + ' ' + reading.unit,
-        status: reading === undefined ? 'WAIT' : reading.value >= 20 && reading.value <= 30 ? 'PASS' : 'FAIL',
-        source: reading === undefined ? '温度传感器' : reading.mode
-      }, eventGate, interlock]
-    }
-    if (this.stageCode === 'AGV_TRANSPORT') {
-      const task = this.bundle.logistics.tasks.length > 0 ? this.bundle.logistics.tasks[0] : undefined
-      return [{
-        label: '超声波避障',
-        standard: '>= 20 cm',
-        actual: task === undefined ? '等待 AGV 报文' : task.obstacleDistanceCm.toString() + ' cm',
-        status: task === undefined ? 'WAIT' : task.obstacleDistanceCm >= 20 ? 'PASS' : 'FAIL',
-        source: task === undefined ? '超声波传感器' : task.mode
-      }, interlock]
-    }
-    if (this.stageCode === 'WAREHOUSE_INBOUND') {
-      const zone = this.bundle.logistics.zones.length > 0 ? this.bundle.logistics.zones[0] : undefined
-      return [{
-        label: '仓区安全',
-        standard: 'SAFE、VOC <= 10 ppm、烟雾 <= 0.5%',
-        actual: zone === undefined ? '等待仓区报文' : zone.status + ' · VOC ' + zone.vocPpm.toString() + ' ppm',
-        status: zone === undefined ? 'WAIT' : zone.status === 'SAFE' && zone.vocPpm <= 10 && zone.smoke <= 0.5 ? 'PASS' : 'FAIL',
-        source: '仓区安全传感器'
-      }, interlock]
-    }
-    return [eventGate, interlock]
+    if (this.snapshot.qualityGates.length > 0) return this.snapshot.qualityGates
+    return [{
+      label: '后端质量门',
+      standard: '由统一 StageSnapshot 返回规则与阈值',
+      actual: '当前接口未提供质量门结果',
+      status: 'WAIT',
+      source: FactoryRepository.snapshotMode
+    }]
   }
 
   private qualitySummary(): string {
@@ -381,42 +359,132 @@ struct StageDetail {
     return value
   }
 
+  private capabilityFor(deviceCode: string, commandType: string): DeviceCapability | undefined {
+    return FactoryRepository.capabilities.find((item: DeviceCapability) =>
+      item.deviceCode === deviceCode && item.commandType === commandType)
+  }
+
+  private parameterMin(control: ParameterControlDefinition): number {
+    const capability = this.capabilityFor(control.deviceCode, control.commandType)
+    return capability !== undefined && capability.min !== undefined ? capability.min : control.min
+  }
+
+  private parameterMax(control: ParameterControlDefinition): number {
+    const capability = this.capabilityFor(control.deviceCode, control.commandType)
+    return capability !== undefined && capability.max !== undefined ? capability.max : control.max
+  }
+
+  private parameterStep(control: ParameterControlDefinition): number {
+    const capability = this.capabilityFor(control.deviceCode, control.commandType)
+    return capability !== undefined && capability.step !== undefined ? capability.step : control.step
+  }
+
+  private parameterCurrent(control: ParameterControlDefinition): number {
+    const capability = this.capabilityFor(control.deviceCode, control.commandType)
+    return capability !== undefined && capability.currentValue !== undefined ? capability.currentValue : control.currentValue
+  }
+
+  private requiredRole(deviceCode: string, commandType: string, fallbackRole: string): string {
+    const capability = this.capabilityFor(deviceCode, commandType)
+    return capability === undefined || capability.requiredRole.length === 0 ? fallbackRole : capability.requiredRole
+  }
+
   private setTarget(control: ParameterControlDefinition, delta: number): void {
+    const min: number = this.parameterMin(control)
+    const max: number = this.parameterMax(control)
     const next: Array<ParameterEdit> = []
     this.edits.forEach((item: ParameterEdit) => {
       const edit = new ParameterEdit()
       edit.parameterCode = item.parameterCode
-      edit.value = item.parameterCode === control.parameterCode ? Math.max(control.min, Math.min(control.max, Number((item.value + delta).toFixed(2)))) : item.value
+      edit.value = item.parameterCode === control.parameterCode ? Math.max(min, Math.min(max, Number((item.value + delta).toFixed(2)))) : item.value
       next.push(edit)
     })
     this.edits = next
   }
 
-  private canSendCommands(): boolean {
-    return this.bundle.online && this.bundle.source === 'BACKEND' && !this.commandBusy
+  private canEditParameter(control: ParameterControlDefinition): boolean {
+    return this.commandBlockReason(true, control.requiredRole, control.deviceCode, control.commandType).length === 0
   }
 
-  private commandBlockReason(controlDangerous: boolean): string {
+  private commandBlockReason(controlDangerous: boolean, fallbackRole: string = 'OPERATOR', deviceCode: string = '', commandType: string = ''): string {
     if (!this.bundle.online || this.bundle.source !== 'BACKEND') return '后端不可达或本地演示模式，只读'
+    if (!FactoryRepository.snapshotOnline || FactoryRepository.snapshotMode !== 'CANONICAL') return '统一 StageSnapshot 接口不可用，旧接口适配仅允许只读'
+    if (FactoryRepository.capabilityMode !== 'BACKEND') return '设备能力接口不可用，无法校验范围、角色和联锁'
     if (this.commandBusy) return '已有命令等待回执'
+    if (!SessionStore.isAuthenticated) return '未登录操作员，终端保持只读'
+    const role: string = this.requiredRole(deviceCode, commandType, fallbackRole)
+    if (!SessionStore.can(role)) return '当前角色权限不足，需要 ' + role
+    if (deviceCode.length > 0 && commandType.length > 0) {
+      const capability = this.capabilityFor(deviceCode, commandType)
+      if (capability === undefined) return '后端未授权该设备命令'
+      if (!capability.writable) return capability.disabledReason || '后端能力标记为只读'
+    }
     if (this.stageStateValue() === 'OFFLINE') return '本站离线'
     if (controlDangerous && this.stationAlarms.length > 0) return '存在开放报警，危险操作禁用'
     if (controlDangerous && this.qualitySummary() === '禁止自动放行') return '质量门失败，危险操作禁用'
     return ''
   }
 
+  private async validateSession(): Promise<void> {
+    try {
+      const user = await apiClient.me()
+      SessionStore.setSession(SessionStore.token, user, SessionStore.expiresAt)
+      this.loginMessage = user.displayName + ' · ' + user.role
+    } catch (error) {
+      SessionStore.clear()
+      this.loginMessage = error instanceof Error ? error.message : '会话校验失败，已恢复只读'
+    }
+  }
+
+  private async loginOperator(): Promise<void> {
+    if (this.username.trim().length === 0 || this.password.length === 0) {
+      this.loginMessage = '请输入工位账号和密码'
+      return
+    }
+    this.loginBusy = true
+    try {
+      const result = await apiClient.login(this.username.trim(), this.password)
+      SessionStore.setSession(result.token, result.user, result.expiresAt || '')
+      this.password = ''
+      this.loginMessage = result.user.displayName + ' · ' + result.user.role + ' 已登录'
+    } catch (error) {
+      SessionStore.clear()
+      this.loginMessage = error instanceof Error ? error.message : '登录失败'
+    } finally {
+      this.loginBusy = false
+    }
+  }
+
+  private logoutOperator(): void {
+    SessionStore.clear()
+    this.password = ''
+    this.loginMessage = '已退出，终端恢复只读'
+  }
+
+  private operatorLabel(): string {
+    if (!SessionStore.isAuthenticated || SessionStore.user === undefined) return '未登录 · READ ONLY'
+    return SessionStore.user.displayName + ' · ' + SessionStore.user.role
+  }
+
   private prepareParameter(control: ParameterControlDefinition): void {
+    const target: number = this.targetValue(control.parameterCode)
+    if (target < this.parameterMin(control) || target > this.parameterMax(control)) {
+      this.commandStatus = 'BLOCKED'
+      this.commandMessage = '目标值超出后端能力范围，请重新调整'
+      return
+    }
     const draft = new PendingCommandDraft()
     draft.deviceCode = control.deviceCode
     draft.commandType = control.commandType
     draft.parameterCode = control.parameterCode
-    draft.value = this.targetValue(control.parameterCode)
+    draft.value = target
     draft.unit = control.unit
     draft.label = control.label
     draft.intent = '调整 ' + control.label + ' 到 ' + draft.value.toString() + ' ' + control.unit
     draft.risk = control.risk
     draft.interlock = control.interlock
     draft.dangerous = true
+    draft.requiredRole = this.requiredRole(control.deviceCode, control.commandType, control.requiredRole)
     this.pendingDraft = draft
     this.commandStatus = 'CONFIRM_REQUIRED'
     this.commandMessage = '请核对风险提示后再次确认发送'
@@ -434,6 +502,7 @@ struct StageDetail {
     draft.risk = control.risk
     draft.interlock = control.interlock
     draft.dangerous = control.dangerous
+    draft.requiredRole = this.requiredRole(control.deviceCode, control.commandType, control.requiredRole)
     this.pendingDraft = draft
     this.commandStatus = 'CONFIRM_REQUIRED'
     this.commandMessage = '请核对风险提示后再次确认发送'
@@ -446,7 +515,8 @@ struct StageDetail {
   }
 
   private async confirmCommand(): Promise<void> {
-    const reason = this.commandBlockReason(this.pendingDraft.dangerous)
+    const reason = this.commandBlockReason(this.pendingDraft.dangerous, this.pendingDraft.requiredRole,
+      this.pendingDraft.deviceCode, this.pendingDraft.commandType)
     if (reason.length > 0 || this.pendingDraft.commandType.length === 0) {
       this.commandStatus = 'BLOCKED'
       this.commandMessage = reason.length > 0 ? reason : '没有待确认命令'
@@ -455,36 +525,32 @@ struct StageDetail {
     this.commandBusy = true
     this.commandStatus = 'PENDING'
     this.commandMessage = 'HTTP 已发送，等待后端受理'
-    const payload = new DeviceCommandPayload()
-    payload.stageCode = this.stageCode
-    payload.parameterCode = this.pendingDraft.parameterCode
-    payload.value = this.pendingDraft.value
-    payload.unit = this.pendingDraft.unit
-    payload.intent = this.pendingDraft.intent
-    payload.risk = this.pendingDraft.risk
-    payload.interlock = this.pendingDraft.interlock
-    payload.clientRequestNo = 'TERM-' + Date.now().toString()
+    const parameters = new DeviceCommandParameters()
+    parameters.parameterCode = this.pendingDraft.parameterCode
+    parameters.value = this.pendingDraft.value
+    parameters.unit = this.pendingDraft.unit
     const request = new DeviceCommandRequestPayload()
+    request.clientRequestId = 'TERM-' + Date.now().toString() + '-' + this.pendingDraft.deviceCode
+    request.lineId = this.snapshot.lineId
+    request.stageCode = this.stageCode
     request.deviceCode = this.pendingDraft.deviceCode
     request.commandType = this.pendingDraft.commandType
-    request.payload = payload
+    request.parameters = parameters
+    request.payload = parameters
+    request.expectedStateVersion = this.snapshot.stateVersion
+    request.recipeVersion = this.snapshot.recipeVersion || ''
+    request.reason = this.pendingDraft.intent
     request.source = 'WORKSTATION_TERMINAL'
     request.traceCode = this.selectedTraceCode
     try {
       const command = await FactoryRepository.createCommand(request)
       this.activeCommandId = command.commandId
-      this.auditNo = command.commandId
-      this.commandStatus = command.status
-      this.commandMessage = command.message || '后端已受理，等待边缘层回执'
+      this.auditNo = command.auditNo || command.commandId
+      this.commandStatus = 'PENDING'
+      this.commandMessage = '后端已受理，等待 WebSocket/HTTP 最终回执'
       this.pendingDraft = new PendingCommandDraft()
-      if (this.commandTimer >= 0) clearTimeout(this.commandTimer)
-      this.commandTimer = setTimeout(() => {
-        if (this.commandBusy && (this.commandStatus === 'PENDING' || this.commandStatus === 'SENT')) {
-          this.commandBusy = false
-          this.commandStatus = 'TIMEOUT'
-          this.commandMessage = '未收到边缘层最终回执，请在管理端或后端命令记录中复核'
-        }
-      }, 12000)
+      this.commandPollCount = 0
+      this.scheduleCommandPoll()
     } catch (error) {
       this.commandBusy = false
       this.commandStatus = 'FAILED'
@@ -498,11 +564,41 @@ struct StageDetail {
     if (command === undefined) return
     this.commandStatus = command.status
     this.commandMessage = command.message || this.commandMessage
-    if (command.status === 'ACKNOWLEDGED' || command.status === 'FAILED' || command.status === 'CANCELLED' || command.status === 'TIMEOUT') {
+    if (isFinalCommandStatus(command.status)) {
       this.commandBusy = false
       if (this.commandTimer >= 0) clearTimeout(this.commandTimer)
       this.commandTimer = -1
     }
+  }
+
+  private scheduleCommandPoll(): void {
+    if (this.commandTimer >= 0) clearTimeout(this.commandTimer)
+    this.commandTimer = setTimeout(() => void this.pollCommandStatus(), 1500)
+  }
+
+  private async pollCommandStatus(): Promise<void> {
+    if (this.activeCommandId.length === 0 || !this.commandBusy) return
+    this.commandPollCount++
+    try {
+      const commands: Array<DeviceCommand> = await FactoryRepository.listCommands()
+      const command = commands.find((item: DeviceCommand) => item.commandId === this.activeCommandId)
+      if (command !== undefined) {
+        this.commandStatus = command.status
+        this.commandMessage = command.message || this.commandMessage
+        this.auditNo = command.auditNo || command.commandId
+        if (isFinalCommandStatus(command.status)) {
+          this.commandBusy = false
+          this.commandTimer = -1
+          return
+        }
+      }
+    } catch (error) {
+      this.commandMessage = '状态查询失败，仍保持 PENDING，等待实时通道或下次补拉'
+    }
+    if (this.commandPollCount >= 8) {
+      this.commandMessage = '后端仍未返回最终状态，命令保持 PENDING，禁止重复下发'
+    }
+    this.scheduleCommandPoll()
   }
 
   private navigateStage(offset: number): void {
@@ -577,6 +673,11 @@ struct StageDetail {
             .fontSize(12)
             .fontColor(Theme.muted)
             .lineHeight(18)
+            .margin({ top: 6 })
+          Text('快照版本 ' + this.snapshot.stateVersion.toString() + ' · ' + FactoryRepository.snapshotMode +
+            (FactoryRepository.snapshotError.length > 0 ? ' · ' + FactoryRepository.snapshotError : ''))
+            .fontSize(8)
+            .fontColor(FactoryRepository.snapshotMode === 'CANONICAL' ? Theme.success : Theme.warning)
             .margin({ top: 6 })
         }
         .alignItems(HorizontalAlign.Start)
@@ -887,6 +988,7 @@ struct StageDetail {
   controlSection() {
     Column() {
       SectionTitle({ code: '08 CONTROL', title: '本站调参与控制', description: '控制请求通过 HTTP 创建命令，HTTP 成功只代表后端受理，最终结果等待 WebSocket/HTTP 回执。' })
+      this.identityPanel()
       Text(this.commandBlockReason(false).length > 0 ? this.commandBlockReason(false) : '后端在线时可发起本站命令；危险动作会额外检查报警和质量门。')
         .fontSize(10)
         .fontColor(this.commandBlockReason(false).length > 0 ? Theme.warning : Theme.muted)
@@ -909,33 +1011,79 @@ struct StageDetail {
   }
 
   @Builder
+  identityPanel() {
+    Column() {
+      Row() {
+        Column() {
+          Text('操作员身份').fontSize(10).fontColor(Theme.muted)
+          Text(this.operatorLabel()).fontSize(13).fontColor(SessionStore.isAuthenticated ? Theme.success : Theme.warning).fontWeight(FontWeight.Bold).margin({ top: 4 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        if (SessionStore.isAuthenticated) {
+          Button('退出').height(32).fontSize(10).backgroundColor('#E7F0F5').fontColor(Theme.navy).onClick(() => this.logoutOperator())
+        }
+      }
+      .width('100%')
+      if (!SessionStore.isAuthenticated) {
+        TextInput({ placeholder: '工位账号', text: this.username })
+          .height(38)
+          .margin({ top: 10 })
+          .onChange((value: string) => this.username = value)
+        TextInput({ placeholder: '密码', text: this.password })
+          .type(InputType.Password)
+          .height(38)
+          .margin({ top: 8 })
+          .onChange((value: string) => this.password = value)
+        Button(this.loginBusy ? '登录中...' : '登录解锁获批操作')
+          .width('100%')
+          .height(36)
+          .margin({ top: 8 })
+          .enabled(!this.loginBusy)
+          .backgroundColor(Theme.navy)
+          .fontColor('#FFFFFF')
+          .onClick(() => void this.loginOperator())
+      }
+      Text(this.loginMessage).fontSize(9).fontColor(Theme.muted).margin({ top: 8 })
+      Text('权限边界：VIEWER 只读；OPERATOR 运行操作；ENGINEER 受限维护；ADMIN 仅继承现场授权，不绕过后端安全门。')
+        .fontSize(8).fontColor(Theme.muted).margin({ top: 5 })
+    }
+    .width('100%')
+    .padding(12)
+    .margin({ top: 10, bottom: 4 })
+    .backgroundColor(Theme.panelSoft)
+    .border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
   parameterControl(control: ParameterControlDefinition) {
     Column() {
       Row() {
         Column() {
           Text(control.label + ' · ' + control.deviceCode).fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold)
           Text(control.role).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
-          Text('范围 ' + control.min.toString() + '-' + control.max.toString() + ' ' + control.unit + ' · 步长 ' + control.step.toString() + ' · ' + control.source).fontSize(8).fontColor(Theme.muted).margin({ top: 4 })
+          Text('范围 ' + this.parameterMin(control).toString() + '-' + this.parameterMax(control).toString() + ' ' + control.unit + ' · 步长 ' + this.parameterStep(control).toString() + ' · ' + control.source).fontSize(8).fontColor(Theme.muted).margin({ top: 4 })
+          Text('最低角色 ' + this.requiredRole(control.deviceCode, control.commandType, control.requiredRole)).fontSize(8).fontColor(Theme.blue).margin({ top: 4 })
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
         Column() {
-          Text('当前 ' + control.currentValue.toString() + ' ' + control.unit).fontSize(9).fontColor(Theme.muted)
+          Text('当前 ' + this.parameterCurrent(control).toString() + ' ' + control.unit).fontSize(9).fontColor(Theme.muted)
           Text('目标 ' + this.targetValue(control.parameterCode).toString() + ' ' + control.unit).fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
         }
         .alignItems(HorizontalAlign.End)
       }
       .width('100%')
       Row({ space: 8 }) {
-        Button('-').width(42).height(34).enabled(this.canSendCommands()).onClick(() => this.setTarget(control, -control.step))
-        Button('+').width(42).height(34).enabled(this.canSendCommands()).onClick(() => this.setTarget(control, control.step))
+        Button('-').width(42).height(34).enabled(this.canEditParameter(control)).onClick(() => this.setTarget(control, -this.parameterStep(control)))
+        Button('+').width(42).height(34).enabled(this.canEditParameter(control)).onClick(() => this.setTarget(control, this.parameterStep(control)))
         Button('发送调整')
           .layoutWeight(1)
           .height(34)
           .fontSize(11)
           .fontColor('#FFFFFF')
-          .backgroundColor(this.commandBlockReason(true).length === 0 ? Theme.blue : Theme.neutral)
-          .enabled(this.commandBlockReason(true).length === 0)
+          .backgroundColor(this.commandBlockReason(true, control.requiredRole, control.deviceCode, control.commandType).length === 0 ? Theme.blue : Theme.neutral)
+          .enabled(this.commandBlockReason(true, control.requiredRole, control.deviceCode, control.commandType).length === 0)
           .onClick(() => this.prepareParameter(control))
       }
       .width('100%')
@@ -956,6 +1104,7 @@ struct StageDetail {
         Text(control.label + ' · ' + control.deviceCode).fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold)
         Text(control.intent).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
         Text('联锁：' + control.interlock).fontSize(8).fontColor(Theme.muted).margin({ top: 4 })
+        Text('最低角色：' + this.requiredRole(control.deviceCode, control.commandType, control.requiredRole)).fontSize(8).fontColor(Theme.blue).margin({ top: 4 })
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
@@ -963,8 +1112,8 @@ struct StageDetail {
         .height(34)
         .fontSize(10)
         .fontColor('#FFFFFF')
-        .backgroundColor(this.commandBlockReason(control.dangerous).length === 0 ? (control.dangerous ? Theme.warning : Theme.blue) : Theme.neutral)
-        .enabled(this.commandBlockReason(control.dangerous).length === 0)
+        .backgroundColor(this.commandBlockReason(control.dangerous, control.requiredRole, control.deviceCode, control.commandType).length === 0 ? (control.dangerous ? Theme.warning : Theme.blue) : Theme.neutral)
+        .enabled(this.commandBlockReason(control.dangerous, control.requiredRole, control.deviceCode, control.commandType).length === 0)
         .onClick(() => this.prepareAction(control))
     }
     .width('100%')
@@ -984,7 +1133,9 @@ struct StageDetail {
         Text('风险：' + this.pendingDraft.risk).fontSize(9).fontColor(Theme.danger).margin({ top: 6 })
         Row({ space: 8 }) {
           Button('取消').layoutWeight(1).height(36).backgroundColor('#E7F0F5').fontColor(Theme.navy).onClick(() => this.clearDraft())
-          Button('确认发送到后端').layoutWeight(1).height(36).backgroundColor(Theme.warning).fontColor('#FFFFFF').enabled(!this.commandBusy).onClick(() => void this.confirmCommand())
+          Button('确认发送到后端').layoutWeight(1).height(36).backgroundColor(Theme.warning).fontColor('#FFFFFF')
+            .enabled(this.commandBlockReason(this.pendingDraft.dangerous, this.pendingDraft.requiredRole, this.pendingDraft.deviceCode, this.pendingDraft.commandType).length === 0)
+            .onClick(() => void this.confirmCommand())
         }
         .width('100%')
         .margin({ top: 12 })
@@ -1076,7 +1227,7 @@ struct StageDetail {
   productProfile() {
     Column() {
       SectionTitle({ code: 'PRODUCT PROFILE', title: this.selectedTraceCode, description: '选中物料的追踪信息。' })
-      ForEach(this.bundle.dashboard.runs.filter((item: FactoryRun) => item.traceCode === this.selectedTraceCode), (run: FactoryRun) => {
+      ForEach(this.stationRuns.filter((item: FactoryRun) => item.traceCode === this.selectedTraceCode), (run: FactoryRun) => {
         this.keyValue('瓶型', run.bottleType || '待识别')
         this.keyValue('批次', run.batchCode || '待绑定')
         this.keyValue('当前工位', run.currentStage)
