@@ -76,9 +76,29 @@ class FactoryRepositoryImpl {
       const operations: OperationsOverview = this.normalizeOperations(await this.client.request<OperationsOverview>('/operations/overview'))
       const logistics: LogisticsOverview = this.normalizeLogistics(await this.client.request<LogisticsOverview>('/logistics/overview'))
       const runtime: RuntimeSnapshot = this.normalizeRuntime(await this.client.request<RuntimeSnapshot>('/factory/runtime'))
-      this.bundle = { dashboard, operations, logistics, runtime, source: 'BACKEND', online: true, updatedAt: runtime.generatedAt || new Date().toISOString(), errorMessage: '' }
+      this.bundle = {
+        dashboard,
+        operations,
+        logistics,
+        runtime,
+        stateVersion: this.bundle.stateVersion + 1,
+        source: 'BACKEND',
+        online: true,
+        updatedAt: runtime.generatedAt || new Date().toISOString(),
+        errorMessage: ''
+      }
     } catch (error) {
-      this.bundle = { dashboard: this.bundle.dashboard, operations: this.bundle.operations, logistics: this.bundle.logistics, runtime: this.bundle.runtime, source: 'LOCAL DEMO', online: false, updatedAt: this.bundle.updatedAt, errorMessage: error instanceof Error ? error.message : '后端请求失败' }
+      this.bundle = {
+        dashboard: this.bundle.dashboard,
+        operations: this.bundle.operations,
+        logistics: this.bundle.logistics,
+        runtime: this.bundle.runtime,
+        stateVersion: this.bundle.stateVersion,
+        source: 'LOCAL DEMO',
+        online: false,
+        updatedAt: this.bundle.updatedAt,
+        errorMessage: error instanceof Error ? error.message : '后端请求失败'
+      }
     }
     this.notify()
   }

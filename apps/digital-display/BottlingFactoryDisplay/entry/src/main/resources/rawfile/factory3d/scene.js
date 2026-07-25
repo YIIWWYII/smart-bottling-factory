@@ -34,7 +34,9 @@
     viewMode: 'THREE',
     stageCode: 'PRETREATMENT',
     stageName: '预处理',
+    stateVersion: 0,
     source: 'LOCAL DEMO',
+    errorMessage: '',
     paused: false,
     statusColors: true,
     layoutEdit: false,
@@ -61,6 +63,17 @@
   var cameraOrbit = { yaw: -0.65, pitch: 0.62, distance: 19 };
   var isPointerDown = false;
   var resizeObserver;
+  var testProbe = {
+    ready: false,
+    mode: 'THREE',
+    stateVersion: 0,
+    rendererInfo: { render: { calls: 0, frame: 0, triangles: 0, points: 0, lines: 0 }, memory: { geometries: 0, textures: 0 } },
+    deviceCount: 0,
+    productCount: 0,
+    paused: false,
+    lastError: '',
+    source: 'LOCAL DEMO'
+  };
 
   function material(color, metalness, roughness) {
     return new THREE.MeshStandardMaterial({
@@ -126,10 +139,13 @@
       resize();
       resizeObserver = new ResizeObserver(resize);
       resizeObserver.observe(host);
+      updateProbe();
       requestAnimationFrame(renderLoop);
     } catch (error) {
       fallback.classList.remove('hidden');
       sourceLabel.textContent = 'WEBGL UNAVAILABLE';
+      state.lastError = error && error.message ? error.message : 'WEBGL UNAVAILABLE';
+      updateProbe();
     }
   }
 
@@ -197,8 +213,9 @@
     });
     rebuildProducts();
     applyRuntimeState();
-    stageLabel.textContent = (state.viewMode === 'PLANAR' ? '2D ' : '3D ') + state.stageName + ' / ' + state.stageCode;
-    sourceLabel.textContent = state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
+    stageLabel.textContent = (state.viewMode === 'PLANAR' ? '2D ' : '3D ') + state.stageName + ' / ' + state.stageCode + ' · v' + String(state.stateVersion || 0);
+    sourceLabel.textContent = buildSourceLabel();
+    updateProbe();
   }
 
   function createStageEnvironment(stageCode) {
@@ -768,6 +785,24 @@
     });
   }
 
+  function buildSourceLabel() {
+    if (state.layoutEdit) return 'LAYOUT EDIT · DRAG DEVICE · v' + String(state.stateVersion || 0)
+    return state.source + ' · v' + String(state.stateVersion || 0) + (state.paused ? ' · PAUSED' : ' · LIVE');
+  }
+
+  function updateProbe() {
+    testProbe.ready = Boolean(renderer && scene && camera);
+    testProbe.mode = state.viewMode;
+    testProbe.stateVersion = Number(state.stateVersion || 0);
+    testProbe.rendererInfo = renderer ? renderer.info : testProbe.rendererInfo;
+    testProbe.deviceCount = state.devices.length;
+    testProbe.productCount = state.products.length;
+    testProbe.paused = Boolean(state.paused);
+    testProbe.lastError = state.lastError || '';
+    testProbe.source = state.source;
+    window.__factoryTest__ = testProbe;
+  }
+
   function positionProducts(elapsed) {
     if (!productRoot) return;
     var baseProgress = Number(state.progress || 0) / 100;
@@ -820,6 +855,7 @@
     animateEquipment(elapsed, delta);
     positionProducts(elapsed);
     renderer.render(scene, camera);
+    updateProbe();
   }
 
   function updateCamera() {
@@ -990,6 +1026,7 @@
           return item.traceCode + ':' + item.status;
         }));
         Object.keys(next).forEach(function (key) { state[key] = next[key]; });
+        if (next.errorMessage !== undefined) state.lastError = next.errorMessage;
         if (modeChanged) {
           createCameraForMode();
           rebuildStage();
@@ -1002,32 +1039,46 @@
           if (productSignature !== oldProductSignature || statusColorsChanged) rebuildProducts();
           applyRuntimeState();
         }
-        stageLabel.textContent = (state.viewMode === 'PLANAR' ? '2D ' : '3D ') + state.stageName + ' / ' + state.stageCode;
-        sourceLabel.textContent = state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
+        stageLabel.textContent = (state.viewMode === 'PLANAR' ? '2D ' : '3D ') + state.stageName + ' / ' + state.stageCode + ' · v' + String(state.stateVersion || 0);
+        sourceLabel.textContent = buildSourceLabel();
+        updateProbe();
       } catch (error) {
+        state.lastError = error && error.message ? error.message : 'DATA ERROR';
         sourceLabel.textContent = 'DATA ERROR';
+        updateProbe();
       }
     },
     setPaused: function (paused) {
       state.paused = Boolean(paused);
-      sourceLabel.textContent = state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
+      sourceLabel.textContent = buildSourceLabel();
+      updateProbe();
     },
     setStatusColors: function (enabled) {
       state.statusColors = Boolean(enabled);
       rebuildProducts();
       applyRuntimeState();
+      updateProbe();
     },
     setLayoutEdit: function (enabled) {
       state.layoutEdit = Boolean(enabled);
-      sourceLabel.textContent = state.layoutEdit ? 'LAYOUT EDIT · DRAG DEVICE' : state.source + (state.paused ? ' · PAUSED' : ' · LIVE');
+      sourceLabel.textContent = state.layoutEdit ? 'LAYOUT EDIT · DRAG DEVICE' : buildSourceLabel();
+      updateProbe();
     },
     resetCamera: resetCamera,
     dispose: function () {
       if (resizeObserver) resizeObserver.disconnect();
       clearObject(stageRoot);
       if (renderer) renderer.dispose();
+      state.lastError = '';
+      testProbe.ready = false;
+      updateProbe();
     }
   };
+
+  window.addEventListener('error', function (event) {
+    state.lastError = event && event.message ? event.message : 'WINDOW ERROR';
+    updateProbe();
+  });
 
   init();
 }());

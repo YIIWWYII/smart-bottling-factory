@@ -48,6 +48,7 @@ export function createMockBundle(): FactoryBundle {
   }))
 
   return {
+    stateVersion: 1,
     dashboard: {
       total: 28,
       running: 12,

@@ -42,7 +42,9 @@ class ThreeProductPayload {
 interface ThreeScenePayload {
   stageCode: string
   stageName: string
+  stateVersion: number
   source: string
+  errorMessage: string
   paused: boolean
   statusColors: boolean
   layoutEdit: boolean
@@ -61,6 +63,7 @@ struct StageDetail {
   @State selectedTraceCode: string = ''
   @State planarEnabled: boolean = true
   @State threeEnabled: boolean = true
+  @State activeVisual: string = 'THREE'
   @State statusColorsEnabled: boolean = true
   @State layoutEditEnabled: boolean = false
   @State paused: boolean = false
@@ -75,12 +78,9 @@ struct StageDetail {
     this.revision += 1
   }
 
-  get stage(): StageDefinition {
-    return findStage(this.stageCode)
-  }
-
   get stageIndex(): number {
-    return FACTORY_STAGES.findIndex(item => item.code === this.stageCode)
+    const index = FACTORY_STAGES.findIndex(item => item.code === this.stageCode)
+    return index < 0 ? 0 : index
   }
 
   get runtimeStage(): RuntimeStage {
@@ -143,6 +143,20 @@ struct StageDetail {
     let value: RuntimeStage = { stageCode: code, state: 'RUNNING', bufferLevel: 0, bufferCapacity: 6 }
     this.runtimeData().stages.forEach(item => {
       if (item.stageCode === code) value = item
+    })
+    return value
+  }
+
+  private stageData(): StageDefinition {
+    let value: StageDefinition = {
+      code: 'PRETREATMENT',
+      name: '预处理',
+      description: '冷却静置、水洗和风洗，去除 PLA 瓶残留物。',
+      devices: [],
+      qualityRules: []
+    }
+    FACTORY_STAGES.forEach((stage: StageDefinition) => {
+      if (stage.code === this.stageCode) value = stage
     })
     return value
   }
@@ -284,10 +298,23 @@ struct StageDetail {
   }
 
   private toggleVisual(key: string): void {
-    if (key === 'PLANAR') this.planarEnabled = !this.planarEnabled
-    if (key === 'THREE') this.threeEnabled = !this.threeEnabled
+    if (key === 'PLANAR') {
+      this.planarEnabled = !this.planarEnabled
+      if (this.planarEnabled) this.activeVisual = 'PLANAR'
+      if (!this.planarEnabled && this.activeVisual === 'PLANAR') this.activeVisual = this.threeEnabled ? 'THREE' : 'NONE'
+    }
+    if (key === 'THREE') {
+      this.threeEnabled = !this.threeEnabled
+      if (this.threeEnabled) this.activeVisual = 'THREE'
+      if (!this.threeEnabled && this.activeVisual === 'THREE') this.activeVisual = this.planarEnabled ? 'PLANAR' : 'NONE'
+    }
     if (key === 'COLORS') this.statusColorsEnabled = !this.statusColorsEnabled
     if (key === 'LAYOUT') this.layoutEditEnabled = !this.layoutEditEnabled
+  }
+
+  private switchVisual(key: string): void {
+    if (key === 'PLANAR' && this.planarEnabled) this.activeVisual = 'PLANAR'
+    if (key === 'THREE' && this.threeEnabled) this.activeVisual = 'THREE'
   }
 
   private sceneSpeed(): number {
@@ -308,7 +335,7 @@ struct StageDetail {
 
   private scenePayload(): string {
     const devices: Array<ThreeDevicePayload> = []
-    this.stage.devices.forEach((device: DeviceDefinition) => {
+    this.stageData().devices.forEach((device: DeviceDefinition) => {
       const item = new ThreeDevicePayload()
       item.code = device.code
       item.name = device.name
@@ -330,8 +357,10 @@ struct StageDetail {
 
     const payload: ThreeScenePayload = {
       stageCode: this.stageCode,
-      stageName: this.stage.name,
+      stageName: this.stageData().name,
+      stateVersion: this.bundle.stateVersion,
       source: this.bundle.source,
+      errorMessage: this.bundle.errorMessage,
       paused: this.paused,
       statusColors: this.statusColorsEnabled,
       layoutEdit: this.layoutEditEnabled,
@@ -349,14 +378,14 @@ struct StageDetail {
         Row() {
           Button('← 总览').type(ButtonType.Normal).fontColor('#FFFFFF').backgroundColor(Color.Transparent).onClick(() => router.back())
           Blank()
-          Text(this.stage.code + ' · 工位 ' + (this.stageIndex + 1) + ' / ' + FACTORY_STAGES.length).fontSize(10).fontColor('#C8DCE9')
+          Text(this.stageData().code + ' · 工位 ' + (this.stageIndex + 1) + ' / ' + FACTORY_STAGES.length).fontSize(10).fontColor('#C8DCE9')
         }.width('100%').padding({ left: 10, right: 10, top: 7, bottom: 7 }).backgroundColor(Theme.navy)
 
         Row() {
           Column() {
-            Text(this.stage.code).fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-            Text(this.stage.name + ' 工位').fontSize(30).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7 })
-            Text(this.stage.description).fontSize(12).fontColor(Theme.muted).lineHeight(18).margin({ top: 6 })
+            Text(this.stageData().code).fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+            Text(this.stageData().name + ' 工位').fontSize(30).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7 })
+            Text(this.stageData().description).fontSize(12).fontColor(Theme.muted).lineHeight(18).margin({ top: 6 })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           StateBadge({ status: this.statusValue(), label: this.statusText() })
         }.width('100%').alignItems(VerticalAlign.Bottom).padding(18).border({ width: { bottom: 3 }, color: Theme.blue })
@@ -377,6 +406,8 @@ struct StageDetail {
             Row({ space: 8 }) {
               this.visualToggle('二维', this.planarEnabled, 'PLANAR')
               this.visualToggle('三维', this.threeEnabled, 'THREE')
+              this.visualModeButton('查看3D', 'THREE')
+              this.visualModeButton('查看2D', 'PLANAR')
               this.visualToggle('状态颜色', this.statusColorsEnabled, 'COLORS')
               this.visualToggle('布局编辑', this.layoutEditEnabled, 'LAYOUT')
               Button(this.paused ? '恢复实时' : '暂停画面')
@@ -390,7 +421,7 @@ struct StageDetail {
             }.padding({ top: 12, bottom: 8 })
           }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
 
-          if (this.threeEnabled) {
+          if (this.threeEnabled && this.activeVisual === 'THREE') {
             Column() {
               Row() {
                 Text('THREE.JS 3D').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
@@ -408,7 +439,7 @@ struct StageDetail {
             }.width('100%').padding(12).margin({ top: 4 }).backgroundColor(Theme.panelSoft)
           }
 
-          if (this.planarEnabled) {
+          if (this.planarEnabled && this.activeVisual === 'PLANAR') {
             Column() {
               Row() {
                 Text('THREE.JS 2D PLAN').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
@@ -439,7 +470,7 @@ struct StageDetail {
             this.metric('当前速度', this.stageCode === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s', '数据驱动画面')
             this.metric('缓冲占用', this.runtimeStage.bufferLevel + '/' + this.runtimeStage.bufferCapacity, '工位间解耦缓冲')
             this.metric('本站在制品', String(this.wipCount), '运行或待处理')
-            this.metric('设备在线', this.runtimeData().devices.filter(item => item.stageCode === this.stageCode && item.state !== 'OFFLINE').length + '/' + this.stage.devices.length, this.bundle.source)
+            this.metric('设备在线', this.runtimeData().devices.filter(item => item.stageCode === this.stageCode && item.state !== 'OFFLINE').length + '/' + this.stageData().devices.length, this.bundle.source)
           }
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 12 })
 
@@ -449,7 +480,7 @@ struct StageDetail {
             title: '设备运行清单',
             description: '点击设备可查看当前状态、来源和传感器读数。'
           })
-          ForEach(this.stage.devices, (device: DeviceDefinition, index: number) => {
+          ForEach(this.stageData().devices, (device: DeviceDefinition, index: number) => {
             Row() {
               DeviceStateRow({
                 index: index,
@@ -500,6 +531,19 @@ struct StageDetail {
   }
 
   @Builder
+  visualModeButton(label: string, key: string) {
+    Button((this.activeVisual === key ? '当前  ' : '切换  ') + label)
+      .type(ButtonType.Normal)
+      .fontSize(10)
+      .fontColor(this.activeVisual === key ? '#FFFFFF' : Theme.blue)
+      .backgroundColor(this.activeVisual === key ? Theme.navy : '#F4FAFD')
+      .border({ width: 1, color: this.activeVisual === key ? Theme.navy : Theme.line })
+      .borderRadius(2)
+      .enabled(key === 'THREE' ? this.threeEnabled : this.planarEnabled)
+      .onClick(() => this.switchVisual(key))
+  }
+
+  @Builder
   selectedProductPanel() {
     Column() {
       SectionTitle({
@@ -536,7 +580,7 @@ struct StageDetail {
 
   private selectedDeviceRole(): string {
     let role: string = '设备作用'
-    this.stage.devices.forEach(item => {
+    this.stageData().devices.forEach(item => {
       if (item.code === this.selectedDeviceCode) role = item.code + ' · ' + item.role
     })
     return role
