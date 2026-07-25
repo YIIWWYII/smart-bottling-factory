@@ -1,6 +1,6 @@
-# 五个对话补救派发词
+# 五个对话执行派发词
 
-四个开发工作区已有未提交改动。不要让开发对话直接拉取或 cherry-pick 总设计分支，以免覆盖工作树；让它们直接读取 E 盘公共文档，在自己的分支补救并提交。下面五段分别发送给对应对话。
+四个开发工作区已有未提交改动，分别执行补救；融合工作尚未开始，等四端交付后再做第一次正式集成。不要让开发对话直接拉取或 cherry-pick 总设计分支，以免覆盖工作树；让它们直接读取 E 盘公共文档，在自己的分支补救并提交。下面五段分别发送给对应对话。
 
 ## 1. 数字展板
 
@@ -29,5 +29,5 @@
 ## 5. 融合评审
 
 ```text
-你先不要合并旧结果，等待 display、terminal、admin、backend 四个补救分支的新提交。直接读取 E:\2026挑战杯\工业沙盘2026\数字展板前后端\docs\ai-prompts\05-integration-review.md，以及最新 contracts、DEVELOPMENT_STANDARD.md、TESTING_TOOLCHAIN.md。收到四个提交后，在 D:\HarmonyOS-Dev\Workspaces\bottling-integration 按后端、展板、小屏、后台顺序逐个评审和合并，每次合并后单独测试。任何端 P0 不完整时给出文件、行为、复现步骤和契约依据并退回对应对话，不替它大规模开发。最终同时安装三个 HAP，用同一中央模拟场景验证三端相同 stateVersion、HTTP/WebSocket、控制回执、持久化和全流程，再决定是否创建 main PR。
+融合此前从未进行，现在先不要开始，等待 display、terminal、admin、backend 四个分支完成补救并分别提交、推送和报告测试证据。直接读取 E:\2026挑战杯\工业沙盘2026\数字展板前后端\docs\ai-prompts\05-integration-review.md，以及最新 contracts、DEVELOPMENT_STANDARD.md、TESTING_TOOLCHAIN.md。四端交付齐全后，从干净的 D:\HarmonyOS-Dev\Workspaces\bottling-integration 和 integration/full-system 基线开始第一次正式融合，按后端、展板、小屏、后台顺序逐个评审和合并，每次合并后单独测试。任何端 P0 不完整时给出文件、行为、复现步骤和契约依据并退回对应对话，不替它大规模开发。最终同时安装三个 HAP，用同一中央模拟场景验证三端相同 stateVersion、HTTP/WebSocket、控制回执、持久化和全流程，再决定是否创建 main PR。
 ```
