@@ -66,18 +66,34 @@ CREATE TABLE IF NOT EXISTS factory_alarm (
 
 CREATE TABLE IF NOT EXISTS device_command (
   command_id VARCHAR(100) NOT NULL,
+  client_request_id VARCHAR(100) NULL,
+  client_type VARCHAR(50) NULL,
+  line_id VARCHAR(100) NULL,
+  stage_code VARCHAR(80) NULL,
   device_code VARCHAR(100) NOT NULL,
   command_type VARCHAR(100) NOT NULL,
   payload JSON NOT NULL,
   source VARCHAR(50) NOT NULL,
   trace_code VARCHAR(100) NULL,
+  operator_name VARCHAR(100) NULL,
+  operator_role VARCHAR(50) NULL,
+  reason VARCHAR(500) NULL,
+  expected_state_version BIGINT NULL,
+  accepted_state_version BIGINT NULL,
+  recipe_version VARCHAR(100) NULL,
+  old_value TEXT NULL,
+  new_value TEXT NULL,
+  safety_validation TEXT NULL,
   status VARCHAR(30) NOT NULL,
   message VARCHAR(500) NULL,
   created_at DATETIME(6) NOT NULL,
+  expires_at DATETIME(6) NULL,
   acknowledged_at DATETIME(6) NULL,
+  edge_ack_id VARCHAR(100) NULL,
   PRIMARY KEY (command_id),
   KEY idx_command_status_time (status, created_at),
-  KEY idx_command_trace (trace_code)
+  KEY idx_command_trace (trace_code),
+  UNIQUE KEY uk_device_command_client_request (client_request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备控制命令及ACK';
 
 CREATE TABLE IF NOT EXISTS ai_decision_audit (
@@ -212,3 +228,68 @@ CREATE TABLE IF NOT EXISTS factory_incident (
   KEY idx_incident_stage_status (stage_code, status),
   KEY idx_incident_trace (trace_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='异常上报、影响范围、路由策略和处置审计';
+
+CREATE TABLE IF NOT EXISTS factory_line_state (
+  line_id VARCHAR(100) NOT NULL,
+  state_version BIGINT NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (line_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='三端共享单调状态版本';
+
+INSERT IGNORE INTO factory_line_state(line_id,state_version,updated_at)
+VALUES ('LINE-01',1,now(6));
+
+CREATE TABLE IF NOT EXISTS factory_simulation_state (
+  line_id VARCHAR(100) NOT NULL,
+  scenario_code VARCHAR(80) NOT NULL,
+  status VARCHAR(30) NOT NULL,
+  tick BIGINT NOT NULL DEFAULT 0,
+  started_at DATETIME(6) NULL,
+  updated_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (line_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='唯一中央模拟时钟和场景状态';
+
+INSERT IGNORE INTO factory_simulation_state(line_id,scenario_code,status,tick,started_at,updated_at)
+VALUES ('LINE-01','NORMAL','RUNNING',0,now(6),now(6));
+
+CREATE TABLE IF NOT EXISTS production_order (
+  order_id VARCHAR(100) NOT NULL,
+  order_code VARCHAR(100) NOT NULL,
+  batch_code VARCHAR(100) NOT NULL,
+  bottle_type VARCHAR(100) NOT NULL,
+  planned_quantity INT NOT NULL,
+  status VARCHAR(30) NOT NULL,
+  scheduled_at DATETIME(6) NULL,
+  created_at DATETIME(6) NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (order_id),
+  UNIQUE KEY uk_production_order_code (order_code),
+  KEY idx_production_order_status_time (status,updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='生产任务和排产状态';
+
+CREATE TABLE IF NOT EXISTS factory_config_version (
+  config_id VARCHAR(100) NOT NULL,
+  category VARCHAR(50) NOT NULL,
+  version VARCHAR(100) NOT NULL,
+  status VARCHAR(30) NOT NULL,
+  payload JSON NOT NULL,
+  operator_name VARCHAR(100) NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (config_id),
+  UNIQUE KEY uk_factory_config_category_version (category,version),
+  KEY idx_factory_config_category_status (category,status,updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='质量规则、配方和安全阈值版本';
+
+CREATE TABLE IF NOT EXISTS operation_audit (
+  audit_id VARCHAR(100) NOT NULL,
+  category VARCHAR(50) NOT NULL,
+  target_id VARCHAR(100) NOT NULL,
+  action VARCHAR(50) NOT NULL,
+  operator_name VARCHAR(100) NOT NULL,
+  detail JSON NOT NULL,
+  occurred_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (audit_id),
+  KEY idx_operation_audit_time (occurred_at),
+  KEY idx_operation_audit_target (category,target_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='配置、工单和处置操作审计';

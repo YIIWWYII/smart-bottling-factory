@@ -6,6 +6,7 @@ import com.archermind.hdc.logistics.model.WarehouseStock;
 import com.archermind.hdc.logistics.model.WarehouseZone;
 import com.archermind.hdc.operations.dto.SensorReadingRequest;
 import com.archermind.hdc.operations.service.OperationsService;
+import com.archermind.hdc.factory.coordination.FactoryRealtimeEventPublisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,8 @@ public class LogisticsService {
     private final OperationsService operationsService;
     @Autowired(required = false)
     private LogisticsPersistence persistence;
+    @Autowired(required = false)
+    private FactoryRealtimeEventPublisher realtimePublisher;
     @Value("${factory.thresholds.agv-distance-min:20.0}")
     private double stopDistanceCm;
 
@@ -64,6 +67,7 @@ public class LogisticsService {
         task.setUpdatedAt(task.getCreatedAt());
         tasks.put(task.getTaskId(), task);
         persist(task);
+        publish("logistics.changed", "AGV_TRANSPORT", task);
         return task;
     }
 
@@ -88,6 +92,7 @@ public class LogisticsService {
         sensor(task.getAgvCode(), "AGV_DISTANCE", request.getObstacleDistanceCm(), "cm",
                 "AGV_TRANSPORT", task.getMode());
         persist(task);
+        publish("logistics.changed", "AGV_TRANSPORT", task);
         return task;
     }
 
@@ -104,6 +109,7 @@ public class LogisticsService {
         sensor("WAREHOUSE-" + zone.getZoneCode(), "VOC", request.getVocPpm(), "ppm", "WAREHOUSE_SAFETY", "SIMULATION");
         sensor("WAREHOUSE-" + zone.getZoneCode(), "SMOKE", request.getSmoke(), "%", "WAREHOUSE_SAFETY", "SIMULATION");
         if (persistence != null) persistence.save(zone);
+        publish("warehouse.changed", "WAREHOUSE_INBOUND", zone);
         return zone;
     }
 
@@ -128,6 +134,7 @@ public class LogisticsService {
         task.setUpdatedAt(LocalDateTime.now());
         persist(task);
         if (persistence != null) persistence.save(value);
+        publish("warehouse.changed", "WAREHOUSE_INBOUND", value);
         return value;
     }
 
@@ -158,6 +165,10 @@ public class LogisticsService {
 
     private void persist(AgvTask value) {
         if (persistence != null) persistence.save(value);
+    }
+
+    private void publish(String type, String stageCode, Object payload) {
+        if (realtimePublisher != null) realtimePublisher.publish(type, stageCode, payload);
     }
 
     private String normalize(String value, String fallback) { return StringUtils.hasText(value) ? value.trim() : fallback; }

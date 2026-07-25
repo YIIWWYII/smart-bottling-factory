@@ -41,5 +41,5 @@ factory:
     agv-distance-min: 20.0
 
 file:
-  path: E:\hdc_runtime\files\hdc
+  path: D:\HarmonyOS-Dev\Runtime\hdc\files\hdc
   url: http://localhost:8088/files/hdc/
