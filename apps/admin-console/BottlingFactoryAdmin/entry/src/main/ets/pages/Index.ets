@@ -21,7 +21,7 @@ struct Index {
     }
     try {
       const user = await apiClient.me()
-      SessionStore.setSession(SessionStore.token, user)
+      SessionStore.setSession(SessionStore.token, user, SessionStore.expiresAt)
       router.replaceUrl({ url: 'pages/AdminConsole' })
     } catch (error) {
       SessionStore.clear()

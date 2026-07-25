@@ -8,12 +8,20 @@ import { apiClient } from '../service/ApiClient'
 import { SessionStore } from '../service/SessionStore'
 import { ApiConfig } from '../service/ApiConfig'
 import {
+  PERMISSION_INCIDENT_DISPOSE,
+  PERMISSION_THRESHOLD_MANAGE,
+  PERMISSION_USER_MANAGE,
+  canAccessAdminPage,
+  hasPermission,
+  permissionLabel,
+  roleLabel
+} from '../service/AdminAccessPolicy'
+import {
   AdminAuditRecord,
   AgvTask,
   AiAudit,
   AlarmRecord,
   AuthUser,
-  DeviceCommand,
   FactoryBundle,
   FactoryIncident,
   FactoryRun,
@@ -46,14 +54,15 @@ const MENU: Array<MenuItem> = [
   { code: 'LOGISTICS', label: '物流仓储', description: 'AGV、库位、库存和安全', minRole: 'VIEWER' },
   { code: 'AI_AUDIT', label: 'AI 决策审计', description: 'RAG、校验、建议和结果', minRole: 'VIEWER' },
   { code: 'USERS', label: '用户权限', description: '账号、角色和状态', minRole: 'ADMIN' },
-  { code: 'SETTINGS', label: '系统配置', description: '阈值和策略版本', minRole: 'ADMIN' },
+  { code: 'SETTINGS', label: '系统配置', description: '阈值和策略版本', minRole: 'VIEWER' },
   { code: 'AUDIT', label: '操作审计', description: '用户操作和后端结果', minRole: 'VIEWER' }
 ]
 
 const DEMO_USERS: Array<AuthUser> = [
   { id: 1, username: 'admin', displayName: '管理员', role: 'ADMIN', status: 'ACTIVE', lastLoginAt: '2026-07-25T10:00:00+08:00' },
   { id: 2, username: 'operator', displayName: '工艺操作员', role: 'OPERATOR', status: 'ACTIVE', lastLoginAt: '2026-07-25T09:40:00+08:00' },
-  { id: 3, username: 'viewer', displayName: '只读观察员', role: 'VIEWER', status: 'ACTIVE', lastLoginAt: '2026-07-24T18:20:00+08:00' }
+  { id: 3, username: 'engineer', displayName: '设备工程师', role: 'ENGINEER', status: 'ACTIVE', lastLoginAt: '2026-07-25T09:20:00+08:00' },
+  { id: 4, username: 'viewer', displayName: '只读观察员', role: 'VIEWER', status: 'ACTIVE', lastLoginAt: '2026-07-24T18:20:00+08:00' }
 ]
 
 const SYSTEM_POLICIES: Array<SystemPolicy> = [
@@ -71,6 +80,8 @@ struct AdminConsole {
   @State users: Array<AuthUser> = []
   @State incidents: Array<FactoryIncident> = []
   @State auditRecords: Array<AdminAuditRecord> = []
+  @State clientActivity: Array<AdminAuditRecord> = []
+  @State auditError: string = '尚未请求后端操作审计。'
   @State query: string = ''
   @State filter: string = 'ALL'
   @State pageIndex: number = 0
@@ -81,7 +92,6 @@ struct AdminConsole {
   private readonly pageSize: number = 5
   private listener: () => void = () => {
     this.bundle = FactoryRepository.bundle
-    this.rebuildAuditRecords()
   }
 
   aboutToAppear(): void {
@@ -105,43 +115,63 @@ struct AdminConsole {
   private async refreshAll(): Promise<void> {
     await FactoryRepository.refresh()
     this.bundle = FactoryRepository.bundle
+    if (!SessionStore.isAuthenticated) {
+      router.replaceUrl({ url: 'pages/Login' })
+      return
+    }
     await this.loadIncidents()
     if (SessionStore.isAdmin) {
       await this.loadUsers()
     } else {
       this.users = []
     }
-    this.rebuildAuditRecords()
+    if (this.section === 'AUDIT') await this.loadAuditRecords()
     this.loading = false
   }
 
   private async loadIncidents(): Promise<void> {
     try {
-      this.incidents = await FactoryRepository.listIncidents(this.filter === 'RESOLVED' ? 'RESOLVED' : 'OPEN')
+      const status: string = this.filter === 'OPEN' || this.filter === 'RESOLVED' ? this.filter : ''
+      this.incidents = await FactoryRepository.listIncidents(status)
     } catch (error) {
       this.incidents = this.bundle.runtime.incidents
     }
   }
 
-  private async loadUsers(): Promise<void> {
+  private async loadAuditRecords(): Promise<void> {
     try {
-      this.users = await apiClient.request<Array<AuthUser>>('/auth/users')
+      this.auditRecords = await apiClient.request<Array<AdminAuditRecord>>('/audit/operations')
+      this.auditError = ''
     } catch (error) {
-      this.users = SessionStore.isDemo ? DEMO_USERS : []
-      this.message = '用户列表暂不可用，已展示只读演示样例。'
+      this.auditRecords = []
+      this.auditError = error instanceof Error ? error.message : '后端操作审计接口不可用'
     }
   }
 
-  private canUse(requiredRole: string): boolean {
-    const role: string = SessionStore.user === undefined ? 'VIEWER' : SessionStore.user.role
-    if (requiredRole === 'VIEWER') return true
-    if (requiredRole === 'OPERATOR') return role === 'OPERATOR' || role === 'ADMIN'
-    if (requiredRole === 'ADMIN') return role === 'ADMIN'
-    return false
+  private async loadUsers(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.users = DEMO_USERS
+      this.message = '当前为只读验收数据；角色变更不会发送到后端。'
+      return
+    }
+    try {
+      this.users = await apiClient.request<Array<AuthUser>>('/auth/users')
+    } catch (error) {
+      this.users = []
+      this.message = '用户列表暂不可用：' + (error instanceof Error ? error.message : '后端请求失败')
+    }
   }
 
-  private canWrite(requiredRole: string): boolean {
-    return this.canUse(requiredRole) && !SessionStore.isDemo && this.bundle.online
+  private currentRole(): string {
+    return SessionStore.user === undefined ? '' : SessionStore.user.role
+  }
+
+  private canUsePage(pageCode: string): boolean {
+    return canAccessAdminPage(this.currentRole(), pageCode)
+  }
+
+  private canWrite(permission: string): boolean {
+    return hasPermission(this.currentRole(), permission) && !SessionStore.isDemo && this.bundle.online
   }
 
   private selectSection(code: string): void {
@@ -153,6 +183,7 @@ struct AdminConsole {
     this.message = ''
     if (code === 'USERS' && SessionStore.isAdmin) void this.loadUsers()
     if (code === 'INCIDENTS') void this.loadIncidents()
+    if (code === 'AUDIT') void this.loadAuditRecords()
   }
 
   private currentMenu(): MenuItem {
@@ -165,9 +196,7 @@ struct AdminConsole {
 
   private roleName(): string {
     if (SessionStore.user === undefined) return '未登录'
-    if (SessionStore.user.role === 'ADMIN') return 'ADMIN 管理员'
-    if (SessionStore.user.role === 'OPERATOR') return 'OPERATOR 操作员'
-    return 'VIEWER 只读'
+    return roleLabel(SessionStore.user.role)
   }
 
   private dataSourceLabel(): string {
@@ -206,7 +235,7 @@ struct AdminConsole {
       try {
         await apiClient.logout()
       } catch (error) {
-        this.appendAudit('退出登录', 'auth/logout', 'FAILED', error instanceof Error ? error.message : '后端退出接口不可达')
+        this.appendClientActivity('退出登录', 'auth/logout', 'FAILED', error instanceof Error ? error.message : '后端退出接口不可达')
       }
     }
     SessionStore.clear()
@@ -222,10 +251,10 @@ struct AdminConsole {
     })
   }
 
-  private appendAudit(action: string, target: string, result: string, message: string): void {
+  private appendClientActivity(action: string, target: string, result: string, message: string): void {
     const actor: string = SessionStore.user === undefined ? 'anonymous' : SessionStore.user.username
     const record: AdminAuditRecord = {
-      auditId: 'LOCAL-' + new Date().getTime().toString(),
+      auditId: 'CLIENT-' + new Date().getTime().toString(),
       actor: actor,
       action: action,
       target: target,
@@ -233,108 +262,69 @@ struct AdminConsole {
       message: message,
       occurredAt: new Date().toISOString()
     }
-    this.auditRecords = [record].concat(this.auditRecords)
-  }
-
-  private rebuildAuditRecords(): void {
-    const rows: Array<AdminAuditRecord> = []
-    this.bundle.operations.commands.forEach((command: DeviceCommand) => {
-      rows.push({
-        auditId: command.commandId,
-        actor: command.source,
-        action: command.commandType,
-        target: command.deviceCode,
-        result: command.status,
-        message: command.message || '等待设备回执',
-        occurredAt: command.acknowledgedAt || command.createdAt || this.bundle.updatedAt
-      })
-    })
-    this.bundle.operations.aiAudits.forEach((item: AiAudit) => {
-      rows.push({
-        auditId: item.auditId,
-        actor: 'AI_DECISION_CENTER',
-        action: item.decision,
-        target: item.traceCode,
-        result: item.validationStatus,
-        message: item.reason,
-        occurredAt: item.createdAt
-      })
-    })
-    this.bundle.runtime.incidents.forEach((incident: FactoryIncident) => {
-      rows.push({
-        auditId: incident.incidentId,
-        actor: 'FACTORY_RUNTIME',
-        action: incident.strategy,
-        target: incident.stageCode,
-        result: incident.status,
-        message: incident.message,
-        occurredAt: incident.resolvedAt || incident.createdAt || this.bundle.updatedAt
-      })
-    })
-    const localRows: Array<AdminAuditRecord> = this.auditRecords.filter((item: AdminAuditRecord) => item.auditId.indexOf('LOCAL-') === 0)
-    this.auditRecords = localRows.concat(rows)
+    this.clientActivity = [record].concat(this.clientActivity)
   }
 
   private async acknowledgeAlarm(alarm: AlarmRecord): Promise<void> {
-    if (!this.canWrite('OPERATOR')) {
-      this.message = this.writeDisabledReason('OPERATOR')
-      this.appendAudit('确认报警', alarm.alarmId, 'DENIED', this.message)
+    if (!this.canWrite(PERMISSION_INCIDENT_DISPOSE)) {
+      this.message = this.writeDisabledReason(PERMISSION_INCIDENT_DISPOSE)
+      this.appendClientActivity('确认报警', alarm.alarmId, 'DENIED', this.message)
       return
     }
     try {
       await FactoryRepository.acknowledgeAlarm(alarm.alarmId)
-      this.appendAudit('确认报警', alarm.alarmId, 'ACCEPTED', '后端已受理报警确认')
+      this.appendClientActivity('确认报警', alarm.alarmId, 'ACCEPTED', '后端已受理，但当前接口未返回服务端审计号')
       promptAction.showToast({ message: '报警确认已提交' })
       await this.refreshAll()
     } catch (error) {
       const msg: string = error instanceof Error ? error.message : '报警确认失败'
-      this.appendAudit('确认报警', alarm.alarmId, 'FAILED', msg)
+      this.appendClientActivity('确认报警', alarm.alarmId, 'FAILED', msg)
       this.message = msg
     }
   }
 
   private async resolveIncident(incident: FactoryIncident, strategy: string): Promise<void> {
-    if (!this.canWrite('OPERATOR')) {
-      this.message = this.writeDisabledReason('OPERATOR')
-      this.appendAudit('处置异常', incident.incidentId, 'DENIED', this.message)
+    if (!this.canWrite(PERMISSION_INCIDENT_DISPOSE)) {
+      this.message = this.writeDisabledReason(PERMISSION_INCIDENT_DISPOSE)
+      this.appendClientActivity('处置异常', incident.incidentId, 'DENIED', this.message)
       return
     }
     try {
       await FactoryRepository.resolveIncident(incident.incidentId, strategy)
-      this.appendAudit('处置异常', incident.incidentId, 'ACCEPTED', '后端已受理异常策略：' + strategy)
+      this.appendClientActivity('处置异常', incident.incidentId, 'ACCEPTED', '后端已受理异常策略，但未返回服务端审计号：' + strategy)
       promptAction.showToast({ message: '异常处置已提交' })
       await this.refreshAll()
     } catch (error) {
       const msg: string = error instanceof Error ? error.message : '异常处置失败'
-      this.appendAudit('处置异常', incident.incidentId, 'FAILED', msg)
+      this.appendClientActivity('处置异常', incident.incidentId, 'FAILED', msg)
       this.message = msg
     }
   }
 
   private async updateUser(user: AuthUser): Promise<void> {
-    if (!this.canWrite('ADMIN')) {
-      this.message = this.writeDisabledReason('ADMIN')
-      this.appendAudit('更新用户', user.username, 'DENIED', this.message)
+    if (!this.canWrite(PERMISSION_USER_MANAGE)) {
+      this.message = this.writeDisabledReason(PERMISSION_USER_MANAGE)
+      this.appendClientActivity('更新用户', user.username, 'DENIED', this.message)
       return
     }
-    const nextRole: string = user.role === 'VIEWER' ? 'OPERATOR' : user.role === 'OPERATOR' ? 'ADMIN' : 'VIEWER'
+    const nextRole: string = user.role === 'VIEWER' ? 'OPERATOR' : user.role === 'OPERATOR' ? 'ENGINEER' : user.role === 'ENGINEER' ? 'ADMIN' : 'VIEWER'
     const payload: UpdateUserPayload = { role: nextRole, status: user.status }
     const patchMethod: http.RequestMethod = 'PATCH' as http.RequestMethod
     try {
       await apiClient.request<Object>('/auth/users/' + user.id.toString(), patchMethod, JSON.stringify(payload))
-      this.appendAudit('更新用户', user.username, 'ACCEPTED', '角色变更为 ' + nextRole)
+      this.appendClientActivity('更新用户', user.username, 'ACCEPTED', '后端已受理角色变更，但未返回服务端审计号：' + nextRole)
       promptAction.showToast({ message: '用户角色更新已提交' })
       await this.loadUsers()
     } catch (error) {
       const msg: string = error instanceof Error ? error.message : '更新用户失败'
-      this.appendAudit('更新用户', user.username, 'FAILED', msg)
+      this.appendClientActivity('更新用户', user.username, 'FAILED', msg)
       this.message = msg
     }
   }
 
-  private writeDisabledReason(requiredRole: string): string {
+  private writeDisabledReason(permission: string): string {
     if (SessionStore.isDemo) return '演示账号只允许浏览，不发送真实写操作。'
-    if (!this.canUse(requiredRole)) return '当前角色权限不足，需要 ' + requiredRole + ' 或更高权限。'
+    if (!hasPermission(this.currentRole(), permission)) return '当前角色权限不足，需要 ' + permissionLabel(permission) + '。'
     if (!this.bundle.online) return '后端不可达，写操作已禁用。'
     return '当前操作不可用。'
   }
@@ -347,10 +337,11 @@ struct AdminConsole {
         Scroll() {
           Column() {
             this.connectionBanner()
-            if (!this.canUse(this.currentMenu().minRole)) {
+            if (!this.canUsePage(this.currentMenu().code)) {
               this.noAccessView()
             } else {
               this.adminToolbar()
+              this.loadingState()
               if (this.section === 'DASHBOARD') this.dashboardView()
               if (this.section === 'PRODUCTION') this.productionView()
               if (this.section === 'INCIDENTS') this.incidentView()
@@ -447,14 +438,35 @@ struct AdminConsole {
     }.width('100%').margin({ bottom: 12 })
   }
 
+  @Builder
+  loadingState() {
+    if (this.loading) {
+      Row({ space: 10 }) {
+        LoadingProgress().width(20).height(20).color(Theme.blue)
+        Text('正在从后端刷新当前页面数据...').fontSize(10).fontColor(Theme.muted)
+      }.width('100%').padding(10).backgroundColor(Theme.panelSoft).margin({ bottom: 12 })
+    }
+  }
+
   private nextFilter(): void {
-    const filters: Array<string> = ['ALL', 'RUNNING', 'OPEN', 'ALARM', 'FAILED', 'RESOLVED']
+    const filters: Array<string> = this.filtersForSection()
     let index: number = filters.indexOf(this.filter)
     index = index < 0 ? 0 : index + 1
     if (index >= filters.length) index = 0
     this.filter = filters[index]
     this.pageIndex = 0
     if (this.section === 'INCIDENTS') void this.loadIncidents()
+  }
+
+  private filtersForSection(): Array<string> {
+    if (this.section === 'PRODUCTION' || this.section === 'MATERIALS') return ['ALL', 'RUNNING', 'HOLD', 'REJECTED', 'COMPLETED']
+    if (this.section === 'INCIDENTS') return ['ALL', 'OPEN', 'RESOLVED']
+    if (this.section === 'DEVICES') return ['ALL', 'RUNNING', 'STANDBY', 'ALARM', 'OFFLINE', 'MAINTENANCE']
+    if (this.section === 'LOGISTICS') return ['ALL', 'PENDING', 'RUNNING', 'ACKNOWLEDGED', 'FAILED', 'TIMEOUT']
+    if (this.section === 'AI_AUDIT') return ['ALL', 'PASSED', 'FAILED', 'PENDING']
+    if (this.section === 'USERS') return ['ALL', 'ACTIVE', 'DISABLED']
+    if (this.section === 'AUDIT') return ['ALL', 'ACCEPTED', 'FAILED', 'DENIED', 'PENDING']
+    return ['ALL']
   }
 
   @Builder
@@ -547,6 +559,10 @@ struct AdminConsole {
   productionView() {
     Column() {
       SectionTitle({ code: 'PRODUCTION TASKS', title: '批次与工单', description: '来自生产总览接口，管理端用于查状态和追溯，不做现场调参。' })
+      Row({ space: 8 }) {
+        Button('新建生产工单').enabled(false).fontColor('#FFFFFF').backgroundColor(Theme.neutral)
+        Text('不可用：P0 目标端点 /production/orders 尚未在当前后端分支实现。').fontSize(10).fontColor(Theme.warning)
+      }.width('100%').margin({ top: 8, bottom: 8 })
       if (this.filteredRuns().length === 0) {
         this.emptyState('没有匹配的生产任务。')
       } else {
@@ -584,12 +600,27 @@ struct AdminConsole {
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             StateBadge({ status: incident.status, label: incident.status })
             Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectedDetail = this.incidentDetail(incident))
-            Button('处置').enabled(this.canWrite('OPERATOR')).fontColor('#FFFFFF').backgroundColor(this.canWrite('OPERATOR') ? Theme.blue : Theme.neutral).onClick(() => this.confirmAction('确认处置异常', '提交后由后端执行权限、安全门和联锁校验。', () => void this.resolveIncident(incident, incident.strategy)))
+            Button('处置').enabled(this.canWrite(PERMISSION_INCIDENT_DISPOSE)).fontColor('#FFFFFF').backgroundColor(this.canWrite(PERMISSION_INCIDENT_DISPOSE) ? Theme.blue : Theme.neutral).onClick(() => this.confirmAction('确认处置异常', '提交后由后端执行权限、安全门和联锁校验。', () => void this.resolveIncident(incident, incident.strategy)))
           }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
         }, (incident: FactoryIncident) => incident.incidentId)
         this.pager(this.filteredIncidents().length)
       }
-      Text('写操作状态：' + (this.canWrite('OPERATOR') ? '可提交到后端' : this.writeDisabledReason('OPERATOR'))).fontSize(10).fontColor(this.canWrite('OPERATOR') ? Theme.success : Theme.warning).margin({ top: 10 })
+      Text('开放报警').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 18, bottom: 8 })
+      if (this.bundle.operations.alarms.filter((alarm: AlarmRecord) => alarm.status === 'OPEN').length === 0) {
+        this.emptyState('当前没有开放报警。')
+      } else {
+        ForEach(this.bundle.operations.alarms.filter((alarm: AlarmRecord) => alarm.status === 'OPEN'), (alarm: AlarmRecord) => {
+          Row({ space: 10 }) {
+            Column() {
+              Text(alarm.alarmId + ' · ' + alarm.alarmType).fontSize(11).fontColor(Theme.danger).fontWeight(FontWeight.Bold)
+              Text(alarm.deviceCode + ' · ' + alarm.message).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+            StateBadge({ status: alarm.status, label: alarm.status })
+            Button('确认报警').enabled(this.canWrite(PERMISSION_INCIDENT_DISPOSE)).fontColor('#FFFFFF').backgroundColor(this.canWrite(PERMISSION_INCIDENT_DISPOSE) ? Theme.blue : Theme.neutral).onClick(() => this.confirmAction('确认报警', '确认只代表管理人员已知晓，后端仍记录操作者并校验权限。', () => void this.acknowledgeAlarm(alarm)))
+          }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
+        }, (alarm: AlarmRecord) => alarm.alarmId)
+      }
+      Text('写操作状态：' + (this.canWrite(PERMISSION_INCIDENT_DISPOSE) ? '可提交到后端' : this.writeDisabledReason(PERMISSION_INCIDENT_DISPOSE))).fontSize(10).fontColor(this.canWrite(PERMISSION_INCIDENT_DISPOSE) ? Theme.success : Theme.warning).margin({ top: 10 })
       this.detailPanel()
     }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
   }
@@ -645,6 +676,10 @@ struct AdminConsole {
   logisticsView() {
     Column() {
       SectionTitle({ code: 'LOGISTICS & WMS', title: '物流仓储', description: '这里作为管理菜单，负责任务、库存、库位和仓区安全查询。' })
+      Row({ space: 8 }) {
+        Button('新建 AGV 调度').enabled(false).fontColor('#FFFFFF').backgroundColor(Theme.neutral)
+        Text('不可用：当前端点仅支持创建任务，尚缺车辆候选、优先级、冲突校验和服务端审计字段。').fontSize(10).fontColor(Theme.warning)
+      }.width('100%').margin({ top: 8 })
       Text('AGV 任务').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 10, bottom: 8 })
       if (this.filteredAgvTasks().length === 0) {
         this.emptyState('没有匹配的 AGV 任务。')
@@ -661,21 +696,25 @@ struct AdminConsole {
         this.pager(this.filteredAgvTasks().length)
       }
       Text('仓区安全与库存').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 18, bottom: 8 })
-      ForEach(this.bundle.logistics.zones, (zone: WarehouseZone) => {
-        Row() {
-          Text(zone.zoneCode).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold).width(110)
-          StateBadge({ status: zone.status === 'SAFE' ? 'PASS' : 'FAIL', label: zone.status })
-          Text('VOC ' + zone.vocPpm.toString() + ' ppm · 烟雾 ' + zone.smoke.toString() + '% · 温度 ' + zone.temperatureC.toString() + ' °C').fontSize(10).fontColor(Theme.muted).layoutWeight(1)
-        }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
-      }, (zone: WarehouseZone) => zone.zoneCode)
-      ForEach(this.bundle.logistics.stock, (stock: StockItem) => {
-        Row() {
-          Text(stock.boxCode).fontSize(10).fontColor(Theme.blue).width(150)
-          Text(stock.bottleType).fontSize(10).fontColor(Theme.text).width(110)
-          Text(stock.zoneCode + ' / ' + stock.locationCode).fontSize(10).fontColor(Theme.muted).layoutWeight(1)
-          Text(stock.status).fontSize(10).fontColor(statusColor(stock.status))
-        }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
-      }, (stock: StockItem) => stock.boxCode)
+      if (this.bundle.logistics.zones.length === 0 && this.bundle.logistics.stock.length === 0) {
+        this.emptyState('当前没有仓区安全或箱级库存数据。')
+      } else {
+        ForEach(this.bundle.logistics.zones, (zone: WarehouseZone) => {
+          Row() {
+            Text(zone.zoneCode).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold).width(110)
+            StateBadge({ status: zone.status === 'SAFE' ? 'PASS' : 'FAIL', label: zone.status })
+            Text('VOC ' + zone.vocPpm.toString() + ' ppm · 烟雾 ' + zone.smoke.toString() + '% · 温度 ' + zone.temperatureC.toString() + ' °C').fontSize(10).fontColor(Theme.muted).layoutWeight(1)
+          }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
+        }, (zone: WarehouseZone) => zone.zoneCode)
+        ForEach(this.bundle.logistics.stock, (stock: StockItem) => {
+          Row() {
+            Text(stock.boxCode).fontSize(10).fontColor(Theme.blue).width(150)
+            Text(stock.bottleType).fontSize(10).fontColor(Theme.text).width(110)
+            Text(stock.zoneCode + ' / ' + stock.locationCode).fontSize(10).fontColor(Theme.muted).layoutWeight(1)
+            Text(stock.status).fontSize(10).fontColor(statusColor(stock.status))
+          }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
+        }, (stock: StockItem) => stock.boxCode)
+      }
       this.detailPanel()
     }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
   }
@@ -721,12 +760,12 @@ struct AdminConsole {
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             Text(user.role).fontSize(10).fontColor(Theme.blue).fontWeight(FontWeight.Bold).width(90)
             StateBadge({ status: user.status === 'ACTIVE' ? 'PASS' : 'WAIT', label: user.status })
-            Button('切换角色').enabled(this.canWrite('ADMIN')).fontColor('#FFFFFF').backgroundColor(this.canWrite('ADMIN') ? Theme.blue : Theme.neutral).onClick(() => this.confirmAction('确认修改用户角色', '提交后由后端记录权限变更审计。', () => void this.updateUser(user)))
+            Button('切换角色').enabled(this.canWrite(PERMISSION_USER_MANAGE)).fontColor('#FFFFFF').backgroundColor(this.canWrite(PERMISSION_USER_MANAGE) ? Theme.blue : Theme.neutral).onClick(() => this.confirmAction('确认修改用户角色', '提交后由后端记录权限变更审计。', () => void this.updateUser(user)))
           }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
         }, (user: AuthUser) => user.id.toString())
         this.pager(this.filteredUsers().length)
       }
-      Text('写操作状态：' + (this.canWrite('ADMIN') ? '可提交到后端' : this.writeDisabledReason('ADMIN'))).fontSize(10).fontColor(this.canWrite('ADMIN') ? Theme.success : Theme.warning).margin({ top: 10 })
+      Text('写操作状态：' + (this.canWrite(PERMISSION_USER_MANAGE) ? '可提交到后端' : this.writeDisabledReason(PERMISSION_USER_MANAGE))).fontSize(10).fontColor(this.canWrite(PERMISSION_USER_MANAGE) ? Theme.success : Theme.warning).margin({ top: 10 })
       this.detailPanel()
     }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
   }
@@ -747,8 +786,9 @@ struct AdminConsole {
       }, (policy: SystemPolicy) => policy.policyCode)
       Text('后端地址：' + ApiConfig.API_BASE).fontSize(10).fontColor(Theme.muted).margin({ top: 14 })
       Text('实时地址：' + ApiConfig.WS_BASE).fontSize(10).fontColor(Theme.muted).margin({ top: 6 })
-      Button('提交策略版本变更').enabled(false).fontColor('#FFFFFF').backgroundColor(Theme.neutral).margin({ top: 12 })
-      Text('按钮禁用原因：公共契约尚未定义系统配置写入端点，管理端不伪造配置成功。').fontSize(10).fontColor(Theme.warning).margin({ top: 8 })
+      Text('阈值管理角色：' + (hasPermission(this.currentRole(), PERMISSION_THRESHOLD_MANAGE) ? '角色满足' : '需要 ENGINEER 或 ADMIN')).fontSize(10).fontColor(hasPermission(this.currentRole(), PERMISSION_THRESHOLD_MANAGE) ? Theme.success : Theme.warning).margin({ top: 12 })
+      Button('提交策略版本变更').enabled(false).fontColor('#FFFFFF').backgroundColor(Theme.neutral).margin({ top: 10 })
+      Text('按钮禁用原因：P0 已定义 /config/thresholds 与发布端点，但当前后端分支尚未实现；管理端不伪造配置成功。').fontSize(10).fontColor(Theme.warning).margin({ top: 8 })
     }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
   }
 
@@ -756,8 +796,11 @@ struct AdminConsole {
   auditView() {
     Column() {
       SectionTitle({ code: 'OPERATION AUDIT', title: '操作审计', description: '记录谁在何时做了什么、目标、结果和失败原因。' })
+      if (this.auditError.length > 0) {
+        Text('服务端审计不可用：' + this.auditError + '。目标端点为 GET /audit/operations。').fontSize(10).fontColor(Theme.warning).width('100%').padding(10).backgroundColor('#FFF7E6').margin({ bottom: 10 })
+      }
       if (this.filteredAuditRecords().length === 0) {
-        this.emptyState('没有匹配的审计记录。')
+        this.emptyState('没有可验证的服务端操作审计记录。')
       } else {
         ForEach(this.filteredAuditRecords().slice(this.pageStart(), this.pageEnd(this.filteredAuditRecords().length)), (record: AdminAuditRecord) => {
           Row() {
@@ -772,6 +815,19 @@ struct AdminConsole {
           }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
         }, (record: AdminAuditRecord) => record.auditId)
         this.pager(this.filteredAuditRecords().length)
+      }
+      Text('本机操作尝试（不是服务端审计）').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 16, bottom: 8 })
+      if (this.clientActivity.length === 0) {
+        this.emptyState('本次会话尚无写操作尝试。')
+      } else {
+        ForEach(this.clientActivity, (record: AdminAuditRecord) => {
+          Row() {
+            Text(record.action).fontSize(10).fontColor(Theme.text).width(160)
+            Text(record.target).fontSize(10).fontColor(Theme.muted).layoutWeight(1)
+            StateBadge({ status: record.result, label: record.result })
+            Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectedDetail = this.auditDetail(record))
+          }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
+        }, (record: AdminAuditRecord) => record.auditId)
       }
       this.detailPanel()
     }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })

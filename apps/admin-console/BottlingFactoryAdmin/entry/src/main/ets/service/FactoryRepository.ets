@@ -66,8 +66,9 @@ class FactoryRepositoryImpl {
     await this.refresh()
   }
 
-  async listIncidents(status: string = 'OPEN'): Promise<Array<FactoryIncident>> {
-    return await this.client.request<Array<FactoryIncident>>(`/factory/runtime/incidents?status=${status}`)
+  async listIncidents(status: string = ''): Promise<Array<FactoryIncident>> {
+    const suffix: string = status.length > 0 ? `?status=${status}` : ''
+    return await this.client.request<Array<FactoryIncident>>(`/factory/runtime/incidents${suffix}`)
   }
 }
 

@@ -44,17 +44,15 @@ export class ApiClient {
         readTimeout: ApiConfig.requestTimeoutMs
       })
       if (response.responseCode < 200 || response.responseCode >= 300) {
-        if (response.responseCode === 401 || response.responseCode === 403) {
-          SessionStore.clear()
-        }
-        throw new ApiError('HTTP ' + response.responseCode + '：后端拒绝或不可达', response.responseCode)
+        if (response.responseCode === 401) SessionStore.clear()
+        if (response.responseCode === 401) throw new ApiError('登录已过期，请重新登录', response.responseCode)
+        if (response.responseCode === 403) throw new ApiError('当前账号权限不足，后端已拒绝操作', response.responseCode)
+        throw new ApiError('HTTP ' + response.responseCode + '：后端请求失败', response.responseCode)
       }
       const raw: string = response.result as string
       const envelope: ApiEnvelope<T> = JSON.parse(raw) as ApiEnvelope<T>
-      if (envelope.code !== 0 && envelope.code !== 1) {
-        if (envelope.code === 401 || envelope.code === 403) {
-          SessionStore.clear()
-        }
+      if ((envelope.code !== 0 && envelope.code !== 1) || envelope.success === false) {
+        if (envelope.code === 401 || envelope.code === 2004) SessionStore.clear()
         throw new ApiError(envelope.message || '后端接口返回错误', envelope.code)
       }
       return envelope.data

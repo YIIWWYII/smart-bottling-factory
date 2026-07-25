@@ -71,6 +71,42 @@ $requiredContracts | ForEach-Object {
     if (-not $serviceText.Contains($_)) { $errors.Add("Missing API contract: $_") }
 }
 
+$adminConsoleFile = Join-Path $root 'entry\src\main\ets\pages\AdminConsole.ets'
+$adminConsoleText = Get-Content -Raw -Encoding UTF8 $adminConsoleFile
+$requiredMenus = @('DASHBOARD', 'PRODUCTION', 'INCIDENTS', 'DEVICES', 'MATERIALS', 'LOGISTICS', 'AI_AUDIT', 'USERS', 'SETTINGS', 'AUDIT')
+$requiredMenus | ForEach-Object {
+    if (-not $adminConsoleText.Contains($_)) { $errors.Add("Missing admin navigation: $_") }
+}
+
+$requiredListStates = @('loadingState()', 'emptyState(', 'pager(', 'nextFilter()', 'detailPanel()')
+$requiredListStates | ForEach-Object {
+    if (-not $adminConsoleText.Contains($_)) { $errors.Add("Missing list state: $_") }
+}
+
+$requiredWriteGuards = @('confirmAction(', 'writeDisabledReason(', 'appendClientActivity(', 'SessionStore.isDemo', '/audit/operations')
+$requiredWriteGuards | ForEach-Object {
+    if (-not $adminConsoleText.Contains($_)) { $errors.Add("Missing write safety evidence: $_") }
+}
+
+$rolePolicyFile = Join-Path $root 'entry\src\main\ets\service\AdminAccessPolicy.ets'
+if (-not (Test-Path -LiteralPath $rolePolicyFile)) {
+    $errors.Add('Missing AdminAccessPolicy.ets')
+} else {
+    $rolePolicyText = Get-Content -Raw -Encoding UTF8 $rolePolicyFile
+    @('VIEWER', 'OPERATOR', 'ENGINEER', 'ADMIN', 'INCIDENT_DISPOSE', 'THRESHOLD_MANAGE', 'USER_MANAGE') | ForEach-Object {
+        if (-not $rolePolicyText.Contains($_)) { $errors.Add("Missing RBAC role or permission: $_") }
+    }
+}
+
+$sessionText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\SessionStore.ets')
+@('expiresAt', 'isExpired()', "token === 'LOCAL-DEMO'") | ForEach-Object {
+    if (-not $sessionText.Contains($_)) { $errors.Add("Missing session expiry evidence: $_") }
+}
+
+$apiClientText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\ApiClient.ets')
+if (-not ($apiClientText -match 'responseCode\s*===\s*401[\s\S]*SessionStore\.clear\(\)')) { $errors.Add('HTTP 401 must clear the session') }
+if ($apiClientText -match 'responseCode\s*===\s*403[\s\S]{0,100}SessionStore\.clear\(\)') { $errors.Add('HTTP 403 must not clear a valid session') }
+
 if ($errors.Count -gt 0) {
     $errors | ForEach-Object { Write-Host "[FAIL] $_" -ForegroundColor Red }
     throw "Static validation failed: $($errors.Count) item(s)."
@@ -86,3 +122,6 @@ if (Test-Path -LiteralPath $threeComponent) {
     Write-Host '[PASS] admin console has no Three.js dependency' -ForegroundColor Green
 }
 Write-Host '[PASS] core backend API contracts are covered' -ForegroundColor Green
+Write-Host "[PASS] $($requiredMenus.Count) real admin navigation entries are present" -ForegroundColor Green
+Write-Host '[PASS] VIEWER/OPERATOR/ENGINEER/ADMIN RBAC and session expiry guards are present' -ForegroundColor Green
+Write-Host '[PASS] list states and write confirmation/failure/audit evidence are present' -ForegroundColor Green
