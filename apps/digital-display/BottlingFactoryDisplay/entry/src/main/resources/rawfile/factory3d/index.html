@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="color-scheme" content="light">
+  <title>Factory Visual Scene</title>
+  <link rel="stylesheet" href="./scene.css">
+</head>
+<body>
+  <main id="scene-host" aria-label="digital display stage realtime scene"></main>
+  <section class="hud hud-left">
+    <span class="live-dot"></span>
+    <strong id="stage-name">FACTORY STAGE</strong>
+    <span id="data-source">LOCAL DEMO</span>
+  </section>
+  <section class="hud hud-right">
+    <span><i class="legend running"></i>RUNNING</span>
+    <span><i class="legend warning"></i>WAIT</span>
+    <span><i class="legend alarm"></i>ALARM</span>
+  </section>
+  <section id="selection" class="selection hidden"></section>
+  <section id="fallback" class="fallback hidden">
+    <strong>Local WebGL scene is unavailable.</strong>
+    <span>Check ArkWeb WebGL support, or turn off this visual layer temporarily.</span>
+  </section>
+  <script src="./vendor/three.min.js"></script>
+  <script src="./scene.js"></script>
+</body>
+</html>

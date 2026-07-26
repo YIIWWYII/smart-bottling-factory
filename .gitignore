@@ -41,3 +41,9 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
+
+# Legacy source trees kept locally during the split; apps/ and services/ are authoritative.
+/数字大屏前端code/
+/数字大屏后端code/
+/鸿蒙原生前端/
+/src/

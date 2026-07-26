@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "app_name", "value": "智慧工位终端" },
+    { "name": "app_desc", "value": "装瓶产线工位监控与设备控制终端" }
+  ]
+}

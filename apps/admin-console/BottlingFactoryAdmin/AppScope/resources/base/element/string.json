@@ -1,0 +1,6 @@
+{
+  "string": [
+    { "name": "app_name", "value": "智慧工厂后台管理" },
+    { "name": "app_desc", "value": "装瓶产线生产运营后台管理端" }
+  ]
+}

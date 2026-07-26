@@ -1,0 +1,144 @@
+import { http } from '@kit.NetworkKit'
+import { ApiClient, apiClient } from './ApiClient'
+import { FactoryRealtime } from './FactoryRealtime'
+import { createMockBundle } from './MockFactoryData'
+import { FactoryBundle, FactoryDashboard, FactoryIncident, LineSnapshotMeta, LogisticsOverview, OperationsOverview, RuntimeSnapshot } from '../model/FactoryModels'
+
+interface IncidentResolveRequest {
+  action: string
+  targetStage: string
+  note: string
+}
+
+class FactoryRepositoryImpl {
+  bundle: FactoryBundle = createMockBundle()
+  realtimeOnline: boolean = false
+  private realtime: FactoryRealtime = new FactoryRealtime()
+  private listeners: Array<() => void> = []
+  private client: ApiClient = apiClient
+
+  subscribe(listener: () => void): void {
+    this.listeners.push(listener)
+  }
+
+  unsubscribe(listener: () => void): void {
+    this.listeners = this.listeners.filter(item => item !== listener)
+  }
+
+  private notify(): void {
+    this.listeners.forEach(listener => listener())
+  }
+
+  private normalizeDashboard(value: FactoryDashboard | undefined): FactoryDashboard {
+    if (value === undefined) return createMockBundle().dashboard
+    return {
+      total: value.total || 0,
+      running: value.running || 0,
+      completed: value.completed || 0,
+      rejected: value.rejected || 0,
+      holding: value.holding || 0,
+      runs: value.runs || []
+    }
+  }
+
+  private normalizeOperations(value: OperationsOverview | undefined): OperationsOverview {
+    if (value === undefined) return createMockBundle().operations
+    return {
+      latestReadings: value.latestReadings || [],
+      alarms: value.alarms || [],
+      commands: value.commands || [],
+      aiAudits: value.aiAudits || []
+    }
+  }
+
+  private normalizeLogistics(value: LogisticsOverview | undefined): LogisticsOverview {
+    if (value === undefined) return createMockBundle().logistics
+    return {
+      tasks: value.tasks || [],
+      zones: value.zones || [],
+      stock: value.stock || []
+    }
+  }
+
+  private normalizeRuntime(value: RuntimeSnapshot | undefined): RuntimeSnapshot {
+    if (value === undefined) return createMockBundle().runtime
+    return {
+      generatedAt: value.generatedAt,
+      devices: value.devices || [],
+      stages: value.stages || [],
+      incidents: value.incidents || []
+    }
+  }
+
+  private normalizeLineSnapshot(value: LineSnapshotMeta | undefined): LineSnapshotMeta {
+    if (value === undefined) return { stateVersion: this.bundle.stateVersion, generatedAt: this.bundle.updatedAt }
+    return {
+      stateVersion: value.stateVersion === undefined ? this.bundle.stateVersion : value.stateVersion,
+      generatedAt: value.generatedAt
+    }
+  }
+
+  async refresh(): Promise<void> {
+    try {
+      const lineSnapshot: LineSnapshotMeta = this.normalizeLineSnapshot(await this.client.request<LineSnapshotMeta>('/factory/line-snapshot'))
+      const dashboard: FactoryDashboard = this.normalizeDashboard(await this.client.request<FactoryDashboard>('/factory/dashboard'))
+      const operations: OperationsOverview = this.normalizeOperations(await this.client.request<OperationsOverview>('/operations/overview'))
+      const logistics: LogisticsOverview = this.normalizeLogistics(await this.client.request<LogisticsOverview>('/logistics/overview'))
+      const runtime: RuntimeSnapshot = this.normalizeRuntime(await this.client.request<RuntimeSnapshot>('/factory/runtime'))
+      this.bundle = {
+        dashboard,
+        operations,
+        logistics,
+        runtime,
+        stateVersion: lineSnapshot.stateVersion === undefined ? this.bundle.stateVersion : lineSnapshot.stateVersion,
+        source: 'BACKEND',
+        online: true,
+        updatedAt: lineSnapshot.generatedAt || runtime.generatedAt || new Date().toISOString(),
+        errorMessage: ''
+      }
+    } catch (error) {
+      this.bundle = {
+        dashboard: this.bundle.dashboard,
+        operations: this.bundle.operations,
+        logistics: this.bundle.logistics,
+        runtime: this.bundle.runtime,
+        stateVersion: this.bundle.stateVersion,
+        source: 'LOCAL DEMO',
+        online: false,
+        updatedAt: this.bundle.updatedAt,
+        errorMessage: error instanceof Error ? error.message : '后端请求失败'
+      }
+    }
+    this.notify()
+  }
+
+  connectRealtime(): void {
+    this.realtime.connect((payload: string) => {
+      if (payload.indexOf('factory.') >= 0 || payload.indexOf('stateVersion') >= 0) void this.refresh()
+    }, (online: boolean) => {
+      this.realtimeOnline = online
+      this.notify()
+    })
+  }
+
+  closeRealtime(): void {
+    this.realtime.close()
+  }
+
+  async acknowledgeAlarm(alarmId: string): Promise<void> {
+    await this.client.request<Object>(`/operations/alarms/${alarmId}/ack`, http.RequestMethod.POST)
+    await this.refresh()
+  }
+
+  async resolveIncident(incidentId: string, strategy: string): Promise<void> {
+    const payload: IncidentResolveRequest = { action: strategy, targetStage: '', note: 'HarmonyOS 管理端人工确认' }
+    await this.client.request<Object>(`/factory/runtime/incidents/${incidentId}/resolve`, http.RequestMethod.POST, JSON.stringify(payload))
+    await this.refresh()
+  }
+
+  async listIncidents(status: string = 'OPEN'): Promise<Array<FactoryIncident>> {
+    return await this.client.request<Array<FactoryIncident>>(`/factory/runtime/incidents?status=${status}`)
+  }
+}
+
+export const FactoryRepository = new FactoryRepositoryImpl()

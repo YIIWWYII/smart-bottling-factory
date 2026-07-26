@@ -1,9 +1,0 @@
-{
-  "modelVersion": "5.0.0",
-  "name": "bottling-factory-native",
-  "version": "1.0.0",
-  "description": "智慧装瓶产线鸿蒙原生应用",
-  "license": "Apache-2.0",
-  "dependencies": {},
-  "devDependencies": {}
-}
