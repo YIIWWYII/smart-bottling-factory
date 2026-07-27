@@ -1,19 +1,19 @@
 # 测试工具链与证据标准
 
-本项目不把“能够编译”当作“功能通过”。三个鸿蒙 App、ArkWeb 中的 Three.js 页面和 Spring Boot 后端必须分层测试，最后再做三端同时在线的端到端联调。
+本项目不把“能够编译”当作“功能通过”。四个鸿蒙 App、ArkWeb 中的 Three.js 页面和 Spring Boot 后端必须分层测试，最后再做四前端同时在线的端到端联调。
 
 ## 已确认的本机工具
 
 | 工具 | 位置/调用 | 负责范围 | 不能代替 |
 | --- | --- | --- | --- |
-| DevEco CLI Skill | `$deveco-cli`，`C:\Users\王艺\.codex\skills\deveco-cli\SKILL.md` | 鸿蒙工程检查、构建、安装、启动、设备和日志 | Test Kit 用例设计、人工视觉验收 |
+| DevEco CLI Skill | `$deveco-cli`，`D:\Codex\.codex\skills\deveco-cli\SKILL.md` | 鸿蒙工程检查、构建、安装、启动、设备和日志 | Test Kit 用例设计、人工视觉验收 |
 | 官方 DevEco CLI MCP | Codex MCP 名 `deveco-cli`，已注册 | 由 AI 调用官方 CLI、设备和官方文档能力 | 第三方“自动修好”插件 |
 | DevEco Studio/Test Kit | 已安装 DevEco Studio，工程 `ohosTest`/Local Test | ArkTS 单元测试、设备/模拟器 Instrument Test、UI 自动化 | ArkWeb 内部 WebGL 像素验证 |
 | HDC | `D:\HarmonyOS-Dev\DevEco-Studio\IDE\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe` | 设备连接、安装辅助、`hilog` 和故障取证 | 业务断言 |
 | Playwright Skill | `$playwright` | 可独立打开的本地 Three.js 测试页、Swagger/辅助 Web 页 | 鸿蒙 ArkUI、ArkWeb 真机兼容性 |
 | browser-harness | `$browser-harness` | 浏览器交互、DOM 和截图辅助验证 | 鸿蒙模拟器 UI 测试 |
 | Computer Use | `$computer-use:computer-use` | CLI 无法完成的 DevEco Test Runner、模拟器和视觉检查 | 日常文件编辑和普通构建 |
-| Maven/JUnit | Maven 3.9.16：`D:\HarmonyOS-Dev\Tools\apache-maven-3.9.16`，项目 `pom.xml` | Spring Boot 单元、集成和契约测试 | 三个鸿蒙 App 的运行验证 |
+| Maven/JUnit | Maven 3.9.16：`D:\HarmonyOS-Dev\Tools\apache-maven-3.9.16`，项目 `pom.xml` | Spring Boot 单元、集成和契约测试 | 四个鸿蒙 App 的运行验证 |
 
 `DevEco Testing` 是独立的大型测试平台，官方环境说明需要约 100GB 磁盘。本项目当前先使用 SDK 自带 Test Kit、模拟器和 HDC，不把它设为开发前置条件，也不安装到 C 盘。
 
@@ -47,7 +47,7 @@ $cli = 'D:\HarmonyOS-Dev\npm-global\devecocli.cmd'
 
 ### 3. ArkWeb 与 Three.js
 
-展板和小屏的 2D/3D 需要两层验证：
+展板、小屏以及 AI 协同端可选的设备/参数动画需要两层验证：
 
 1. 在鸿蒙模拟器内确认 `Web` 成功加载 HAP `rawfile`，JavaScript bridge 能收发 `stateVersion` 和快照。
 2. 开发构建开启 ArkWeb Web 调试，检查 Console、Network、WebGL 上下文和未处理异常；发布构建关闭调试。
@@ -90,8 +90,17 @@ $hdc = 'D:\HarmonyOS-Dev\DevEco-Studio\IDE\DevEco Studio\sdk\default\openharmony
 - 未登录拦截，注册、登录、会话恢复、退出和 token 过期有效。
 - VIEWER、OPERATOR、ENGINEER、ADMIN 的菜单、读写和危险操作矩阵正确，后端仍做最终鉴权。
 - 每个导航有真实页面；列表的加载、空、错误、筛选、分页和详情状态完整。
-- 配方、阈值、生产任务、异常、物流仓储、AI 与操作审计写操作有确认、失败反馈和审计号。
+- 配方、阈值、生产任务、异常、物流仓储、AI、知识审核与操作审计写操作有确认、失败反馈和审计号。
+- 知识审核覆盖批准、拒绝、撤销、提交人不可自审、冲突提示和索引失败；批准前资料不得用于 RAG。
 - Playwright 仅用于后端 Swagger/辅助 Web 页面，不得替代 ArkUI 模拟器测试。
+
+### AI 协同端
+
+- 登录、会话恢复、VIEWER 问答和 `KNOWLEDGE_SUBMIT` 上传权限正确；本端没有知识批准和设备控制入口。
+- 决策详情能区分建议、后端受理和设备回执；人工覆盖字段显示锁定人/时间/原因，且没有强制覆盖操作。
+- 问答覆盖历史、流式片段、引用、无依据回答、断线重连和失败重试；控制类自然语言不会创建命令。
+- 上传覆盖文件校验、重复文件、处理中、待审核、批准、拒绝、索引失败和最终 `INDEXED`；审核前内容不出现在检索结果。
+- 原生 ArkUI 页面可滚动且不被键盘遮挡；若使用 Three.js，执行 canvas 非空、资源释放和鸿蒙模拟器复测。
 
 ## 后端测试
 
@@ -103,11 +112,11 @@ mvn test
 mvn -DskipTests package
 ```
 
-最低覆盖：统一 HTTP 响应、认证/RBAC、MySQL 重启持久化、Redis 非事实源、MQTT 与中央模拟切换、统一 WebSocket 信封、命令安全门/幂等/超时/回执、AI 决策审计、九工序并行、局部异常影响、AGV/仓储和服务重启恢复。Testcontainers 只有在项目已采用且 D 盘缓存配置完成后使用，不擅自把 Docker 变成前置条件。
+最低覆盖：统一 HTTP 响应、认证/RBAC、MySQL 重启持久化、Redis 非事实源、MQTT 与中央模拟切换、统一 WebSocket 信封、命令安全门/幂等/超时/回执、AI 字段级补丁、人工覆盖锁、参数版本竞态、原子组、知识审核与向量索引、问答不会触发控制、九工序并行、局部异常影响、AGV/仓储和服务重启恢复。Testcontainers 只有在项目已采用且 D 盘缓存配置完成后使用，不擅自把 Docker 变成前置条件。
 
 ## 融合证据
 
-每个开发对话交付：提交号、测试命令、成功/失败计数、HAP 或 JAR 路径、模拟器截图、关键日志、未通过项和复现步骤。融合对话必须同时安装三个不同 bundleName 的 HAP，用同一后端中央模拟场景核对相同 `stateVersion` 下的数据；任一 P0 或关键测试失败不得合入 `main`。
+每个开发对话交付：提交号、测试命令、成功/失败计数、HAP 或 JAR 路径、模拟器截图、关键日志、未通过项和复现步骤。融合对话必须同时安装四个不同 bundleName 的 HAP，用同一后端中央模拟场景核对相同 `stateVersion`、AI 决策、人工覆盖和知识审核状态；任一 P0 或关键测试失败不得合入 `main`。
 
 ## 官方依据
 

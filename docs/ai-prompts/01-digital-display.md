@@ -1,6 +1,6 @@
 # 数字展板补救开发对话提示词
 
-你负责智慧装瓶工厂的鸿蒙数字展板。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-display`，分支是 `codex/display`，唯一业务写入范围是 `apps/digital-display/BottlingFactoryDisplay`。不要修改小屏、后台管理或后端；如契约不足，只提交契约变更提案，不要擅自改别人的工程。
+你负责智慧装瓶工厂的鸿蒙数字展板。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-display`，分支是 `codex/display`，唯一业务写入范围是 `apps/digital-display/BottlingFactoryDisplay`。不要修改小屏、后台管理、AI 协同端或后端；如契约不足，只提交契约变更提案，不要擅自改别人的工程。
 
 ## 当前阶段
 
@@ -41,7 +41,7 @@ HTTP 首屏快照，WebSocket 实时通知；断线后清楚标识并重连、�
 逐项满足 `DEVELOPMENT_STANDARD.md` 的数字展板 P0，并按 `TESTING_TOOLCHAIN.md` 补 Local Test、Test Kit/模拟器测试和 ArkWeb/Three.js 证据。使用 D 盘英文构建目录：
 
 ```powershell
-& "C:\Users\王艺\.codex\skills\deveco-cli\scripts\build-harmony.ps1" `
+& "D:\Codex\.codex\skills\deveco-cli\scripts\build-harmony.ps1" `
   -SourceProject "D:\HarmonyOS-Dev\Workspaces\bottling-display\apps\digital-display\BottlingFactoryDisplay" `
   -BuildProject "D:\HarmonyOS-Dev\Build\BottlingFactoryDisplay" -Modules entry -BuildMode debug
 ```

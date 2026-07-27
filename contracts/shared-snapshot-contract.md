@@ -1,6 +1,6 @@
-# 三端共享快照契约
+# 四前端共享快照契约
 
-数字展板工位详情、小屏当前环节和后台运营监控必须读取同一个后端模型。允许各端排版不同，不允许字段含义和计算口径不同。
+数字展板工位详情、小屏当前环节、后台运营监控和 AI 协同端的决策上下文必须读取同一个后端模型。允许各端排版不同，不允许字段含义和计算口径不同。
 
 ## 整线快照
 
@@ -21,7 +21,7 @@
 
 ## 工位快照
 
-`StageSnapshot` 是展板与小屏一致性的核心，至少包含：
+`StageSnapshot` 是四前端关联同一产线事实的核心，至少包含：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -36,7 +36,7 @@
 | `buffer` | object | 输入/输出占用、容量和阻塞原因 |
 | `incidents`、`alarms` | array | 本站异常、报警和上下游影响 |
 | `activeRecipe` | object? | 配方/参数模板、版本、来源和应用状态 |
-| `aiDecision` | object? | 建议、知识版本、校验、审批和执行状态 |
+| `aiDecision` | object? | 决策 ID、建议摘要、知识版本、校验、人工锁和执行状态 |
 | `upstream`、`downstream` | StageLink[] | 相邻工位状态和物料流向 |
 | `capabilityVersion` | string | 小屏控制能力版本 |
 
@@ -47,7 +47,7 @@
 - `actionCode`：例如 `CONVEYING`、`WASHING`、`SCANNING`、`FILLING`、`REJECTING`、`PICKING`、`MOVING`。
 - `cycleProgressPct`：0-100 周期进度；无周期设备可为空。
 - `speed`、`speedUnit`：真实或中央模拟速度及单位。
-- `parameters`：当前有效运行参数，只读快照。
+- `parameters`：当前有效运行参数；每个字段包含值、单位、`ownerSource`、`lockMode` 和 `parameterVersion`。
 - `source`、`fallback`、`lastSeenAt`：数据来源和新鲜度。
 
 `ProductRuntime` 必须提供：
@@ -61,8 +61,8 @@
 
 ## 一致性规则
 
-1. 三端相同 `stateVersion` 下，相同设备和产品状态必须一致。
+1. 四前端相同 `stateVersion` 下，相同设备、产品、参数所有权和人工锁状态必须一致。
 2. WebSocket 只通知增量变化；客户端发现版本跳跃时重新 GET 快照。
 3. 前端 KPI 只做展示格式化，统计口径由后端返回。
-4. 质量门最终结果、异常影响和 AI 校验状态由后端返回，前端不得分别重算。
+4. 质量门最终结果、异常影响、AI 校验和参数可修改性由后端返回，前端不得分别重算。
 5. `LOCAL DEMO` 只能用于单 App 离线展示；跨端联调必须使用后端中央 `SIMULATION`，否则无法保证一致。
