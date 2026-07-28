@@ -45,6 +45,36 @@ python .\scripts\smoke_test.py
 - `POST /api/assistant/conversations/{id}/messages/{messageId}/retry`
 - `GET /api/assistant/conversations/{id}/messages`
 
+## Admin AI Settings
+
+The admin console can manage AI runtime settings through the AI center. API keys are stored server-side and are always masked when returned to the frontend.
+
+- `GET /api/admin/ai/config`
+- `PUT /api/admin/ai/config`
+- `POST /api/admin/ai/config/test`
+- `POST /api/admin/ai/config/test-question`
+- `GET /api/admin/ai/rag/status`
+- `GET /api/admin/ai/rag/documents`
+- `POST /api/admin/ai/rag/documents`
+- `POST /api/admin/ai/rag/reindex`
+
+Supported config fields:
+
+- `provider`: `LOCAL_DEMO` or an OpenAI-compatible provider label.
+- `modelName`, `baseUrl`, `apiKey`, `temperature`, `maxTokens`.
+- `requestTimeoutSeconds`, `retryCount`, `streamingEnabled`.
+- `embeddingModel`, `vectorStoreType`, `vectorStoreUrl`.
+- `ragTopK`, `chunkSize`, `chunkOverlap`, `knowledgeIndexEnabled`.
+
+Timeout behavior:
+
+- Assistant answers never create production commands.
+- If the external model times out, the service returns a clear `AI_PROVIDER_TIMEOUT` result instead of spinning forever.
+- `POST /api/admin/ai/config/test` classifies common errors as `AUTH_FAILED`, `NETWORK_TIMEOUT`, `MODEL_NOT_FOUND`, `RATE_LIMITED`, or `RAG_NOT_READY`.
+- `LOCAL_DEMO` mode returns immediately and is marked `LOCAL DEMO / SIMULATION`.
+
+Boot defaults can be set with `.env.example` style variables such as `AI_PROVIDER`, `AI_MODEL_NAME`, `AI_BASE_URL`, `AI_API_KEY`, and `AI_REQUEST_TIMEOUT_SECONDS`.
+
 ## Important Boundary
 
 产品汇报里可以说“AI 给出调参/控制建议”，但工程实现上：

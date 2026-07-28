@@ -20,6 +20,48 @@ API_PREFIX = "/api"
 SOURCE_MARK = "LOCAL DEMO / SIMULATION"
 KNOWLEDGE_VERSION = "SIMULATION-KB-2026.07"
 DEFAULT_BACKEND_BASE_URL = "http://127.0.0.1:8088/hdc/api"
+DEFAULT_AI_CONFIG = {
+    "provider": "LOCAL_DEMO",
+    "modelName": "local-demo-assistant",
+    "baseUrl": "",
+    "apiKey": "",
+    "temperature": 0.2,
+    "maxTokens": 800,
+    "requestTimeoutSeconds": 12,
+    "retryCount": 1,
+    "streamingEnabled": True,
+    "embeddingModel": "local-demo-embedding",
+    "vectorStoreType": "LOCAL_DEMO_MEMORY",
+    "vectorStoreUrl": "",
+    "ragTopK": 5,
+    "chunkSize": 800,
+    "chunkOverlap": 120,
+    "knowledgeIndexEnabled": True,
+}
+DEFAULT_RAG_DOCUMENTS = [
+    {
+        "documentId": "doc-local-pla-safety",
+        "title": "PLA bottle pretreatment safety SOP",
+        "status": "INDEXED",
+        "indexStatus": "READY",
+        "version": KNOWLEDGE_VERSION,
+        "chunkCount": 8,
+        "source": SOURCE_MARK,
+        "failureReason": "",
+        "updatedAt": "2026-07-28T00:00:00Z",
+    },
+    {
+        "documentId": "doc-local-filling-quality",
+        "title": "Filling quality inspection guide",
+        "status": "INDEXED",
+        "indexStatus": "READY",
+        "version": KNOWLEDGE_VERSION,
+        "chunkCount": 6,
+        "source": SOURCE_MARK,
+        "failureReason": "",
+        "updatedAt": "2026-07-28T00:00:00Z",
+    },
+]
 
 
 def now_iso() -> str:
@@ -94,9 +136,11 @@ class AiCenterState:
         self.messages: dict[str, list[dict[str, Any]]] = {}
         self.active_messages: dict[str, dict[str, Any]] = {}
         self.knowledge_submissions: dict[str, dict[str, Any]] = {}
+        self.rag_documents: dict[str, dict[str, Any]] = {item["documentId"]: deepcopy(item) for item in DEFAULT_RAG_DOCUMENTS}
         self.decisions: dict[str, dict[str, Any]] = {}
         self.recognitions: dict[str, dict[str, Any]] = {}
         self.command_intents: dict[str, dict[str, Any]] = {}
+        self.ai_config: dict[str, Any] = load_ai_config_from_env()
         self.events = EventHub()
 
 
@@ -119,10 +163,119 @@ def create_app() -> FastAPI:
                 "status": "UP",
                 "port": int(os.getenv("AI_CENTER_PORT", "8091")),
                 "apiPrefix": API_PREFIX,
+                "aiProvider": state.ai_config["provider"],
+                "modelName": state.ai_config["modelName"],
                 "source": SOURCE_MARK,
                 "time": now_iso(),
             }
         )
+
+    @app.get(f"{API_PREFIX}/admin/ai/config")
+    async def get_ai_config() -> dict[str, Any]:
+        return envelope({"config": mask_ai_config(state.ai_config), "source": SOURCE_MARK})
+
+    @app.put(f"{API_PREFIX}/admin/ai/config")
+    async def update_ai_config(request_body: dict[str, Any]) -> dict[str, Any]:
+        merged = deepcopy(state.ai_config)
+        updates = normalize_ai_config(request_body)
+        if is_masked_secret(updates.get("apiKey")):
+            updates.pop("apiKey")
+        merged.update(updates)
+        state.ai_config = merged
+        return envelope(
+            {
+                "config": mask_ai_config(state.ai_config),
+                "note": "LOCAL DEMO: config is stored in memory for this service process. Use .env for boot defaults.",
+                "source": SOURCE_MARK,
+            }
+        )
+
+    @app.post(f"{API_PREFIX}/admin/ai/config/test")
+    async def test_ai_config(request_body: dict[str, Any] | None = None) -> dict[str, Any]:
+        test_config = deepcopy(state.ai_config)
+        if request_body:
+            candidate = request_body.get("config") if isinstance(request_body.get("config"), dict) else request_body
+            test_config.update(normalize_ai_config(candidate))
+        result = await run_ai_connection_test(test_config)
+        return envelope(result, message=result["message"], code=0 if result["ok"] else 1)
+
+    @app.post(f"{API_PREFIX}/admin/ai/config/test-question")
+    async def test_ai_question(request_body: dict[str, Any] | None = None) -> dict[str, Any]:
+        body = request_body or {}
+        question = str(body.get("question", "Give a short LOCAL DEMO health answer.")).strip()
+        test_config = deepcopy(state.ai_config)
+        if isinstance(body.get("config"), dict):
+            test_config.update(normalize_ai_config(body["config"]))
+        started = time.perf_counter()
+        result = await generate_model_or_demo_answer(test_config, question, body.get("context") if isinstance(body.get("context"), dict) else {})
+        result["elapsedMs"] = int((time.perf_counter() - started) * 1000)
+        return envelope(result, message=result["message"], code=0 if result["ok"] else 1)
+
+    @app.get(f"{API_PREFIX}/admin/ai/rag/status")
+    async def rag_status() -> dict[str, Any]:
+        documents = list(state.rag_documents.values())
+        failed = [item for item in documents if item.get("indexStatus") == "FAILED"]
+        pending = [item for item in documents if item.get("indexStatus") in ("PENDING", "INDEXING")]
+        return envelope(
+            {
+                "status": "READY" if not failed and not pending else "ATTENTION_REQUIRED",
+                "knowledgeVersion": KNOWLEDGE_VERSION,
+                "documentCount": len(documents),
+                "indexedCount": len([item for item in documents if item.get("indexStatus") == "READY"]),
+                "failedCount": len(failed),
+                "pendingCount": len(pending),
+                "vectorStoreType": state.ai_config["vectorStoreType"],
+                "vectorStoreUrl": state.ai_config["vectorStoreUrl"],
+                "embeddingModel": state.ai_config["embeddingModel"],
+                "ragTopK": state.ai_config["ragTopK"],
+                "chunkSize": state.ai_config["chunkSize"],
+                "chunkOverlap": state.ai_config["chunkOverlap"],
+                "knowledgeIndexEnabled": state.ai_config["knowledgeIndexEnabled"],
+                "source": SOURCE_MARK,
+            }
+        )
+
+    @app.get(f"{API_PREFIX}/admin/ai/rag/documents")
+    async def rag_documents() -> dict[str, Any]:
+        return envelope({"items": list(state.rag_documents.values()), "source": SOURCE_MARK})
+
+    @app.post(f"{API_PREFIX}/admin/ai/rag/documents")
+    async def create_rag_document(request_body: dict[str, Any]) -> dict[str, Any]:
+        document_id = request_body.get("documentId") or new_id("doc")
+        document = {
+            "documentId": document_id,
+            "title": request_body.get("title", "LOCAL DEMO uploaded document"),
+            "status": "PENDING_REVIEW",
+            "indexStatus": "PENDING",
+            "version": request_body.get("version", KNOWLEDGE_VERSION),
+            "chunkCount": 0,
+            "failureReason": "",
+            "source": SOURCE_MARK,
+            "updatedAt": now_iso(),
+            "note": "LOCAL DEMO: document metadata accepted; admin review must approve before production indexing.",
+        }
+        state.rag_documents[document_id] = document
+        return envelope(document)
+
+    @app.post(f"{API_PREFIX}/admin/ai/rag/reindex")
+    async def reindex_rag_documents() -> dict[str, Any]:
+        if not state.ai_config["knowledgeIndexEnabled"]:
+            return envelope(
+                {
+                    "status": "SKIPPED",
+                    "reason": "knowledgeIndexEnabled=false",
+                    "source": SOURCE_MARK,
+                },
+                message="knowledge indexing disabled",
+                code=1,
+            )
+        for document in state.rag_documents.values():
+            if document.get("status") in ("INDEXED", "APPROVED", "PENDING_REVIEW"):
+                document["indexStatus"] = "READY"
+                document["chunkCount"] = max(int(document.get("chunkCount", 0)), 1)
+                document["failureReason"] = ""
+                document["updatedAt"] = now_iso()
+        return envelope({"status": "READY", "items": list(state.rag_documents.values()), "source": SOURCE_MARK})
 
     @app.websocket(f"{API_PREFIX}/assistant/events")
     async def assistant_events(websocket: WebSocket) -> None:
@@ -314,6 +467,18 @@ def create_app() -> FastAPI:
             "createdAt": now_iso(),
         }
         state.knowledge_submissions[submission_id] = submission
+        state.rag_documents[submission_id] = {
+            "documentId": submission_id,
+            "title": "LOCAL DEMO uploaded knowledge",
+            "status": "PENDING_REVIEW",
+            "indexStatus": "PENDING",
+            "version": KNOWLEDGE_VERSION,
+            "chunkCount": 0,
+            "failureReason": "",
+            "source": SOURCE_MARK,
+            "updatedAt": now_iso(),
+            "note": "Awaiting admin review before indexing.",
+        }
         return envelope(submission)
 
     @app.get(f"{API_PREFIX}/knowledge/submissions/{{knowledge_id}}")
@@ -357,6 +522,13 @@ def create_app() -> FastAPI:
                 "reviewedAt": now_iso(),
             }
         )
+        document = state.rag_documents.get(knowledge_id)
+        if document is not None:
+            document["status"] = status
+            document["indexStatus"] = "READY" if index_status == "INDEXED" else index_status
+            document["failureReason"] = "" if action == "approve" else item["reviewNote"]
+            document["chunkCount"] = max(int(document.get("chunkCount", 0)), 1 if action == "approve" else 0)
+            document["updatedAt"] = now_iso()
         return envelope(item)
 
     @app.api_route(f"{API_PREFIX}/ai-integration/facts", methods=["GET", "POST"])
@@ -419,6 +591,310 @@ def build_conversation_title(context: dict[str, Any]) -> str:
     return f"{source_app} assistant - {stage}"
 
 
+def load_ai_config_from_env() -> dict[str, Any]:
+    config = deepcopy(DEFAULT_AI_CONFIG)
+    env_map = {
+        "AI_PROVIDER": "provider",
+        "AI_MODEL_NAME": "modelName",
+        "AI_BASE_URL": "baseUrl",
+        "AI_API_KEY": "apiKey",
+        "AI_TEMPERATURE": "temperature",
+        "AI_MAX_TOKENS": "maxTokens",
+        "AI_REQUEST_TIMEOUT_SECONDS": "requestTimeoutSeconds",
+        "AI_RETRY_COUNT": "retryCount",
+        "AI_STREAMING_ENABLED": "streamingEnabled",
+        "AI_EMBEDDING_MODEL": "embeddingModel",
+        "AI_VECTOR_STORE_TYPE": "vectorStoreType",
+        "AI_VECTOR_STORE_URL": "vectorStoreUrl",
+        "AI_RAG_TOP_K": "ragTopK",
+        "AI_CHUNK_SIZE": "chunkSize",
+        "AI_CHUNK_OVERLAP": "chunkOverlap",
+        "AI_KNOWLEDGE_INDEX_ENABLED": "knowledgeIndexEnabled",
+    }
+    raw: dict[str, Any] = {}
+    for env_name, key in env_map.items():
+        value = os.getenv(env_name)
+        if value is not None:
+            raw[key] = value
+    config.update(normalize_ai_config(raw))
+    return config
+
+
+def normalize_ai_config(raw: dict[str, Any] | None) -> dict[str, Any]:
+    raw = raw or {}
+    normalized: dict[str, Any] = {}
+    text_keys = [
+        "provider",
+        "modelName",
+        "baseUrl",
+        "apiKey",
+        "embeddingModel",
+        "vectorStoreType",
+        "vectorStoreUrl",
+    ]
+    for key in text_keys:
+        if key in raw and raw[key] is not None:
+            normalized[key] = str(raw[key]).strip()
+    int_defaults = {
+        "maxTokens": DEFAULT_AI_CONFIG["maxTokens"],
+        "requestTimeoutSeconds": DEFAULT_AI_CONFIG["requestTimeoutSeconds"],
+        "retryCount": DEFAULT_AI_CONFIG["retryCount"],
+        "ragTopK": DEFAULT_AI_CONFIG["ragTopK"],
+        "chunkSize": DEFAULT_AI_CONFIG["chunkSize"],
+        "chunkOverlap": DEFAULT_AI_CONFIG["chunkOverlap"],
+    }
+    for key, default_value in int_defaults.items():
+        if key in raw:
+            normalized[key] = clamp_int(raw[key], 0, 120000, int(default_value))
+    if "requestTimeoutSeconds" in normalized:
+        normalized["requestTimeoutSeconds"] = clamp_int(normalized["requestTimeoutSeconds"], 3, 40, 12)
+    if "retryCount" in normalized:
+        normalized["retryCount"] = clamp_int(normalized["retryCount"], 0, 5, 1)
+    if "ragTopK" in normalized:
+        normalized["ragTopK"] = clamp_int(normalized["ragTopK"], 1, 30, 5)
+    if "chunkSize" in normalized:
+        normalized["chunkSize"] = clamp_int(normalized["chunkSize"], 100, 8000, 800)
+    if "chunkOverlap" in normalized:
+        normalized["chunkOverlap"] = clamp_int(normalized["chunkOverlap"], 0, 2000, 120)
+    if "temperature" in raw:
+        normalized["temperature"] = clamp_float(raw["temperature"], 0.0, 2.0, 0.2)
+    for key in ["streamingEnabled", "knowledgeIndexEnabled"]:
+        if key in raw:
+            normalized[key] = parse_bool(raw[key])
+    if "provider" in normalized:
+        normalized["provider"] = normalized["provider"].upper() or "LOCAL_DEMO"
+    return normalized
+
+
+def clamp_int(value: Any, minimum: int, maximum: int, fallback: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(minimum, min(maximum, parsed))
+
+
+def clamp_float(value: Any, minimum: float, maximum: float, fallback: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(minimum, min(maximum, parsed))
+
+
+def parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on", "enabled")
+
+
+def mask_ai_config(config: dict[str, Any]) -> dict[str, Any]:
+    result = deepcopy(config)
+    result["apiKey"] = mask_secret(str(config.get("apiKey", "")))
+    result["hasApiKey"] = bool(str(config.get("apiKey", "")).strip())
+    return result
+
+
+def mask_secret(value: str) -> str:
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "***"
+    return f"{value[:3]}***{value[-4:]}"
+
+
+def is_masked_secret(value: Any) -> bool:
+    return isinstance(value, str) and "***" in value
+
+
+def get_request_timeout_seconds(config: dict[str, Any]) -> int:
+    return clamp_int(config.get("requestTimeoutSeconds"), 3, 40, 12)
+
+
+async def run_ai_connection_test(config: dict[str, Any]) -> dict[str, Any]:
+    started = time.perf_counter()
+    if not config.get("knowledgeIndexEnabled", True):
+        return {
+            "ok": False,
+            "status": "RAG_NOT_READY",
+            "errorCode": "RAG_NOT_READY",
+            "message": "RAG indexing is disabled in current config.",
+            "elapsedMs": int((time.perf_counter() - started) * 1000),
+            "config": mask_ai_config(config),
+            "source": SOURCE_MARK,
+        }
+    if is_local_demo_provider(config):
+        return {
+            "ok": True,
+            "status": "LOCAL_DEMO_READY",
+            "message": "LOCAL DEMO model is ready; no external provider was called.",
+            "elapsedMs": int((time.perf_counter() - started) * 1000),
+            "config": mask_ai_config(config),
+            "source": SOURCE_MARK,
+        }
+    if not str(config.get("baseUrl", "")).strip():
+        return make_test_error("CONFIG_MISSING_BASE_URL", "Model baseUrl is required.", started, config)
+    if not str(config.get("apiKey", "")).strip():
+        return make_test_error("AUTH_FAILED", "API Key is required.", started, config)
+    result = await generate_model_or_demo_answer(config, "Return exactly: AI_CONNECTION_OK", {})
+    result["elapsedMs"] = int((time.perf_counter() - started) * 1000)
+    result["config"] = mask_ai_config(config)
+    if result["ok"]:
+        result["status"] = "PROVIDER_READY"
+        result["message"] = "AI provider returned a valid response."
+    return result
+
+
+async def generate_model_or_demo_answer(config: dict[str, Any], question: str, context: dict[str, Any]) -> dict[str, Any]:
+    if is_local_demo_provider(config):
+        return {
+            "ok": True,
+            "status": "LOCAL_DEMO_READY",
+            "message": "LOCAL DEMO response generated.",
+            "answer": build_local_demo_answer(question),
+            "provider": config.get("provider"),
+            "modelName": config.get("modelName"),
+            "source": SOURCE_MARK,
+        }
+    try:
+        answer = await asyncio.wait_for(
+            asyncio.to_thread(call_openai_compatible_chat, config, question, context),
+            timeout=get_request_timeout_seconds(config) + 1,
+        )
+        return {
+            "ok": True,
+            "status": "PROVIDER_READY",
+            "message": "AI provider returned a valid response.",
+            "answer": answer,
+            "provider": config.get("provider"),
+            "modelName": config.get("modelName"),
+            "source": "AI_PROVIDER",
+        }
+    except asyncio.TimeoutError:
+        return make_generation_error("NETWORK_TIMEOUT", "AI provider timed out before returning a response.", config)
+    except Exception as exc:
+        code, message = classify_ai_provider_error(exc)
+        return make_generation_error(code, message, config)
+
+
+def is_local_demo_provider(config: dict[str, Any]) -> bool:
+    return str(config.get("provider", "LOCAL_DEMO")).upper() in ("", "LOCAL_DEMO", "SIMULATION", "MOCK")
+
+
+def build_local_demo_answer(question: str) -> str:
+    return (
+        "[LOCAL DEMO][SIMULATION] This answer is generated by the local demo assistant, "
+        "not by a production LLM provider. It uses page context, simulated production facts, "
+        f"and simulated RAG citations. Question: {question[:120]}. "
+    )
+
+
+def call_openai_compatible_chat(config: dict[str, Any], question: str, context: dict[str, Any]) -> str:
+    url = build_chat_completions_url(str(config.get("baseUrl", "")))
+    payload = {
+        "model": config.get("modelName", "gpt-compatible-model"),
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a read-only bottling factory assistant. "
+                    "Never create commands, release manual locks, approve knowledge, or change production state."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Context JSON: {json.dumps(context, ensure_ascii=False)}\nQuestion: {question}",
+            },
+        ],
+        "temperature": config.get("temperature", 0.2),
+        "max_tokens": config.get("maxTokens", 800),
+        "stream": False,
+    }
+    req = request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json;charset=UTF-8",
+            "Authorization": f"Bearer {config.get('apiKey', '')}",
+        },
+    )
+    with request.urlopen(req, timeout=get_request_timeout_seconds(config)) as response:
+        raw = response.read().decode("utf-8")
+        parsed = json.loads(raw)
+        choices = parsed.get("choices") if isinstance(parsed, dict) else None
+        if not choices:
+            raise RuntimeError("MODEL_EMPTY_RESPONSE")
+        message = choices[0].get("message") if isinstance(choices[0], dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        if not content:
+            raise RuntimeError("MODEL_EMPTY_RESPONSE")
+        return str(content).strip()
+
+
+def build_chat_completions_url(base_url: str) -> str:
+    value = base_url.strip().rstrip("/")
+    if value.endswith("/chat/completions"):
+        return value
+    if value.endswith("/v1"):
+        return f"{value}/chat/completions"
+    return f"{value}/v1/chat/completions"
+
+
+def classify_ai_provider_error(exc: Exception) -> tuple[str, str]:
+    if isinstance(exc, error.HTTPError):
+        status = exc.code
+        detail = safe_read_http_error(exc)
+        if status in (401, 403):
+            return "AUTH_FAILED", f"Authentication failed with HTTP {status}."
+        if status == 404:
+            return "MODEL_NOT_FOUND", "Model or endpoint was not found."
+        if status == 429:
+            return "RATE_LIMITED", "AI provider rate limit was reached."
+        if status in (408, 504):
+            return "NETWORK_TIMEOUT", f"AI provider timed out with HTTP {status}."
+        return "PROVIDER_HTTP_ERROR", f"AI provider returned HTTP {status}. {detail}"[:300]
+    if isinstance(exc, (error.URLError, TimeoutError, OSError)):
+        return "NETWORK_TIMEOUT", "AI provider network request timed out or could not connect."
+    message = str(exc)
+    if "MODEL_EMPTY_RESPONSE" in message:
+        return "MODEL_EMPTY_RESPONSE", "AI provider returned no answer content."
+    return "PROVIDER_ERROR", message[:300] if message else "AI provider failed."
+
+
+def safe_read_http_error(exc: error.HTTPError) -> str:
+    try:
+        body = exc.read().decode("utf-8")
+        return body[:200]
+    except Exception:
+        return ""
+
+
+def make_test_error(code: str, message: str, started: float, config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "status": code,
+        "errorCode": code,
+        "message": message,
+        "elapsedMs": int((time.perf_counter() - started) * 1000),
+        "config": mask_ai_config(config),
+        "source": SOURCE_MARK,
+    }
+
+
+def make_generation_error(code: str, message: str, config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "status": code,
+        "errorCode": code,
+        "message": message,
+        "answer": "",
+        "provider": config.get("provider"),
+        "modelName": config.get("modelName"),
+        "source": SOURCE_MARK,
+    }
+
+
 async def create_assistant_message(
     state: AiCenterState,
     conversation_id: str,
@@ -464,9 +940,31 @@ async def create_assistant_message(
             "status": "STREAMING",
         }
     )
-    chunks = build_answer_chunks(question, context)
+    try:
+        chunks = await asyncio.wait_for(
+            build_answer_chunks(state, question, context),
+            timeout=get_request_timeout_seconds(state.ai_config) + 1,
+        )
+    except asyncio.TimeoutError:
+        assistant_message["status"] = "FAILED"
+        assistant_message["content"] = (
+            "[LOCAL DEMO][AI_PROVIDER_TIMEOUT] The AI provider did not return before the configured timeout. "
+            "No command was created and no production state was changed. Please check model/baseUrl/apiKey/timeout in admin AI settings."
+        )
+        state.active_messages.pop(assistant_message_id, None)
+        await state.events.publish(
+            {
+                "type": "ai.conversation.failed",
+                "conversationId": conversation_id,
+                "messageId": assistant_message_id,
+                "status": "FAILED",
+                "code": "AI_PROVIDER_TIMEOUT",
+                "content": assistant_message["content"],
+            }
+        )
+        return envelope(to_message_result(assistant_message), message="AI provider timeout", code=1)
     content_parts: list[str] = []
-    delay = 0.2 if "slow" in question.lower() or "慢" in question else 0.03
+    delay = 0.08 if "slow" in question.lower() or "慢" in question else 0.02
     for chunk in chunks:
         active = state.active_messages.get(assistant_message_id)
         if active is None or active.get("cancelled"):
@@ -584,7 +1082,7 @@ def decide_answer_mode(question: str, context: dict[str, Any]) -> str:
     return "HYBRID"
 
 
-def build_answer_chunks(question: str, context: dict[str, Any]) -> list[str]:
+async def build_answer_chunks(state: AiCenterState, question: str, context: dict[str, Any]) -> list[str]:
     facts = fetch_backend_facts(context)
     selection = context.get("selection") if isinstance(context.get("selection"), dict) else None
     scope = describe_scope(context, selection)
@@ -595,11 +1093,20 @@ def build_answer_chunks(question: str, context: dict[str, Any]) -> list[str]:
             "正式操作应由工位端或后台通过 HTTP 创建命令，生产后端再校验 RBAC、人工锁、版本、范围、联锁和边缘 ACK。"
         )
     else:
+        model_result = await generate_model_or_demo_answer(state.ai_config, question, context)
+        if model_result["ok"]:
+            answer = model_result["answer"]
+        else:
+            answer = (
+                f"[LOCAL DEMO][{model_result['errorCode']}] AI provider is unavailable, so this response falls back to local demo knowledge. "
+                f"Reason: {model_result['message']}. "
+            )
         text = (
-            f"[LOCAL DEMO][SIMULATION] 当前回答基于页面上下文、可见选择对象和模拟知识库生成。范围：{scope}。"
-            f"生产事实来源：{facts['source']}，stateVersion={facts.get('stateVersion')}。"
-            f"问题摘要：{question[:120]}。"
-            "若是实时状态问题，请以回答中的 dataGeneratedAt/stateVersion 为准；若是工艺知识问题，请以后续引用版本为准。"
+            f"{answer}"
+            f" Scope: {scope}. "
+            f"Production facts source: {facts['source']}, stateVersion={facts.get('stateVersion')}. "
+            f"Question summary: {question[:120]}. "
+            "For realtime questions, verify dataGeneratedAt/stateVersion; for process knowledge, verify cited knowledgeVersion."
         )
     return split_chunks(text, 38)
 

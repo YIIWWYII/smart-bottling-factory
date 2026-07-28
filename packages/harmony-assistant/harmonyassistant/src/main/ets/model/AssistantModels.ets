@@ -146,6 +146,7 @@ export interface AssistantMessageResult {
   messageId: string
   content: string
   answerMode: AssistantAnswerMode
+  status?: AssistantUiStatus
   dataGeneratedAt?: string
   stateVersion?: number
   knowledgeVersion?: string

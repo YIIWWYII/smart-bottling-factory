@@ -113,6 +113,74 @@ def main() -> None:
         wait_health()
         print("health OK")
 
+        config = assert_envelope(http_json("GET", "/admin/ai/config"), "get ai config")
+        if config["config"]["provider"] != "LOCAL_DEMO":
+            raise AssertionError(f"unexpected default provider: {config}")
+        if "hasApiKey" not in config["config"]:
+            raise AssertionError(f"config did not mask key metadata: {config}")
+        print("ai config read OK")
+
+        updated_config = assert_envelope(
+            http_json(
+                "PUT",
+                "/admin/ai/config",
+                {
+                    "provider": "LOCAL_DEMO",
+                    "modelName": "local-demo-assistant",
+                    "apiKey": "secret-key-for-smoke-test",
+                    "requestTimeoutSeconds": 5,
+                    "ragTopK": 4,
+                    "chunkSize": 600,
+                    "chunkOverlap": 80,
+                },
+            ),
+            "update ai config",
+        )
+        if updated_config["config"]["apiKey"] == "secret-key-for-smoke-test" or not updated_config["config"]["hasApiKey"]:
+            raise AssertionError(f"api key was not masked: {updated_config}")
+        print("ai config update/mask OK")
+
+        connection = assert_envelope(http_json("POST", "/admin/ai/config/test"), "test ai config")
+        if connection["status"] != "LOCAL_DEMO_READY":
+            raise AssertionError(f"local demo provider test failed: {connection}")
+        print("ai connection test OK")
+
+        auth_failed = assert_envelope(
+            http_json(
+                "POST",
+                "/admin/ai/config/test",
+                {"provider": "OPENAI_COMPATIBLE", "baseUrl": "http://127.0.0.1:65534", "apiKey": ""},
+            ),
+            "test auth failure classification",
+        )
+        if auth_failed["errorCode"] != "AUTH_FAILED":
+            raise AssertionError(f"auth failure was not classified: {auth_failed}")
+        print("ai auth failure classification OK")
+
+        rag_not_ready = assert_envelope(
+            http_json("POST", "/admin/ai/config/test", {"knowledgeIndexEnabled": False}),
+            "test rag readiness classification",
+        )
+        if rag_not_ready["errorCode"] != "RAG_NOT_READY":
+            raise AssertionError(f"rag readiness was not classified: {rag_not_ready}")
+        print("ai rag readiness classification OK")
+
+        test_question = assert_envelope(
+            http_json("POST", "/admin/ai/config/test-question", {"question": "local demo ping"}),
+            "test ai question",
+        )
+        if "LOCAL DEMO" not in test_question["answer"]:
+            raise AssertionError(f"test question did not return local demo mark: {test_question}")
+        print("ai test question OK")
+
+        rag_status = assert_envelope(http_json("GET", "/admin/ai/rag/status"), "rag status")
+        if rag_status["documentCount"] < 1:
+            raise AssertionError(f"rag status missing demo documents: {rag_status}")
+        documents = assert_envelope(http_json("GET", "/admin/ai/rag/documents"), "rag documents")
+        if not documents["items"]:
+            raise AssertionError(f"rag documents empty: {documents}")
+        print("rag status/documents OK")
+
         context = {
             "contextVersion": 1,
             "sourceApp": "DISPLAY",
