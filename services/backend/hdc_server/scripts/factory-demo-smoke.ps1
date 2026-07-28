@@ -2,7 +2,7 @@ param(
   [string]$BaseUrl = 'http://127.0.0.1:8088/hdc/api',
   [string]$WsUrl = 'ws://127.0.0.1:8088/hdc/api/dataScreen/1',
   [string]$Username = 'admin',
-  [string]$Password = 'Admin@123456'
+  [string]$Password = 'admin123'
 )
 
 $ErrorActionPreference = 'Stop'
