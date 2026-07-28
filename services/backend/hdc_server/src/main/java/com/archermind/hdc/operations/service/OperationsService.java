@@ -15,6 +15,7 @@ import com.archermind.hdc.factory.runtime.model.DeviceRuntimeState;
 import com.archermind.hdc.factory.runtime.service.FactoryRuntimeService;
 import com.archermind.hdc.factory.capability.DeviceCapabilityCatalog;
 import com.archermind.hdc.factory.coordination.FactoryStateVersionService;
+import com.archermind.hdc.factory.parameter.ParameterStateService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -63,6 +64,8 @@ public class OperationsService {
     private DeviceCapabilityCatalog capabilityCatalog;
     @Autowired(required = false)
     private FactoryStateVersionService stateVersionService;
+    @Autowired(required = false)
+    private ParameterStateService parameterStateService;
 
     public OperationsService(OperationsPersistence persistence,
                              OperationsRealtimePublisher realtimePublisher) {
@@ -158,7 +161,7 @@ public class OperationsService {
             return existing;
         }
 
-        validateCommandSafety(request);
+        validateCommandRequest(request);
         LocalDateTime now = LocalDateTime.now();
 
         DeviceCommand value = new DeviceCommand();
@@ -177,6 +180,12 @@ public class OperationsService {
         value.setReason(request.getReason().trim());
         value.setExpectedStateVersion(request.getExpectedStateVersion());
         value.setAcceptedStateVersion(stateVersionService == null ? null : stateVersionService.current());
+        value.setExpectedParameterVersion(request.getExpectedParameterVersion());
+        value.setAcceptedParameterVersion(parameterStateService == null ? null : parameterStateService.currentVersion(request));
+        value.setParameterCode(normalize(request.getParameterCode(), parameterFromCommand(request.getCommandType())));
+        value.setAtomicGroupId(normalize(request.getAtomicGroupId(), null));
+        value.setAiDecisionId(normalize(request.getAiDecisionId(), null));
+        value.setCorrelationId(normalize(request.getCorrelationId(), null));
         value.setRecipeVersion(normalize(request.getRecipeVersion(), null));
         value.setOldValue(currentCapabilityValue(request));
         value.setNewValue(JSON.toJSONString(parameters));
@@ -212,6 +221,9 @@ public class OperationsService {
             value.setMessage(normalize(request.getMessage(), "Device acknowledgement received"));
             value.setAcknowledgedAt(LocalDateTime.now());
             value.setEdgeAckId(normalize(request.getEdgeAckId(), null));
+            if ("ACKNOWLEDGED".equals(status) && parameterStateService != null) {
+                parameterStateService.applyAcknowledged(value);
+            }
             persistence.save(value);
             realtimePublisher.publish("operations.command.changed", value);
         }
@@ -226,6 +238,22 @@ public class OperationsService {
                 .sorted(Comparator.comparing(DeviceCommand::getCreatedAt).reversed())
                 .limit(100)
                 .collect(Collectors.toList());
+    }
+
+    public DeviceCommand command(String commandId) {
+        expirePendingCommands(LocalDateTime.now());
+        return requiredCommand(commandId);
+    }
+
+    public void validateCommandRequest(DeviceCommandRequest request) {
+        require(request != null, "request is required");
+        requireText(request.getClientRequestId(), "clientRequestId is required");
+        requireText(request.getDeviceCode(), "deviceCode is required");
+        requireText(request.getCommandType(), "commandType is required");
+        Map<String, Object> parameters = request.effectiveParameters();
+        require(parameters != null && !parameters.isEmpty(), "parameters are required");
+        requireText(request.getReason(), "reason is required");
+        validateCommandSafety(request);
     }
 
     public AiDecisionResponse decide(AiDecisionRequest request) {
@@ -386,6 +414,9 @@ public class OperationsService {
         Map<String, Object> parameters = request.effectiveParameters();
         validatePayloadRanges(parameters);
         validateCapability(request, role, parameters);
+        if (parameterStateService != null) {
+            parameterStateService.validateWritable(request, role, request.getSource());
+        }
         if (request.getExpectedStateVersion() != null && stateVersionService != null) {
             require(request.getExpectedStateVersion() == stateVersionService.current(),
                     "stateVersion changed; refresh snapshot before retrying command");
@@ -498,6 +529,11 @@ public class OperationsService {
     private String defaultRole(String source) {
         String normalized = normalize(source, "OPERATOR").toUpperCase(Locale.ROOT);
         return normalized.startsWith("AI") ? "AI_DECISION" : "OPERATOR";
+    }
+
+    private String parameterFromCommand(String commandType) {
+        String normalized = normalize(commandType, "").toUpperCase(Locale.ROOT);
+        return normalized.startsWith("SET_") ? normalized.substring(4) : normalized;
     }
 
     private void reportRuntimeIncident(SensorReading reading, AlarmRecord alarm) {

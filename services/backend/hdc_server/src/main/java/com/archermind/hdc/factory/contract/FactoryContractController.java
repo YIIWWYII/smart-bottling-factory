@@ -49,6 +49,25 @@ public class FactoryContractController {
         return call(() -> service.deviceParameters(deviceCode));
     }
 
+    @GetMapping("/devices/{deviceCode}/parameter-ownership")
+    public Result<List<Map<String, Object>>> parameterOwnership(@PathVariable String deviceCode) {
+        return call(() -> service.parameterOwnership(deviceCode));
+    }
+
+    @PostMapping("/devices/{deviceCode}/manual-overrides")
+    public Result<Map<String, Object>> manualOverride(@PathVariable String deviceCode,
+                                                      @RequestBody Map<String, Object> request,
+                                                      HttpServletRequest servletRequest) {
+        return call(() -> service.manualOverride(deviceCode, request, operator(servletRequest)));
+    }
+
+    @PostMapping("/devices/{deviceCode}/manual-overrides/{parameterCode}/release")
+    public Result<Map<String, Object>> releaseManualOverride(@PathVariable String deviceCode,
+                                                             @PathVariable String parameterCode,
+                                                             HttpServletRequest servletRequest) {
+        return call(() -> service.releaseManualOverride(deviceCode, parameterCode, operator(servletRequest)));
+    }
+
     @GetMapping("/production/orders")
     public Result<List<Map<String, Object>>> orders() { return Result.success(service.orders()); }
 

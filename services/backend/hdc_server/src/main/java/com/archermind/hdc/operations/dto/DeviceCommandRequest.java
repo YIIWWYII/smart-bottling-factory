@@ -18,6 +18,11 @@ public class DeviceCommandRequest {
     private String reason;
     private Integer timeoutSeconds;
     private Long expectedStateVersion;
+    private Long expectedParameterVersion;
+    private String parameterCode;
+    private String atomicGroupId;
+    private String aiDecisionId;
+    private String correlationId;
     private String recipeVersion;
 
     public String getClientRequestId() { return clientRequestId; }
@@ -51,6 +56,16 @@ public class DeviceCommandRequest {
     public void setTimeoutSeconds(Integer timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
     public Long getExpectedStateVersion() { return expectedStateVersion; }
     public void setExpectedStateVersion(Long expectedStateVersion) { this.expectedStateVersion = expectedStateVersion; }
+    public Long getExpectedParameterVersion() { return expectedParameterVersion; }
+    public void setExpectedParameterVersion(Long expectedParameterVersion) { this.expectedParameterVersion = expectedParameterVersion; }
+    public String getParameterCode() { return parameterCode; }
+    public void setParameterCode(String parameterCode) { this.parameterCode = parameterCode; }
+    public String getAtomicGroupId() { return atomicGroupId; }
+    public void setAtomicGroupId(String atomicGroupId) { this.atomicGroupId = atomicGroupId; }
+    public String getAiDecisionId() { return aiDecisionId; }
+    public void setAiDecisionId(String aiDecisionId) { this.aiDecisionId = aiDecisionId; }
+    public String getCorrelationId() { return correlationId; }
+    public void setCorrelationId(String correlationId) { this.correlationId = correlationId; }
     public String getRecipeVersion() { return recipeVersion; }
     public void setRecipeVersion(String recipeVersion) { this.recipeVersion = recipeVersion; }
 }

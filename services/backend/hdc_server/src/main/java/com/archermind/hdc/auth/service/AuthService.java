@@ -97,6 +97,32 @@ public class AuthService {
         if (token != null) jdbcTemplate.update("delete from admin_session where token_hash=?", sha256(token));
     }
 
+    public Map<String, Object> introspect(String authorization, String sourceApp, String lineId,
+                                          String stageCode, String deviceCode, String traceCode) {
+        AdminUser user = authenticate(authorization);
+        String source = normalizeSourceApp(sourceApp);
+        Map<String, Object> scope = new LinkedHashMap<>();
+        scope.put("lineId", lineId == null || lineId.trim().isEmpty() ? "LINE-01" : lineId.trim());
+        scope.put("sourceApp", source);
+        scope.put("stageCode", scopedStage(source, stageCode));
+        scope.put("deviceCode", emptyToNull(deviceCode));
+        scope.put("traceCode", emptyToNull(traceCode));
+        scope.put("readOnly", "VIEWER".equals(user.getRole()) || "DISPLAY".equals(source));
+        scope.put("canControl", !"VIEWER".equals(user.getRole()) && !"DISPLAY".equals(source));
+        scope.put("canReviewKnowledge", "ADMIN".equals(user.getRole()) || "ENGINEER".equals(user.getRole()));
+        scope.put("canSubmitKnowledge", "ADMIN".equals(user.getRole()) || "ENGINEER".equals(user.getRole()));
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("active", true);
+        result.put("userId", String.valueOf(user.getId()));
+        result.put("username", user.getUsername());
+        result.put("displayName", user.getDisplayName());
+        result.put("role", user.getRole());
+        result.put("status", user.getStatus());
+        result.put("scope", scope);
+        return result;
+    }
+
     public List<AdminUser> listUsers() {
         return jdbcTemplate.query("select id,username,password_hash,display_name,role,status,last_login_at,created_at "
                 + "from admin_user order by created_at desc", (rs, rowNum) -> mapUser(rs));
@@ -149,6 +175,26 @@ public class AuthService {
         if (authorization == null || authorization.trim().isEmpty()) return null;
         String value = authorization.trim();
         return value.regionMatches(true, 0, "Bearer ", 0, 7) ? value.substring(7).trim() : value;
+    }
+
+    private String normalizeSourceApp(String value) {
+        String source = value == null ? "ADMIN" : value.trim().toUpperCase();
+        if (!Arrays.asList("DISPLAY", "WORKSTATION", "ADMIN").contains(source)) {
+            throw new IllegalArgumentException("sourceApp must be DISPLAY, WORKSTATION or ADMIN");
+        }
+        return source;
+    }
+
+    private String scopedStage(String sourceApp, String stageCode) {
+        if (!"WORKSTATION".equals(sourceApp)) return emptyToNull(stageCode);
+        if (stageCode == null || stageCode.trim().isEmpty()) {
+            throw new IllegalArgumentException("WORKSTATION sourceApp requires stageCode");
+        }
+        return stageCode.trim().toUpperCase();
+    }
+
+    private String emptyToNull(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 
     private String sha256(String value) {

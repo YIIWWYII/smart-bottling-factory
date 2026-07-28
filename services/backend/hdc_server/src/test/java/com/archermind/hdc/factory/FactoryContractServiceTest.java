@@ -5,6 +5,7 @@ import com.archermind.hdc.factory.contract.FactoryContractPersistence;
 import com.archermind.hdc.factory.contract.FactoryContractService;
 import com.archermind.hdc.factory.coordination.FactoryRealtimeEventPublisher;
 import com.archermind.hdc.factory.coordination.FactoryStateVersionService;
+import com.archermind.hdc.factory.parameter.ParameterStateService;
 import com.archermind.hdc.factory.simulation.FactorySimulationService;
 import com.archermind.hdc.factory.snapshot.FactorySnapshotService;
 import com.archermind.hdc.logistics.service.LogisticsService;
@@ -28,7 +29,8 @@ class FactoryContractServiceTest {
                 mock(FactoryStateVersionService.class),
                 mock(FactorySimulationService.class),
                 mock(OperationsService.class),
-                mock(LogisticsService.class));
+                mock(LogisticsService.class),
+                mock(ParameterStateService.class));
 
         List<Map<String, Object>> stages = (List<Map<String, Object>>) service.topology().get("stages");
 
