@@ -296,19 +296,6 @@ public class OperationsService {
         response.setValidationStatus(validation);
         response.setReason(reason);
         response.setParameters(parameters);
-        if (request.isAutoApply() && "PASSED".equals(validation)) {
-            DeviceCommandRequest command = new DeviceCommandRequest();
-            command.setClientRequestId("AI-" + audit.getAuditId());
-            command.setDeviceCode("LINE-CONTROL-01");
-            command.setCommandType("SET_RECIPE");
-            command.setPayload(parameters);
-            command.setSource("AI_VALIDATED");
-            command.setTraceCode(request.getTraceCode());
-            command.setOperator("AI_DECISION_CENTER");
-            command.setOperatorRole("AI_DECISION");
-            command.setReason("AI decision " + audit.getAuditId() + " passed backend safety validation");
-            response.setCommandId(createCommand(command).getCommandId());
-        }
         return response;
     }
 
