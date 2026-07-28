@@ -2,7 +2,10 @@
   "modelVersion": "5.0.0",
   "name": "entry",
   "version": "1.0.0",
-  "description": "智慧装瓶产线鸿蒙原生入口模块",
+  "description": "Bottling factory admin console entry module",
   "main": "Index.ets",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@bottling/harmony-assistant": "file:../../../../packages/harmony-assistant/harmonyassistant"
+  }
 }

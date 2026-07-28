@@ -172,6 +172,7 @@ export interface FactoryIncident {
 }
 
 export interface RuntimeSnapshot {
+  stateVersion?: number
   generatedAt?: string
   devices: Array<RuntimeDevice>
   stages: Array<RuntimeStage>
