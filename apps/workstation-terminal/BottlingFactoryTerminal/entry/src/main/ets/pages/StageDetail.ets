@@ -1,4 +1,14 @@
 import { router } from '@kit.ArkUI'
+import {
+  AssistantController,
+  AssistantDisplayField,
+  AssistantDock,
+  AssistantEntityType,
+  AssistantSelectionPublisher,
+  AssistantSelectionSource,
+  AssistantVisibilityPublisher,
+  createSelection
+} from '@bottling/harmony-assistant'
 import { Theme, statusColor } from '../common/Theme'
 import { DeviceStateRow, QualityGateRow, SectionTitle, StateBadge } from '../components/IndustrialComponents'
 import { FactoryThreeScene } from '../components/FactoryThreeScene'
@@ -8,6 +18,7 @@ import { FactoryRepository } from '../service/FactoryRepository'
 import { ApiConfig } from '../service/ApiConfig'
 import { apiClient } from '../service/ApiClient'
 import { SessionStore } from '../service/SessionStore'
+import { WorkstationAssistantHostAdapter } from '../service/WorkstationAssistantHostAdapter'
 import { isFinalCommandStatus } from '../service/WorkstationPolicy'
 import {
   AgvTask,
@@ -108,6 +119,19 @@ struct StageDetail {
   @State commandMessage: string = '尚未发起命令'
   @State auditNo: string = '--'
   @State activeCommandId: string = ''
+  private assistantSelectionPublisher: AssistantSelectionPublisher = new AssistantSelectionPublisher()
+  private assistantVisibilityPublisher: AssistantVisibilityPublisher = new AssistantVisibilityPublisher()
+  private assistantAdapter: WorkstationAssistantHostAdapter = new WorkstationAssistantHostAdapter(
+    this.assistantSelectionPublisher,
+    this.assistantVisibilityPublisher,
+    () => this.stageCode,
+    () => this.selectedDeviceCode,
+    () => this.selectedTraceCode,
+    (deviceCode: string) => this.focusDevice(deviceCode),
+    (traceCode: string) => this.focusProduct(traceCode),
+    () => this.clearFocusedEntity()
+  )
+  @State assistantController: AssistantController = new AssistantController(this.assistantAdapter)
   private refreshTimer: number = -1
   private commandTimer: number = -1
   private commandPollCount: number = 0
@@ -211,6 +235,8 @@ struct StageDetail {
     if (params !== undefined && params.stageCode !== undefined && params.stageCode.length > 0) {
       this.stageCode = params.stageCode
     }
+    this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+    this.assistantVisibilityPublisher.publish('VISIBLE')
     this.resetControlTargets()
     FactoryRepository.subscribe(this.listener)
     SessionStore.subscribe(this.sessionListener)
@@ -221,6 +247,9 @@ struct StageDetail {
   }
 
   aboutToDisappear(): void {
+    this.assistantVisibilityPublisher.publish('HIDDEN')
+    this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+    this.clearFocusedEntity()
     FactoryRepository.unsubscribe(this.listener)
     SessionStore.unsubscribe(this.sessionListener)
     FactoryRepository.closeRealtime()
@@ -663,6 +692,8 @@ struct StageDetail {
   private navigateStage(offset: number): void {
     const next = this.currentStageIndex() + offset
     if (next >= 0 && next < FACTORY_STAGES.length) {
+      this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+      this.clearFocusedEntity()
       router.replaceUrl({ url: 'pages/StageDetail', params: { stageCode: FACTORY_STAGES[next].code } })
     }
   }
@@ -674,22 +705,203 @@ struct StageDetail {
     return '运行中'
   }
 
+  private assistantPageRoute(): string {
+    return 'pages/StageDetail?stageCode=' + this.stageCode
+  }
+
+  private focusDevice(deviceCode: string): void {
+    this.selectedDeviceCode = deviceCode
+    this.selectedTraceCode = ''
+  }
+
+  private focusProduct(traceCode: string): void {
+    this.selectedTraceCode = traceCode
+    this.selectedDeviceCode = ''
+  }
+
+  private clearFocusedEntity(): void {
+    this.selectedDeviceCode = ''
+    this.selectedTraceCode = ''
+  }
+
+  private assistantField(code: string, label: string, displayValue: string, unit: string = ''): AssistantDisplayField {
+    const field: AssistantDisplayField = {
+      code: code,
+      label: label,
+      displayValue: displayValue
+    }
+    if (unit.length > 0) {
+      field.unit = unit
+    }
+    return field
+  }
+
+  private publishAssistantSelection(entityType: AssistantEntityType, entityId: string, displayText: string, source: AssistantSelectionSource, fields: Array<AssistantDisplayField> = []): void {
+    this.assistantSelectionPublisher.publish(createSelection(
+      entityType,
+      entityId,
+      displayText,
+      source,
+      this.assistantPageRoute(),
+      this.snapshot.stateVersion,
+      fields
+    ))
+  }
+
+  private deviceDisplay(deviceCode: string): string {
+    let label: string = deviceCode
+    this.currentStage().devices.forEach((item: DeviceDefinition) => {
+      if (item.code === deviceCode) {
+        label = item.name + ' · ' + item.code
+      }
+    })
+    return label
+  }
+
+  private selectDeviceCodeForAssistant(deviceCode: string, source: AssistantSelectionSource): void {
+    this.focusDevice(deviceCode)
+    this.publishAssistantSelection(
+      AssistantEntityType.DEVICE,
+      deviceCode,
+      this.deviceDisplay(deviceCode),
+      source,
+      [
+        this.assistantField('status', '状态', this.deviceRuntime(deviceCode)),
+        this.assistantField('reading', '读数', this.deviceReading(deviceCode)),
+        this.assistantField('source', '数据源', this.deviceSource(deviceCode))
+      ]
+    )
+  }
+
+  private selectDeviceForAssistant(device: DeviceDefinition, source: AssistantSelectionSource = 'ARKUI'): void {
+    this.selectDeviceCodeForAssistant(device.code, source)
+  }
+
+  private selectProductCodeForAssistant(traceCode: string, source: AssistantSelectionSource): void {
+    this.focusProduct(traceCode)
+    const run = this.stationRunsValue().find((item: FactoryRun) => item.traceCode === traceCode)
+    const display: string = run === undefined ? traceCode : traceCode + ' · ' + (run.bottleType || '待识别')
+    const fields: Array<AssistantDisplayField> = run === undefined
+      ? []
+      : [
+        this.assistantField('status', '状态', this.statusTextForRun(run.status)),
+        this.assistantField('batchCode', '批次', run.batchCode || '待绑定'),
+        this.assistantField('currentStage', '当前工位', run.currentStage)
+      ]
+    this.publishAssistantSelection(AssistantEntityType.PRODUCT, traceCode, display, source, fields)
+  }
+
+  private selectProductForAssistant(run: FactoryRun, source: AssistantSelectionSource = 'ARKUI'): void {
+    this.selectProductCodeForAssistant(run.traceCode, source)
+  }
+
+  private selectSensorForAssistant(reading: SensorReading): void {
+    if (reading.deviceCode.length > 0) {
+      this.focusDevice(reading.deviceCode)
+    }
+    this.publishAssistantSelection(
+      AssistantEntityType.SENSOR,
+      reading.readingId,
+      reading.sensorType + ' · ' + reading.deviceCode,
+      'ARKUI',
+      [
+        this.assistantField('value', '读数', reading.value.toString(), reading.unit),
+        this.assistantField('quality', '质量', reading.quality),
+        this.assistantField('occurredAt', '时间', this.formatTime(reading.occurredAt))
+      ]
+    )
+  }
+
+  private selectQualityGateForAssistant(gate: QualityGateView): void {
+    this.publishAssistantSelection(
+      AssistantEntityType.KPI,
+      this.stageCode + ':quality:' + gate.label,
+      gate.label,
+      'ARKUI',
+      [
+        this.assistantField('standard', '标准', gate.standard),
+        this.assistantField('actual', '实际', gate.actual),
+        this.assistantField('status', '结果', gate.status)
+      ]
+    )
+  }
+
+  private selectAlarmForAssistant(alarm: AlarmRecord): void {
+    if (alarm.deviceCode.length > 0) {
+      this.focusDevice(alarm.deviceCode)
+    }
+    this.publishAssistantSelection(
+      AssistantEntityType.ALARM,
+      alarm.alarmId,
+      alarm.alarmType + ' · ' + alarm.deviceCode,
+      'ARKUI',
+      [
+        this.assistantField('message', '内容', alarm.message),
+        this.assistantField('deviceCode', '设备', alarm.deviceCode)
+      ]
+    )
+  }
+
+  private selectIncidentForAssistant(incident: FactoryIncident): void {
+    if (incident.deviceCode !== undefined && incident.deviceCode.length > 0) {
+      this.focusDevice(incident.deviceCode)
+    }
+    this.publishAssistantSelection(
+      AssistantEntityType.INCIDENT,
+      incident.incidentId,
+      incident.strategy + ' · ' + (incident.deviceCode || this.stageCode),
+      'ARKUI',
+      [
+        this.assistantField('message', '内容', incident.message),
+        this.assistantField('status', '状态', incident.status)
+      ]
+    )
+  }
+
+  private selectParameterForAssistant(control: ParameterControlDefinition): void {
+    this.focusDevice(control.deviceCode)
+    this.publishAssistantSelection(
+      AssistantEntityType.PARAMETER,
+      control.deviceCode + ':' + control.parameterCode,
+      control.label + ' · ' + control.deviceCode,
+      'ARKUI',
+      [
+        this.assistantField('currentValue', '当前值', this.parameterCurrent(control).toString(), control.unit),
+        this.assistantField('targetValue', '目标值', this.targetValue(control.parameterCode).toString(), control.unit),
+        this.assistantField('range', '范围', this.parameterMin(control).toString() + '-' + this.parameterMax(control).toString(), control.unit),
+        this.assistantField('interlock', '联锁', control.interlock)
+      ]
+    )
+  }
+
+  private selectTextForAssistant(entityId: string, displayText: string, selectedText: string): void {
+    this.publishAssistantSelection(AssistantEntityType.TEXT_FRAGMENT, entityId, displayText, 'ARKUI', [
+      this.assistantField('text', '文本', selectedText)
+    ])
+  }
+
   build() {
-    Scroll() {
-      Column() {
-        this.topBar()
-        this.stageHeader()
-        this.visualSection()
-        this.stationSnapshotSection()
-        this.controlSection()
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Scroll() {
+        Column() {
+          this.topBar()
+          this.stageHeader()
+          this.visualSection()
+          this.stationSnapshotSection()
+          this.controlSection()
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .padding({ bottom: 32 })
       }
       .width('100%')
-      .alignItems(HorizontalAlign.Start)
-      .padding({ bottom: 32 })
+      .height('100%')
+      .backgroundColor(Theme.page)
+      AssistantDock({ controller: this.assistantController, panelWidth: 360, panelHeight: 560 })
+        .margin({ top: 18, right: 14 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Theme.page)
   }
 
   @Builder
@@ -699,7 +911,11 @@ struct StageDetail {
         .type(ButtonType.Normal)
         .fontColor('#FFFFFF')
         .backgroundColor(Color.Transparent)
-        .onClick(() => router.back())
+        .onClick(() => {
+          this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+          this.clearFocusedEntity()
+          router.back()
+        })
       Blank()
       Text(FactoryRepository.realtimeOnline ? 'WebSocket 在线' : 'WebSocket 重连中')
         .fontSize(10)
@@ -733,6 +949,7 @@ struct StageDetail {
             .fontColor(Theme.muted)
             .lineHeight(18)
             .margin({ top: 6 })
+            .onClick(() => this.selectTextForAssistant(this.stageCode + ':description', this.currentStage().name, this.currentStage().description))
           Text('快照版本 ' + this.snapshot.stateVersion.toString() + ' · ' + FactoryRepository.snapshotMode +
             (FactoryRepository.snapshotError.length > 0 ? ' · ' + FactoryRepository.snapshotError : ''))
             .fontSize(8)
@@ -849,6 +1066,8 @@ struct StageDetail {
         payload: this.scenePayload(viewMode),
         sceneHeight: height,
         label: title,
+        onDeviceSelected: (deviceCode: string): void => this.selectDeviceCodeForAssistant(deviceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
+        onProductSelected: (traceCode: string): void => this.selectProductCodeForAssistant(traceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
         selectedDeviceCode: $selectedDeviceCode,
         selectedTraceCode: $selectedTraceCode
       })
@@ -883,7 +1102,7 @@ struct StageDetail {
           DeviceStateRow({ index: index, device: device, state: this.deviceRuntime(device.code), source: this.deviceSource(device.code), reading: this.deviceReading(device.code) })
         }
         .width('100%')
-        .onClick(() => this.selectedDeviceCode = device.code)
+        .onClick(() => this.selectDeviceForAssistant(device))
       }, (device: DeviceDefinition) => device.code)
     }
     .width('100%')
@@ -914,6 +1133,7 @@ struct StageDetail {
           .width('100%')
           .padding(11)
           .border({ width: { bottom: 1 }, color: Theme.line })
+          .onClick(() => this.selectSensorForAssistant(reading))
         }, (reading: SensorReading) => reading.readingId)
       }
     }
@@ -945,7 +1165,7 @@ struct StageDetail {
           .width('100%')
           .padding(11)
           .border({ width: { bottom: 1 }, color: Theme.line })
-          .onClick(() => this.selectedTraceCode = run.traceCode)
+          .onClick(() => this.selectProductForAssistant(run))
         }, (run: FactoryRun) => run.traceCode)
       }
     }
@@ -969,7 +1189,11 @@ struct StageDetail {
       .backgroundColor('#F1F7FB')
       .margin({ top: 12 })
       ForEach(this.qualityGates(), (gate: QualityGateView) => {
-        QualityGateRow({ gate: gate })
+        Row() {
+          QualityGateRow({ gate: gate })
+        }
+        .width('100%')
+        .onClick(() => this.selectQualityGateForAssistant(gate))
       }, (gate: QualityGateView) => gate.label)
     }
     .width('100%')
@@ -1019,6 +1243,7 @@ struct StageDetail {
         .width('100%')
         .padding(11)
         .border({ width: { bottom: 1 }, color: Theme.line })
+        .onClick(() => this.selectAlarmForAssistant(alarm))
       }, (alarm: AlarmRecord) => alarm.alarmId)
       ForEach(this.stationIncidentsValue(), (incident: FactoryIncident) => {
         Row({ space: 10 }) {
@@ -1034,6 +1259,7 @@ struct StageDetail {
         .width('100%')
         .padding(11)
         .border({ width: { bottom: 1 }, color: Theme.line })
+        .onClick(() => this.selectIncidentForAssistant(incident))
       }, (incident: FactoryIncident) => incident.incidentId)
     }
     .width('100%')
@@ -1154,6 +1380,7 @@ struct StageDetail {
     .margin({ top: 10 })
     .backgroundColor(Theme.panelSoft)
     .border({ width: 1, color: Theme.line })
+    .onClick(() => this.selectParameterForAssistant(control))
   }
 
   @Builder
@@ -1339,6 +1566,10 @@ struct StageDetail {
     .padding(10)
     .backgroundColor(Theme.panelSoft)
     .border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: statusColor(tone) })
+    .onClick(() => this.publishAssistantSelection(AssistantEntityType.KPI, this.stageCode + ':metric:' + label, label, 'ARKUI', [
+      this.assistantField('value', '数值', value),
+      this.assistantField('note', '说明', note)
+    ]))
   }
 
   @Builder
