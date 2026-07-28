@@ -1,23 +1,43 @@
 import {
   AssistantContext,
-  AssistantEntityType,
+  AssistantDisplayField,
+  AssistantEntityRef,
+  AssistantNavigationResult,
   AssistantSelection,
-  AssistantSourceApp
+  AssistantSelectionSource,
+  AssistantServiceEndpoint,
+  AssistantSourceApp,
+  AssistantSubscription,
+  AssistantVisibility
 } from '../model/AssistantModels'
 
-export interface AssistantSelectionListener {
-  onSelectionChanged(selection: AssistantSelection | undefined): void
-}
+export type AssistantSelectionListener = (selection: AssistantSelection) => void
+export type AssistantVisibilityListener = (visibility: AssistantVisibility) => void
 
 export interface AssistantHostAdapter {
   readonly sourceApp: AssistantSourceApp
-  getContext(): AssistantContext
-  getAccessToken(): Promise<string>
-  getServiceEndpoint(): string
-  subscribeSelection(listener: AssistantSelectionListener): void
-  unsubscribeSelection(listener: AssistantSelectionListener): void
-  clearSelection(): void
-  navigateToEntity(entityType: AssistantEntityType, entityId: string): void
+  getContext(): Promise<AssistantContext>
+  getAccessToken(): Promise<string | undefined>
+  getServiceEndpoint(): AssistantServiceEndpoint
+  subscribeSelection(listener: AssistantSelectionListener): AssistantSubscription
+  subscribeVisibility(listener: AssistantVisibilityListener): AssistantSubscription
+  navigateToEntity(entity: AssistantEntityRef): Promise<AssistantNavigationResult>
+}
+
+class AssistantCallbackSubscription implements AssistantSubscription {
+  private releaseCallback: () => void
+  private released: boolean = false
+
+  constructor(releaseCallback: () => void) {
+    this.releaseCallback = releaseCallback
+  }
+
+  unsubscribe(): void {
+    if (!this.released) {
+      this.released = true
+      this.releaseCallback()
+    }
+  }
 }
 
 export class AssistantSelectionPublisher {
@@ -28,44 +48,72 @@ export class AssistantSelectionPublisher {
     return this.currentSelection
   }
 
-  subscribe(listener: AssistantSelectionListener): void {
+  subscribe(listener: AssistantSelectionListener): AssistantSubscription {
     if (this.listeners.indexOf(listener) < 0) {
       this.listeners.push(listener)
     }
-    listener.onSelectionChanged(this.currentSelection)
-  }
-
-  unsubscribe(listener: AssistantSelectionListener): void {
-    this.listeners = this.listeners.filter((item: AssistantSelectionListener) => item !== listener)
+    if (this.currentSelection !== undefined) {
+      listener(this.currentSelection)
+    }
+    return new AssistantCallbackSubscription(() => {
+      this.listeners = this.listeners.filter((item: AssistantSelectionListener) => item !== listener)
+    })
   }
 
   publish(selection: AssistantSelection): void {
-    this.currentSelection = selection
-    this.notify()
+    this.currentSelection = selection.action === 'CLEAR' ? undefined : selection
+    this.notify(selection)
   }
 
-  clear(): void {
-    this.currentSelection = undefined
-    this.notify()
+  clear(pageRoute: string = '', source: AssistantSelectionSource = 'ARKUI'): void {
+    const selection: AssistantSelection = createClearSelection(pageRoute, source)
+    this.publish(selection)
   }
 
-  private notify(): void {
+  private notify(selection: AssistantSelection): void {
     this.listeners.forEach((listener: AssistantSelectionListener) => {
-      listener.onSelectionChanged(this.currentSelection)
+      listener(selection)
+    })
+  }
+}
+
+export class AssistantVisibilityPublisher {
+  private listeners: AssistantVisibilityListener[] = []
+  private currentVisibility: AssistantVisibility = 'VISIBLE'
+
+  get current(): AssistantVisibility {
+    return this.currentVisibility
+  }
+
+  subscribe(listener: AssistantVisibilityListener): AssistantSubscription {
+    if (this.listeners.indexOf(listener) < 0) {
+      this.listeners.push(listener)
+    }
+    listener(this.currentVisibility)
+    return new AssistantCallbackSubscription(() => {
+      this.listeners = this.listeners.filter((item: AssistantVisibilityListener) => item !== listener)
+    })
+  }
+
+  publish(visibility: AssistantVisibility): void {
+    this.currentVisibility = visibility
+    this.listeners.forEach((listener: AssistantVisibilityListener) => {
+      listener(visibility)
     })
   }
 }
 
 export function createSelection(
-  entityType: AssistantEntityType,
+  entityType: string,
   entityId: string,
   displayText: string,
-  source: string,
+  source: AssistantSelectionSource,
   pageRoute: string,
-  stateVersion: number,
-  selectedText?: string
+  stateVersion?: number,
+  fields: AssistantDisplayField[] = []
 ): AssistantSelection {
   return {
+    action: 'SELECT',
     entityType: entityType,
     entityId: entityId,
     displayText: displayText,
@@ -73,6 +121,30 @@ export function createSelection(
     pageRoute: pageRoute,
     stateVersion: stateVersion,
     selectedAt: new Date().toISOString(),
-    selectedText: selectedText
+    fields: fields
+  }
+}
+
+export function createClearSelection(
+  pageRoute: string = '',
+  source: AssistantSelectionSource = 'ARKUI'
+): AssistantSelection {
+  return {
+    action: 'CLEAR',
+    entityType: '',
+    entityId: '',
+    displayText: '',
+    source: source,
+    pageRoute: pageRoute,
+    selectedAt: new Date().toISOString(),
+    fields: []
+  }
+}
+
+export function createEntityRef(selection: AssistantSelection): AssistantEntityRef {
+  return {
+    entityType: selection.entityType,
+    entityId: selection.entityId,
+    pageRoute: selection.pageRoute
   }
 }

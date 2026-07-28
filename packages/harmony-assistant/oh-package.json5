@@ -1,7 +1,7 @@
 {
   "modelVersion": "6.1.1",
   "name": "bottling-harmony-assistant-project",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Build project for the shared bottling factory HarmonyOS assistant HAR.",
   "license": "Apache-2.0",
   "dependencies": {},

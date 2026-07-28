@@ -15,7 +15,7 @@ struct AssistantMessageCard {
     messageId: '',
     role: 'ASSISTANT',
     content: '',
-    status: AssistantUiStatus.COMPLETE,
+    status: AssistantUiStatus.COMPLETED,
     citations: [],
     createdAt: ''
   }
@@ -104,7 +104,7 @@ export struct AssistantPanel {
               .maxLines(2)
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           Button('定位').height(30).fontSize(10).borderRadius(3)
-            .onClick(() => this.controller.navigateToSelection())
+            .onClick(() => { void this.controller.navigateToSelection() })
           Button('清除').height(30).fontSize(10).borderRadius(3)
             .onClick(() => this.controller.clearSelection())
         }
@@ -138,7 +138,7 @@ export struct AssistantPanel {
           .width('100%')
           .padding({ left: 12, right: 12, top: 8, bottom: 8 })
           .fontSize(11)
-          .fontColor(this.controller.status === AssistantUiStatus.ERROR ? PANEL_DANGER : PANEL_MUTED)
+          .fontColor(this.controller.status === AssistantUiStatus.FAILED ? PANEL_DANGER : PANEL_MUTED)
           .backgroundColor('#FFF1F0')
       }
 
@@ -161,7 +161,7 @@ export struct AssistantPanel {
             .borderRadius(3)
             .onClick(() => this.controller.stop())
         } else {
-          if (this.controller.status === AssistantUiStatus.ERROR ||
+          if (this.controller.status === AssistantUiStatus.FAILED ||
             this.controller.status === AssistantUiStatus.STOPPED) {
             Button('重试')
               .height(38)

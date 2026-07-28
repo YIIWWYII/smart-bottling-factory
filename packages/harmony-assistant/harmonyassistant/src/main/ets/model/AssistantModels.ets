@@ -1,22 +1,23 @@
-export enum AssistantSourceApp {
-  DISPLAY = 'DISPLAY',
-  WORKSTATION = 'WORKSTATION',
-  ADMIN = 'ADMIN'
-}
+export type AssistantSourceApp = 'DISPLAY' | 'WORKSTATION' | 'ADMIN'
+export type AssistantSelectionSource = 'ARKUI' | 'THREE_2D' | 'THREE_3D'
+export type AssistantVisibility = 'VISIBLE' | 'HIDDEN'
+export type AssistantSelectionAction = 'SELECT' | 'CLEAR'
 
 export enum AssistantEntityType {
-  TEXT = 'TEXT',
+  LINE = 'LINE',
   STAGE = 'STAGE',
   KPI = 'KPI',
   SENSOR = 'SENSOR',
   ALARM = 'ALARM',
+  INCIDENT = 'INCIDENT',
   DEVICE = 'DEVICE',
   PRODUCT = 'PRODUCT',
   PARAMETER = 'PARAMETER',
   TABLE_ROW = 'TABLE_ROW',
   AUDIT = 'AUDIT',
   CONFIG = 'CONFIG',
-  KNOWLEDGE_DOCUMENT = 'KNOWLEDGE_DOCUMENT'
+  KNOWLEDGE_DOCUMENT = 'KNOWLEDGE_DOCUMENT',
+  TEXT_FRAGMENT = 'TEXT_FRAGMENT'
 }
 
 export enum AssistantQuestionType {
@@ -33,36 +34,74 @@ export enum AssistantAnswerMode {
 export enum AssistantUiStatus {
   IDLE = 'IDLE',
   SENDING = 'SENDING',
-  COMPLETE = 'COMPLETE',
-  ERROR = 'ERROR',
+  STREAMING = 'STREAMING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
   STOPPED = 'STOPPED',
   UNAVAILABLE = 'UNAVAILABLE'
 }
 
+export interface AssistantServiceEndpoint {
+  httpBaseUrl: string
+  wsBaseUrl: string
+}
+
+export interface AssistantDisplayField {
+  code: string
+  label: string
+  displayValue: string
+  unit?: string
+}
+
+export interface AssistantEntityRef {
+  entityType: string
+  entityId: string
+  lineId?: string
+  stageCode?: string
+  pageRoute?: string
+}
+
 export interface AssistantSelection {
-  entityType: AssistantEntityType
+  action: AssistantSelectionAction
+  entityType: string
   entityId: string
   displayText: string
-  source: string
+  source: AssistantSelectionSource
   pageRoute: string
-  stateVersion: number
+  stateVersion?: number
   selectedAt: string
-  selectedText?: string
+  fields: AssistantDisplayField[]
 }
 
 export interface AssistantContext {
+  contextVersion: number
   sourceApp: AssistantSourceApp
   pageRoute: string
-  lineId: string
+  capturedAt: string
+  lineId?: string
   stageCode?: string
   deviceCode?: string
   traceCode?: string
-  stateVersion: number
-  selectedEntityType?: AssistantEntityType
-  selectedEntityId?: string
-  selectedText?: string
-  userRole: string
-  capturedAt: string
+  stateVersion?: number
+  dataGeneratedAt?: string
+  userRoleHint?: string
+  selection?: AssistantSelection
+}
+
+export interface AssistantNavigationResult {
+  handled: boolean
+  reason?: string
+}
+
+export interface AssistantSubscription {
+  unsubscribe(): void
+}
+
+export interface AssistantPanelOptions {
+  defaultVisible?: boolean
+  panelWidth?: number
+  panelHeight?: number
+  theme?: string
 }
 
 export interface AssistantCitation {
@@ -71,6 +110,7 @@ export interface AssistantCitation {
   source: string
   version: string
   excerpt: string
+  entity?: AssistantEntityRef
 }
 
 export interface AssistantMessageView {

@@ -2,17 +2,29 @@ export {
   AssistantAnswerMode,
   AssistantCitation,
   AssistantContext,
+  AssistantDisplayField,
+  AssistantEntityRef,
   AssistantEntityType,
   AssistantMessageView,
+  AssistantNavigationResult,
+  AssistantPanelOptions,
   AssistantQuestionType,
   AssistantSelection,
+  AssistantSelectionSource,
+  AssistantServiceEndpoint,
   AssistantSourceApp,
-  AssistantUiStatus
+  AssistantSubscription,
+  AssistantUiStatus,
+  AssistantVisibility
 } from './src/main/ets/model/AssistantModels'
 export {
   AssistantHostAdapter,
   AssistantSelectionListener,
   AssistantSelectionPublisher,
+  AssistantVisibilityListener,
+  AssistantVisibilityPublisher,
+  createClearSelection,
+  createEntityRef,
   createSelection
 } from './src/main/ets/host/AssistantHostAdapter'
 export { AssistantApiError } from './src/main/ets/service/AssistantApiClient'

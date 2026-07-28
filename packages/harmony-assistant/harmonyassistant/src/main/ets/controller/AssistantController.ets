@@ -1,4 +1,9 @@
-import { AssistantHostAdapter, AssistantSelectionListener } from '../host/AssistantHostAdapter'
+import {
+  AssistantHostAdapter,
+  AssistantSelectionListener,
+  AssistantVisibilityListener,
+  createEntityRef
+} from '../host/AssistantHostAdapter'
 import {
   AssistantContext,
   AssistantMessageResult,
@@ -6,12 +11,14 @@ import {
   AssistantQuestionType,
   AssistantSelection,
   AssistantSendMessagePayload,
-  AssistantUiStatus
+  AssistantSubscription,
+  AssistantUiStatus,
+  AssistantVisibility
 } from '../model/AssistantModels'
 import { AssistantApiClient, AssistantApiError } from '../service/AssistantApiClient'
 
 @Observed
-export class AssistantController implements AssistantSelectionListener {
+export class AssistantController {
   readonly adapter: AssistantHostAdapter
   visible: boolean = false
   hostVisible: boolean = true
@@ -26,15 +33,22 @@ export class AssistantController implements AssistantSelectionListener {
   private lastQuestion: string = ''
   private disposed: boolean = false
   private requestCancelled: boolean = false
+  private selectionSubscription: AssistantSubscription
+  private visibilitySubscription: AssistantSubscription
+  private selectionListener: AssistantSelectionListener
+  private visibilityListener: AssistantVisibilityListener
 
   constructor(adapter: AssistantHostAdapter) {
     this.adapter = adapter
     this.client = new AssistantApiClient(adapter)
-    this.adapter.subscribeSelection(this)
-  }
-
-  onSelectionChanged(selection: AssistantSelection | undefined): void {
-    this.activeSelection = selection
+    this.selectionListener = (selection: AssistantSelection): void => {
+      this.onSelectionChanged(selection)
+    }
+    this.visibilityListener = (visibility: AssistantVisibility): void => {
+      this.onVisibilityChanged(visibility)
+    }
+    this.selectionSubscription = this.adapter.subscribeSelection(this.selectionListener)
+    this.visibilitySubscription = this.adapter.subscribeVisibility(this.visibilityListener)
   }
 
   toggle(): void {
@@ -42,7 +56,9 @@ export class AssistantController implements AssistantSelectionListener {
   }
 
   open(): void {
-    this.visible = true
+    if (this.hostVisible) {
+      this.visible = true
+    }
   }
 
   close(): void {
@@ -54,24 +70,34 @@ export class AssistantController implements AssistantSelectionListener {
   }
 
   reportHostVisibility(visible: boolean): void {
-    this.hostVisible = visible
-    if (!visible) {
-      this.close()
-    }
+    this.onVisibilityChanged(visible ? 'VISIBLE' : 'HIDDEN')
   }
 
   clearSelection(): void {
-    this.adapter.clearSelection()
+    this.onSelectionChanged({
+      action: 'CLEAR',
+      entityType: '',
+      entityId: '',
+      displayText: '',
+      source: 'ARKUI',
+      pageRoute: '',
+      selectedAt: new Date().toISOString(),
+      fields: []
+    })
   }
 
-  navigateToSelection(): void {
+  async navigateToSelection(): Promise<void> {
     if (this.activeSelection !== undefined) {
-      this.adapter.navigateToEntity(this.activeSelection.entityType, this.activeSelection.entityId)
+      const result = await this.adapter.navigateToEntity(createEntityRef(this.activeSelection))
+      if (!result.handled) {
+        this.errorMessage = result.reason === undefined ? '当前页面无法定位该对象' : result.reason
+        this.status = AssistantUiStatus.FAILED
+      }
     }
   }
 
   async sendQuestion(questionOverride?: string): Promise<void> {
-    if (this.disposed || this.status === AssistantUiStatus.SENDING) {
+    if (this.disposed || this.status === AssistantUiStatus.SENDING || this.status === AssistantUiStatus.STREAMING) {
       return
     }
     const question: string = (questionOverride === undefined ? this.draft : questionOverride).trim()
@@ -86,7 +112,7 @@ export class AssistantController implements AssistantSelectionListener {
     this.status = AssistantUiStatus.SENDING
     this.appendUserMessage(question)
     try {
-      const context: AssistantContext = this.buildContext()
+      const context: AssistantContext = await this.buildContext()
       if (this.conversationId.length === 0) {
         const conversation = await this.client.createConversation({ context: context })
         this.conversationId = conversation.conversationId
@@ -100,18 +126,18 @@ export class AssistantController implements AssistantSelectionListener {
       }
       const result: AssistantMessageResult = await this.client.sendMessage(this.conversationId, payload)
       this.messages = this.messages.concat([this.toAssistantMessage(result)])
-      this.status = AssistantUiStatus.COMPLETE
+      this.status = AssistantUiStatus.COMPLETED
     } catch (error) {
       if (!this.requestCancelled) {
         const apiError: AssistantApiError = error as AssistantApiError
         this.errorMessage = apiError.message || 'AI 助手暂时不可用'
-        this.status = AssistantUiStatus.ERROR
+        this.status = AssistantUiStatus.FAILED
       }
     }
   }
 
   stop(): void {
-    if (this.status === AssistantUiStatus.SENDING) {
+    if (this.status === AssistantUiStatus.SENDING || this.status === AssistantUiStatus.STREAMING) {
       this.requestCancelled = true
       this.status = AssistantUiStatus.STOPPED
       this.client.cancelActiveRequest()
@@ -119,33 +145,47 @@ export class AssistantController implements AssistantSelectionListener {
     }
   }
 
-  async retry(): Promise<void> {
-    if (this.lastQuestion.length > 0 && this.status !== AssistantUiStatus.SENDING) {
+  async retryLast(): Promise<void> {
+    if (this.lastQuestion.length > 0 &&
+      this.status !== AssistantUiStatus.SENDING &&
+      this.status !== AssistantUiStatus.STREAMING) {
       await this.sendQuestion(this.lastQuestion)
     }
+  }
+
+  async retry(): Promise<void> {
+    await this.retryLast()
   }
 
   dispose(): void {
     this.disposed = true
     this.requestCancelled = true
     this.client.cancelActiveRequest()
-    this.adapter.unsubscribeSelection(this)
+    this.selectionSubscription.unsubscribe()
+    this.visibilitySubscription.unsubscribe()
   }
 
-  private buildContext(): AssistantContext {
-    const context: AssistantContext = this.adapter.getContext()
+  private onSelectionChanged(selection: AssistantSelection): void {
+    this.activeSelection = selection.action === 'CLEAR' ? undefined : selection
+  }
+
+  private onVisibilityChanged(visibility: AssistantVisibility): void {
+    this.hostVisible = visibility === 'VISIBLE'
+    if (!this.hostVisible) {
+      this.close()
+      this.stop()
+    }
+  }
+
+  private async buildContext(): Promise<AssistantContext> {
+    const context: AssistantContext = await this.adapter.getContext()
+    context.contextVersion = context.contextVersion <= 0 ? 1 : context.contextVersion
     context.sourceApp = this.adapter.sourceApp
     context.capturedAt = new Date().toISOString()
     if (this.activeSelection !== undefined) {
-      context.selectedEntityType = this.activeSelection.entityType
-      context.selectedEntityId = this.activeSelection.entityId
-      context.selectedText = this.activeSelection.selectedText === undefined
-        ? this.activeSelection.displayText
-        : this.activeSelection.selectedText
+      context.selection = this.activeSelection
     } else {
-      context.selectedEntityType = undefined
-      context.selectedEntityId = undefined
-      context.selectedText = undefined
+      context.selection = undefined
     }
     return context
   }
@@ -155,7 +195,7 @@ export class AssistantController implements AssistantSelectionListener {
       messageId: 'local-' + Date.now().toString(),
       role: 'USER',
       content: question,
-      status: AssistantUiStatus.COMPLETE,
+      status: AssistantUiStatus.COMPLETED,
       citations: [],
       createdAt: new Date().toISOString()
     }
@@ -167,7 +207,7 @@ export class AssistantController implements AssistantSelectionListener {
       messageId: result.messageId,
       role: 'ASSISTANT',
       content: result.content,
-      status: AssistantUiStatus.COMPLETE,
+      status: AssistantUiStatus.COMPLETED,
       answerMode: result.answerMode,
       dataGeneratedAt: result.dataGeneratedAt,
       stateVersion: result.stateVersion,
