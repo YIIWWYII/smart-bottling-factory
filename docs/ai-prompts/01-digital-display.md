@@ -1,6 +1,6 @@
 # 数字展板补救开发对话提示词
 
-你负责智慧装瓶工厂的鸿蒙数字展板。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-display`，分支是 `codex/display`，唯一业务写入范围是 `apps/digital-display/BottlingFactoryDisplay`。不要修改小屏、后台管理、AI 协同端或后端；如契约不足，只提交契约变更提案，不要擅自改别人的工程。
+你负责智慧装瓶工厂的鸿蒙数字展板。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-display`，分支是 `codex/display`，唯一业务写入范围是 `apps/digital-display/BottlingFactoryDisplay`。不要修改小屏、后台管理、生产后端或 AI 中枢；如契约不足，只提交契约变更提案。
 
 ## 当前阶段
 
@@ -8,7 +8,7 @@
 
 ## 先做
 
-1. 阅读根 `README.md`、`contracts/`、`docs/engineering/DEVELOPMENT_STANDARD.md`、`docs/engineering/TESTING_TOOLCHAIN.md` 和本工程 README。
+1. 先 `git fetch origin`、`git pull --ff-only origin codex/display`，再阅读 GitHub 最新架构分支的根 `README.md`、`contracts/`、开发标准、测试规范和本工程 README。
 2. 检查 `git status --short` 和当前分支，保护已有改动。
 3. 必须调用 `$deveco-cli`；会话可见时优先使用官方 `deveco-cli` MCP。鸿蒙错误先查 `D:\HarmonyOS-Dev\Logs\devecocli-official-docs.md`，再查 `devecocli docs`，再查华为官方文档；开发记录只写入 D 盘开发日志。
 4. Three.js rawfile 有独立浏览器测试入口时调用 `$playwright`；它只验证 Web 层，不能替代鸿蒙模拟器。只有 DevEco Test Runner、模拟器窗口或 Web 调试必须操作 UI 时才调用 `$computer-use:computer-use`。
@@ -21,6 +21,10 @@
 
 HTTP 首屏快照，WebSocket 实时通知；断线后清楚标识并重连、补拉。后端无数据时可显示明确的 `LOCAL DEMO`，不能伪装 MQTT。所有数值和数组做好缺失保护，修复当前总览空数据可能触发的 `toString` 崩溃。
 
+## 上下文 AI 助手
+
+在总览和工位详情提供可收起的原生 ArkUI 助手侧栏。支持自由问询，以及选中工位、KPI、报警、产品、文字和 Three.js 设备/物料后“问 AI”。调用独立 AI 中枢，发送统一 `AssistantContext`；Three.js 选中对象通过 JS Bridge 上报实体类型和 ID。展板助手只回答全局/当前工位的只读问题，实时回答显示数据时间和 `stateVersion`，文档回答显示知识版本和引用。AI 不可达时显示真实错误，不生成本地假回答。
+
 ## 补救顺序
 
 1. 对照 `client-capability-matrix.md`、`shared-snapshot-contract.md` 和实时契约审计现有 Repository、ArkTS 页面、ArkWeb bridge、2D/3D rawfile。
@@ -31,7 +35,7 @@ HTTP 首屏快照，WebSocket 实时通知；断线后清楚标识并重连、�
 
 ## 禁止
 
-- 不加登录、注册、后台管理、设备控制或参数写入。
+- 不加登录、注册、后台管理、设备控制或参数写入；AI 助手也不能成为控制入口。
 - 不连接 MQTT，不在前端实现业务真相或随机生成彼此不一致的数据。
 - 不引入网络 CDN，Three.js 及许可证都随 HAP 本地打包。
 - 不做只有样式不能点击的按钮，不牺牲滚动和小尺寸可用性。

@@ -2,9 +2,9 @@
 
 ## 边界
 
-- 当前展示通道：`ws://<backend-host>:8088/hdc/api/dataScreen/{groupId}`。
+- 生产实时通道：`ws://<backend-host>:8088/hdc/api/dataScreen/{groupId}`；AI 助手/决策通道由 AI 中枢提供 `ws://<ai-host>:8091/api/ws/{clientId}`。
 - WebSocket 用于主动通知和关键事件；HTTP 用于首屏快照、断线补偿、详情和所有有副作用的控制。
-- MQTT 是硬件/边缘层与后端之间的设备消息载体，四个鸿蒙前端不直接连接 MQTT。
+- MQTT 是硬件/边缘层与生产后端之间的设备消息载体，三个鸿蒙前端和 AI 中枢不直接冒充边缘控制器发布设备命令。
 
 ## 统一事件信封
 
@@ -48,24 +48,25 @@
 
 | 类型 | 消费端 | 处理 |
 | --- | --- | --- |
-| `factory.stage.changed` | 四前端 | 刷新产品、工位和决策上下文 |
-| `factory.runtime.changed` | 四前端 | 更新设备、速度、进度、参数版本和缓冲 |
-| `operations.sensor.recorded` | 四前端 | 更新读数和质量门 |
-| `operations.alarm.changed` | 四前端 | 更新颜色、报警和联锁 |
-| `operations.command.changed` | 终端、管理、AI 协同端 | 更新人工/AI 命令最终结果 |
-| `parameter.override.changed` | 终端、管理、AI 协同端 | 更新字段所有权、人工锁和 AI 跳过原因 |
-| `product.changed` | 四前端 | 更新产品位置、瓶型、状态、质量和追踪链 |
-| `quality.gate.changed` | 四前端 | 更新质量门判定、依据和规则版本 |
+| `factory.stage.changed` | 三前端、AI 工具 | 刷新产品、工位和决策上下文 |
+| `factory.runtime.changed` | 三前端、AI 工具 | 更新设备、速度、进度、参数版本和缓冲 |
+| `operations.sensor.recorded` | 三前端、AI 工具 | 更新读数和质量门 |
+| `operations.alarm.changed` | 三前端、AI 工具 | 更新颜色、报警和联锁 |
+| `operations.command.changed` | 终端、管理、AI 中枢 | 更新人工/AI 命令最终结果 |
+| `parameter.override.changed` | 终端、管理、AI 中枢 | 更新字段所有权、人工锁和 AI 跳过原因 |
+| `product.changed` | 三前端、AI 工具 | 更新产品位置、瓶型、状态、质量和追踪链 |
+| `quality.gate.changed` | 三前端、AI 工具 | 更新质量门判定、依据和规则版本 |
 | `production.order.changed` | 展板、终端、管理 | 更新工单、批次、计划和实际进度 |
 | `logistics.changed` | 展板、终端、管理 | 更新 AGV 运力、任务、速度和避障 |
 | `warehouse.changed` | 展板、终端、管理 | 更新仓区安全、库位和箱级库存 |
-| `config.recipe.changed` | 终端、管理、AI 协同端；展板摘要 | 更新批准配方、参数来源和版本 |
-| `config.threshold.changed` | 四前端 | 只读刷新安全阈值版本和相关质量门 |
-| `simulation.changed` | 四前端 | 更新中央模拟场景、时钟、运行状态和来源 |
-| `ai.decision.changed` | 四前端 | 更新识别、RAG、校验、字段补丁、人工锁和执行状态 |
-| `ai.conversation.delta` | AI 协同端 | 流式回答片段、引用和完成/失败状态 |
-| `knowledge.submission.changed` | AI 协同端、管理 | 更新处理、待审核、批准或拒绝状态 |
-| `knowledge.index.changed` | AI 协同端、管理 | 更新正式入库、向量化、索引或撤销状态 |
+| `config.recipe.changed` | 终端、管理、AI 工具；展板摘要 | 更新批准配方、参数来源和版本 |
+| `config.threshold.changed` | 三前端、AI 工具 | 只读刷新安全阈值版本和相关质量门 |
+| `simulation.changed` | 三前端、AI 工具 | 更新中央模拟场景、时钟、运行状态和来源 |
+| `ai.vision.changed` | 三前端按范围 | 更新瓶型、缺陷、置信度和视觉证据摘要 |
+| `ai.decision.changed` | 三前端按范围 | 更新 RAG、实时校验、字段补丁、人工锁和执行状态 |
+| `ai.conversation.delta` | 发起问询的前端 | 流式回答片段、实时数据时间、引用和完成/失败状态 |
+| `knowledge.submission.changed` | 管理 | 更新处理、待审核、批准或拒绝状态 |
+| `knowledge.index.changed` | 管理 | 更新正式入库、向量化、索引或撤销状态 |
 
 ## 客户端规则
 
@@ -76,3 +77,4 @@
 5. Three.js 2D/3D 使用同一份快照。速度、进度、设备状态、产品位置和颜色不得各自随机生成。
 6. 产线事件至少携带 `lineId` 和 `stateVersion`，工位事件还要携带 `stageCode`；问答/知识事件携带聚合 ID 和聚合版本。客户端只应用比当前版本新的事件。
 7. 同一业务变化可以触发多个主题，但后端必须使用稳定 `eventId`/关联号，客户端不得重复累计 KPI。
+8. 生产事件由 Spring Boot 发布，AI 事件由 AI 中枢发布；二者通过 `correlationId/decisionId/commandId` 关联，不混用数据库或伪造对方状态。

@@ -1,6 +1,6 @@
-# 四前端共享快照契约
+# 生产快照与 AI 上下文契约
 
-数字展板工位详情、小屏当前环节、后台运营监控和 AI 协同端的决策上下文必须读取同一个后端模型。允许各端排版不同，不允许字段含义和计算口径不同。
+数字展板工位详情、小屏当前环节、后台运营监控和 AI 中枢决策工具必须读取同一个 Spring Boot 生产事实模型。允许各端排版不同，不允许字段含义和计算口径不同。
 
 ## 整线快照
 
@@ -21,7 +21,7 @@
 
 ## 工位快照
 
-`StageSnapshot` 是四前端关联同一产线事实的核心，至少包含：
+`StageSnapshot` 是三前端和 AI 中枢关联同一产线事实的核心，至少包含：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -61,8 +61,19 @@
 
 ## 一致性规则
 
-1. 四前端相同 `stateVersion` 下，相同设备、产品、参数所有权和人工锁状态必须一致。
+1. 三前端与 AI 中枢在相同 `stateVersion` 下，相同设备、产品、参数所有权和人工锁状态必须一致。
 2. WebSocket 只通知增量变化；客户端发现版本跳跃时重新 GET 快照。
 3. 前端 KPI 只做展示格式化，统计口径由后端返回。
 4. 质量门最终结果、异常影响、AI 校验和参数可修改性由后端返回，前端不得分别重算。
-5. `LOCAL DEMO` 只能用于单 App 离线展示；跨端联调必须使用后端中央 `SIMULATION`，否则无法保证一致。
+5. `LOCAL DEMO` 只能用于单 App 离线展示；跨端联调和 AI 实时问答必须使用后端中央 `SIMULATION`，否则无法保证一致。
+
+## 助手上下文
+
+三个前端调用 AI 助手时发送统一 `AssistantContext`，至少包含：
+
+- `sourceApp`：`DISPLAY`、`WORKSTATION`、`ADMIN`。
+- `pageRoute`、`lineId`、可选 `stageCode/deviceCode/traceCode`。
+- `stateVersion`、`selectedEntityType`、`selectedEntityId`、`selectedText`。
+- `userRole` 和短期身份令牌；AI 中枢必须再次校验，不能只信任前端字段。
+
+选中问询可来自 ArkUI 文字、列表行、参数卡片，也可由 Three.js 通过 JS Bridge 上报设备或物料对象。若 `stateVersion` 已过期，AI 中枢先通过生产后端获取最新快照，再回答并标注数据时间。

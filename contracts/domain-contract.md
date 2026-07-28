@@ -29,8 +29,20 @@
 - `DeviceCommand`：命令 ID、客户端请求号、设备、类型、参数、来源、AI 决策、操作者、状态、消息和回执时间。
 - `AgvTask`：车辆、箱码、起终点、距离、速度、负载、超声波距离、状态、模式和时间。
 - `ParameterState`：参数编码、值、单位、所有者来源、人工/安全锁、锁定人/原因、参数版本和原子组。
+- `VisionInference`：推理 ID、任务类型、摄像头、产线/工序、可选产品追踪号、采集时间、瓶型、缺陷列表、置信度、证据引用、模型版本、推理状态和耗时。原始图片默认保留在视觉服务或对象存储中，提交给生产后端的只能是结构化结果和受控证据引用。
 - `AiDecision`：识别瓶型、上下文版本、知识引用、数据库校验、字段级建议、阻止字段、命令和回执。
 - `KnowledgeSubmission`：文件、来源、适用范围、提交人、审核记录、知识版本和索引状态。
+- `AssistantContext`：来源应用 `sourceApp`、页面路由、产线、可选工序/设备/产品、`stateVersion`、选中实体类型/ID、选中文字、用户角色和上下文采集时间。身份令牌必须放在 `Authorization` 请求头中，不得写入会话正文或持久化上下文字段。
+- `AssistantConversation`：会话 ID、用户 ID、来源应用、可访问产线/工序范围、标题、创建时间和更新时间。
+- `AssistantMessage`：消息 ID、会话 ID、角色、问询类型（自由或选中）、问题、`AssistantContext`、回答模式（实时、RAG 或混合）、数据时间、事实 `stateVersion`、知识版本、引用、工具调用摘要和创建时间。
+
+## AI 上下文约束
+
+1. `sourceApp` 只能是 `DISPLAY`、`WORKSTATION`、`ADMIN`；AI 中枢必须根据真实登录身份和权限重新裁剪上下文，不能信任前端自报的 `userRole` 或实体范围。
+2. `selectedEntityType` 至少支持 `TEXT`、`STAGE`、`KPI`、`ALARM`、`DEVICE`、`PRODUCT`、`PARAMETER`、`TABLE_ROW`、`KNOWLEDGE_DOCUMENT`；`selectedEntityId` 使用后端稳定 ID，Three.js 对象通过 JS Bridge 上报同一 ID。
+3. 实时或混合回答必须返回事实数据时间和实际使用的 `stateVersion`；收到过期版本时，AI 中枢先通过生产后端只读接口补取最新快照。
+4. RAG 或混合回答必须返回可核验引用和知识版本；未审核、已拒绝、已撤销或已被替代的资料不得参与检索。
+5. 助手消息只能形成回答和建议，不能创建 `DeviceCommand` 或 `command-intent`。隐式决策是独立流程，只有它能生成字段级命令意图，并仍由 Spring Boot 完成安全校验和执行。
 
 ## 可视化映射
 

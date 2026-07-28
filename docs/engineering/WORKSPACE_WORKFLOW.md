@@ -7,7 +7,7 @@
 | 数字展板 | `D:\HarmonyOS-Dev\Workspaces\bottling-display` | `codex/display` |
 | 小屏终端 | `D:\HarmonyOS-Dev\Workspaces\bottling-terminal` | `codex/terminal` |
 | 后台管理 | `D:\HarmonyOS-Dev\Workspaces\bottling-admin` | `codex/admin` |
-| AI 协同端 | `D:\HarmonyOS-Dev\Workspaces\bottling-ai-assistant` | `codex/ai-assistant` |
+| AI 中枢 | `D:\HarmonyOS-Dev\Workspaces\bottling-ai-center` | `codex/ai-center` |
 | 后端 | `D:\HarmonyOS-Dev\Workspaces\bottling-backend` | `codex/backend` |
 | 融合评审 | `D:\HarmonyOS-Dev\Workspaces\bottling-integration` | `integration/full-system` |
 
@@ -24,7 +24,7 @@ git fetch origin
 git worktree add -b codex/display D:\HarmonyOS-Dev\Workspaces\bottling-display origin/main
 git worktree add -b codex/terminal D:\HarmonyOS-Dev\Workspaces\bottling-terminal origin/main
 git worktree add -b codex/admin D:\HarmonyOS-Dev\Workspaces\bottling-admin origin/main
-git worktree add -b codex/ai-assistant D:\HarmonyOS-Dev\Workspaces\bottling-ai-assistant origin/main
+git worktree add -b codex/ai-center D:\HarmonyOS-Dev\Workspaces\bottling-ai-center origin/main
 git worktree add -b codex/backend D:\HarmonyOS-Dev\Workspaces\bottling-backend origin/main
 git worktree add -b integration/full-system D:\HarmonyOS-Dev\Workspaces\bottling-integration origin/main
 ```

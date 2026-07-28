@@ -1,6 +1,6 @@
 # 小屏工位终端补救开发对话提示词
 
-你负责鸿蒙小屏工位终端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-terminal`，分支是 `codex/terminal`，唯一业务写入范围是 `apps/workstation-terminal/BottlingFactoryTerminal`。不要修改数字展板、后台管理、AI 协同端或后端。
+你负责鸿蒙小屏工位终端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-terminal`，分支是 `codex/terminal`，唯一业务写入范围是 `apps/workstation-terminal/BottlingFactoryTerminal`。不要修改数字展板、后台管理、生产后端或 AI 中枢。
 
 ## 当前阶段
 
@@ -8,7 +8,7 @@
 
 ## 先做
 
-阅读根 README、`contracts/`、开发标准、`docs/engineering/TESTING_TOOLCHAIN.md` 和本工程 README；核对 Git 状态。必须调用 `$deveco-cli`，会话可见时优先使用官方 `deveco-cli` MCP；所有 SDK、缓存、构建和日志留在 D 盘。Three.js 独立测试入口调用 `$playwright`，但仍须模拟器复测；仅在 CLI 无法完成 Test Runner/模拟器 UI 时调用 `$computer-use:computer-use`。遇错执行“本地开发日志、CLI 本地文档、华为官方文档”的顺序。
+先 `git fetch origin`、`git pull --ff-only origin codex/terminal`，再阅读 GitHub 最新架构分支的 README、`contracts/`、开发标准、测试规范和本工程 README；核对 Git 状态。必须调用 `$deveco-cli`，会话可见时优先使用官方 `deveco-cli` MCP；所有 SDK、缓存、构建和日志留在 D 盘。Three.js 独立测试入口调用 `$playwright`，但仍须模拟器复测；仅在 CLI 无法完成 Test Runner/模拟器 UI 时调用 `$computer-use:computer-use`。遇错执行“本地开发日志、CLI 本地文档、华为官方文档”的顺序。
 
 ## 目标
 
@@ -19,6 +19,10 @@
 逐工位设计控制项，不能复制一套通用面板：预处理控制清洗/风洗/静置；气检控制采样与阈值相关允许项；外观检测控制相机/光源/剔除；饮料准备控制搅拌、加热和目标温度；灌装控制泵、阀、灌装量与节拍；二检控制相机/液位/剔除；装箱控制机械臂、箱型与摆放方案；AGV 控制任务、速度上限和调度请求；仓储控制入库、库位和安全处置。所有参数以设备能力/后端契约为准，显示单位、范围、步长、当前值、目标值和来源。
 
 控制闭环：编辑、前端校验、风险提示和二次确认、HTTP 创建命令、显示 PENDING、等待 WebSocket/HTTP 回执、显示 ACKNOWLEDGED/FAILED/TIMEOUT 和审计号。人工修改成功后显示该字段的 `MANUAL_HOLD`、锁定人、时间、原因和参数版本；AI 建议不得覆盖该字段。设备离线、报警、质量门失败、权限不足或后端不可达时禁用危险操作。演示模式只能只读。
+
+## 上下文 AI 助手
+
+在当前工位页面提供原生 ArkUI 助手，默认携带本站 `stageCode/stateVersion`。支持自由问询，以及选中文字、传感器、参数卡片、报警、在制品和 Three.js 设备/物料后“问 AI”。回答范围默认限制本站，必须区分实时数据与文档知识并显示时间/引用。助手只能解释、排查和给建议；即使用户输入“把流量改为 120”，也不能直接调用控制接口，正式调参仍走页面控制区、二次确认和后端安全门。
 
 ## 补救顺序
 
@@ -34,6 +38,7 @@
 - 不做全局数字展板、用户管理、报表或后台配置中心。
 - 不直接连接 MQTT，不绕过后端控制硬件，不把 HTTP 200 当执行成功。
 - 不伪造控制成功，不隐藏失败和联锁原因。
+- 不把 AI 问答转成命令，不允许助手解除 `MANUAL_HOLD` 或安全锁。
 
 ## 验收与交付
 

@@ -1,6 +1,6 @@
 # 后台管理端补救开发对话提示词
 
-你负责鸿蒙后台管理端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-admin`，分支是 `codex/admin`，唯一业务写入范围是 `apps/admin-console/BottlingFactoryAdmin`。不要修改其他三个 App 或后端。
+你负责鸿蒙后台管理端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-admin`，分支是 `codex/admin`，唯一业务写入范围是 `apps/admin-console/BottlingFactoryAdmin`。不要修改数字展板、小屏、生产后端或 AI 中枢。
 
 ## 当前阶段
 
@@ -8,7 +8,7 @@
 
 ## 先做
 
-阅读 README、`contracts/`、开发标准、`docs/engineering/TESTING_TOOLCHAIN.md` 和本工程 README；检查 Git。必须调用 `$deveco-cli`，会话可见时优先使用官方 `deveco-cli` MCP，并使用 D 盘构建环境。仅在 CLI 无法完成 Test Runner/模拟器 UI 时调用 `$computer-use:computer-use`；`$playwright` 只可验证后端 Swagger/辅助 Web 页面，不能代替鸿蒙后台模拟器测试。错误先查本地开发知识再查官方。
+先 `git fetch origin`、`git pull --ff-only origin codex/admin`，再阅读 GitHub 最新架构分支的 README、`contracts/`、开发标准、测试规范和本工程 README；检查 Git。必须调用 `$deveco-cli`，会话可见时优先使用官方 `deveco-cli` MCP，并使用 D 盘构建环境。仅在 CLI 无法完成 Test Runner/模拟器 UI 时调用 `$computer-use:computer-use`；`$playwright` 只可验证后端 Swagger/辅助 Web 页面，不能代替鸿蒙后台模拟器测试。错误先查本地开发知识再查官方。
 
 ## 目标
 
@@ -16,13 +16,15 @@
 
 运营首页看管理指标和待办，不做沉浸 Three.js；生产任务管理批次、工单和状态；异常中心处理剔除、局停、返工、缓冲和上下游影响；设备管理查档案、在线态、维护、参数模板及人工覆盖锁；产品物料做追踪、质量事件和箱码；物流仓储管 AGV 任务、箱级库存、库位和仓区安全；AI 审计展示识别、RAG 来源版本、数据库校验、字段级建议、人工跳过、命令和最终结果；知识审核按 `knowledge-governance-contract.md` 检查来源、内容、单位、适用范围、冲突和版权后批准/拒绝/撤销；用户权限管理账号、角色和状态；系统配置管理阈值/策略版本；操作审计记录谁在何时做了什么以及结果。
 
+后台内嵌全局上下文 AI 助手，支持自由问询，以及选中表格行、审计记录、配置项、报警、设备、产品和知识资料后“问 AI”。助手调用独立 AI 中枢，按当前用户 RBAC 限制全局/历史数据范围；实时回答标时间，知识回答标来源。知识资料上传、解析预览、审核、撤销和索引进度都在后台完成，但数据写入 AI 中枢的独立知识存储，不写入生产后端数据库。
+
 列表必须有搜索、筛选、分页/分段加载、详情、空/错/加载状态。写操作有确认、鉴权、失败反馈和审计；危险权限不能只靠前端隐藏。演示账号严格只读。HTTP/WebSocket 遵守契约，令牌安全保存和过期处理清楚。
 
 ## 补救顺序
 
 1. 先核对所有侧边导航是否有真实可操作页面，清理假按钮、死链接和大屏式重复模块。
 2. 按 `control-security-contract.md` 补未登录拦截、会话恢复、token 过期以及 VIEWER/OPERATOR/ENGINEER/ADMIN 角色矩阵。
-3. 对照 `client-capability-matrix.md` 补生产任务、异常、设备、产品物料、物流仓储、AI 审计、知识审核、用户权限、系统配置和操作审计，但不复制小屏现场调参或 AI 协同端聊天页面。
+3. 对照 `client-capability-matrix.md` 补生产任务、异常、设备、产品物料、物流仓储、AI 审计、知识审核、上下文助手、用户权限、系统配置和操作审计，但不复制小屏现场调参。
 4. 对照 API 契约区分“当前端点”和“P0 目标端点”。后端未实现时显示明确的不可用/只读状态并提交阻塞清单，禁止假成功或仅在前端写入临时数据。
 5. 知识审核必须验证 `KNOWLEDGE_REVIEW` 权限、提交人不可自审、批准后入库/索引状态和撤销效果；审核前资料不能出现在 RAG。
 6. 每个写操作核对确认、后端鉴权、失败反馈、审计号和刷新后的事实状态。
