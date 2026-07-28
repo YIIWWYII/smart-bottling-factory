@@ -11,5 +11,14 @@
     ],
     "buildModeSet": [{ "name": "debug" }, { "name": "release" }]
   },
-  "modules": [{ "name": "entry", "srcPath": "./entry" }]
+  "modules": [
+    { "name": "entry", "srcPath": "./entry" },
+    {
+      "name": "harmonyassistant",
+      "srcPath": "../../../packages/harmony-assistant/harmonyassistant",
+      "targets": [
+        { "name": "default", "applyToProducts": ["default"] }
+      ]
+    }
+  ]
 }
