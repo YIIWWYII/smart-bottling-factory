@@ -1,10 +1,14 @@
-# 小屏工位终端开发对话提示词
+# 小屏工位终端补救开发对话提示词
 
-你负责鸿蒙小屏工位终端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-terminal`，分支是 `codex/terminal`，唯一业务写入范围是 `apps/workstation-terminal/BottlingFactoryTerminal`。不要修改数字展板、后台管理或后端。
+你负责鸿蒙小屏工位终端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-terminal`，分支是 `codex/terminal`，唯一业务写入范围是 `apps/workstation-terminal/BottlingFactoryTerminal`。不要修改数字展板、后台管理、生产后端或 AI 中枢。
+
+## 当前阶段
+
+该工程已经完成一轮开发且可能存在未提交修改。先审计和补救，不推倒重写。读取 `git diff`、现有页面、Repository、控制组件和 rawfile，保护已有成果；禁止硬重置、覆盖工作树或复制旧骨架。先给出 P0 已完成、缺失、证据不足清单，再按风险从高到低修复。
 
 ## 先做
 
-阅读根 README、`contracts/`、开发标准和本工程 README；核对 Git 状态。使用 `deveco-cli` Skill，所有 SDK、缓存、构建和日志留在 D 盘；遇错执行“本地开发日志、CLI 本地文档、华为官方文档”的顺序。
+先 `git fetch origin`、`git pull --ff-only origin codex/terminal`，再阅读 GitHub 最新架构分支的 README、`contracts/`、开发标准、测试规范和本工程 README；核对 Git 状态。必须调用 `$deveco-cli`，会话可见时优先使用官方 `deveco-cli` MCP；所有 SDK、缓存、构建和日志留在 D 盘。Three.js 独立测试入口调用 `$playwright`，但仍须模拟器复测；仅在 CLI 无法完成 Test Runner/模拟器 UI 时调用 `$computer-use:computer-use`。遇错执行“本地开发日志、CLI 本地文档、华为官方文档”的顺序。
 
 ## 目标
 
@@ -14,14 +18,28 @@
 
 逐工位设计控制项，不能复制一套通用面板：预处理控制清洗/风洗/静置；气检控制采样与阈值相关允许项；外观检测控制相机/光源/剔除；饮料准备控制搅拌、加热和目标温度；灌装控制泵、阀、灌装量与节拍；二检控制相机/液位/剔除；装箱控制机械臂、箱型与摆放方案；AGV 控制任务、速度上限和调度请求；仓储控制入库、库位和安全处置。所有参数以设备能力/后端契约为准，显示单位、范围、步长、当前值、目标值和来源。
 
-控制闭环：编辑、前端校验、风险提示和二次确认、HTTP 创建命令、显示 PENDING、等待 WebSocket/HTTP 回执、显示 ACKNOWLEDGED/FAILED/TIMEOUT 和审计号。设备离线、报警、质量门失败、权限不足或后端不可达时禁用危险操作。演示模式只能只读。
+控制闭环：编辑、前端校验、风险提示和二次确认、HTTP 创建命令、显示 PENDING、等待 WebSocket/HTTP 回执、显示 ACKNOWLEDGED/FAILED/TIMEOUT 和审计号。人工修改成功后显示该字段的 `MANUAL_HOLD`、锁定人、时间、原因和参数版本；AI 建议不得覆盖该字段。设备离线、报警、质量门失败、权限不足或后端不可达时禁用危险操作。演示模式只能只读。
+
+## 上下文 AI 助手
+
+在当前工位页面提供原生 ArkUI 助手，默认携带本站 `stageCode/stateVersion`。支持自由问询，以及选中文字、传感器、参数卡片、报警、在制品和 Three.js 设备/物料后“问 AI”。回答范围默认限制本站，必须区分实时数据与文档知识并显示时间/引用。助手只能解释、排查和给建议；即使用户输入“把流量改为 120”，也不能直接调用控制接口，正式调参仍走页面控制区、二次确认和后端安全门。
+
+## 补救顺序
+
+1. 先确认当前环节完整展示位于控制区之前，并与展板使用同一 `StageSnapshot/stateVersion`。
+2. 按 `control-security-contract.md` 补客户端身份、未登录只读、操作员登录、token 过期降级和 VIEWER/OPERATOR/ENGINEER/ADMIN 权限。
+3. 逐工位核对设备能力与控制项；删除虚构通用参数。安全阈值只读，小屏只提交批准范围内的运行设定值。
+4. 按 `ai-decision-contract.md` 补字段级人工覆盖：修改后创建锁、按权限释放、显示 AI 跳过原因，版本冲突时要求刷新而不是覆盖。
+5. 补完整命令状态机和失败路径；现有后端缺端点时显示不可用并提交契约提案，不准本地伪造 ACK。
+6. 对 ArkWeb/Three.js 做与展板相同的 canvas、同快照、暂停恢复、资源释放测试。
 
 ## 禁止
 
 - 不做全局数字展板、用户管理、报表或后台配置中心。
 - 不直接连接 MQTT，不绕过后端控制硬件，不把 HTTP 200 当执行成功。
 - 不伪造控制成功，不隐藏失败和联锁原因。
+- 不把 AI 问答转成命令，不允许助手解除 `MANUAL_HOLD` 或安全锁。
 
 ## 验收与交付
 
-满足小屏 P0，对九工位分别做参数/控制矩阵测试。使用构建目录 `D:\HarmonyOS-Dev\Build\BottlingFactoryTerminal`，验证 HAP、模拟器、2D/3D、数据断线和完整命令状态机。提交并推送 `codex/terminal`，报告提交号、测试、风险和契约提案，不推 `main`。
+满足小屏 P0，对九工位分别做参数/控制矩阵测试。按 `TESTING_TOOLCHAIN.md` 补 Local Test、Test Kit/模拟器和 Three.js 证据；使用构建目录 `D:\HarmonyOS-Dev\Build\BottlingFactoryTerminal`，验证 HAP、当前环节优先、2D/3D 非空且同版本、数据断线、身份权限和完整命令状态机。提交并推送 `codex/terminal`，报告提交号、测试命令与计数、截图/日志、风险和契约提案，不推 `main`。
