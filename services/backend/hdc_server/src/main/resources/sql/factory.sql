@@ -80,6 +80,12 @@ CREATE TABLE IF NOT EXISTS device_command (
   reason VARCHAR(500) NULL,
   expected_state_version BIGINT NULL,
   accepted_state_version BIGINT NULL,
+  expected_parameter_version BIGINT NULL,
+  accepted_parameter_version BIGINT NULL,
+  parameter_code VARCHAR(100) NULL,
+  atomic_group_id VARCHAR(100) NULL,
+  ai_decision_id VARCHAR(100) NULL,
+  correlation_id VARCHAR(100) NULL,
   recipe_version VARCHAR(100) NULL,
   old_value TEXT NULL,
   new_value TEXT NULL,
@@ -93,6 +99,7 @@ CREATE TABLE IF NOT EXISTS device_command (
   PRIMARY KEY (command_id),
   KEY idx_command_status_time (status, created_at),
   KEY idx_command_trace (trace_code),
+  KEY idx_command_ai_decision (ai_decision_id),
   UNIQUE KEY uk_device_command_client_request (client_request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备控制命令及ACK';
 
@@ -111,6 +118,53 @@ CREATE TABLE IF NOT EXISTS ai_decision_audit (
   PRIMARY KEY (audit_id),
   KEY idx_ai_trace_time (trace_code, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI建议、证据和后端校验审计';
+
+CREATE TABLE IF NOT EXISTS ai_vision_recognition (
+  inference_id VARCHAR(100) NOT NULL,
+  task_type VARCHAR(80) NOT NULL,
+  camera_code VARCHAR(100) NOT NULL,
+  line_id VARCHAR(100) NOT NULL,
+  stage_code VARCHAR(80) NOT NULL,
+  trace_code VARCHAR(100) NULL,
+  bottle_type_code VARCHAR(100) NULL,
+  confidence DECIMAL(12,6) NULL,
+  evidence_ref VARCHAR(500) NULL,
+  model_version VARCHAR(100) NULL,
+  status VARCHAR(30) NOT NULL,
+  latency_ms BIGINT NULL,
+  defects_json JSON NOT NULL,
+  captured_at DATETIME(6) NOT NULL,
+  received_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (inference_id),
+  KEY idx_ai_vision_trace_time (trace_code, received_at),
+  KEY idx_ai_vision_stage_time (stage_code, received_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI视觉结构化识别结果';
+
+CREATE TABLE IF NOT EXISTS ai_command_intent (
+  intent_id VARCHAR(100) NOT NULL,
+  idempotency_key VARCHAR(160) NOT NULL,
+  decision_id VARCHAR(100) NOT NULL,
+  correlation_id VARCHAR(100) NULL,
+  source_app VARCHAR(30) NOT NULL,
+  line_id VARCHAR(100) NOT NULL,
+  stage_code VARCHAR(80) NULL,
+  device_code VARCHAR(100) NULL,
+  trace_code VARCHAR(100) NULL,
+  operator_name VARCHAR(100) NOT NULL,
+  operator_role VARCHAR(50) NOT NULL,
+  context_state_version BIGINT NULL,
+  status VARCHAR(50) NOT NULL,
+  status_reason VARCHAR(500) NOT NULL,
+  request_json JSON NOT NULL,
+  command_ids JSON NOT NULL,
+  blocked_json JSON NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (intent_id),
+  UNIQUE KEY uk_ai_command_intent_idempotency (idempotency_key),
+  KEY idx_ai_command_intent_decision (decision_id),
+  KEY idx_ai_command_intent_status (status, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI字段级命令意图和后端安全门结果';
 
 CREATE TABLE IF NOT EXISTS agv_task (
   task_id VARCHAR(100) NOT NULL,
@@ -251,6 +305,24 @@ CREATE TABLE IF NOT EXISTS factory_simulation_state (
 
 INSERT IGNORE INTO factory_simulation_state(line_id,scenario_code,status,tick,started_at,updated_at)
 VALUES ('LINE-01','NORMAL','RUNNING',0,now(6),now(6));
+
+CREATE TABLE IF NOT EXISTS device_parameter_state (
+  device_code VARCHAR(100) NOT NULL,
+  parameter_code VARCHAR(100) NOT NULL,
+  value_json JSON NOT NULL,
+  unit VARCHAR(30) NULL,
+  owner_source VARCHAR(30) NOT NULL,
+  lock_mode VARCHAR(30) NOT NULL,
+  locked_by VARCHAR(100) NULL,
+  locked_at DATETIME(6) NULL,
+  lock_reason VARCHAR(500) NULL,
+  expires_at DATETIME(6) NULL,
+  parameter_version BIGINT NOT NULL,
+  atomic_group_id VARCHAR(100) NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (device_code, parameter_code),
+  KEY idx_device_parameter_lock (lock_mode, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备字段级参数所有权、锁和版本';
 
 CREATE TABLE IF NOT EXISTS production_order (
   order_id VARCHAR(100) NOT NULL,

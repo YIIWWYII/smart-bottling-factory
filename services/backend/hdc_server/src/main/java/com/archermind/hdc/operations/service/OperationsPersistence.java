@@ -39,6 +39,12 @@ public class OperationsPersistence {
         addColumnIfMissing("device_command", "expires_at", "datetime(6) null");
         addColumnIfMissing("device_command", "expected_state_version", "bigint null");
         addColumnIfMissing("device_command", "accepted_state_version", "bigint null");
+        addColumnIfMissing("device_command", "expected_parameter_version", "bigint null");
+        addColumnIfMissing("device_command", "accepted_parameter_version", "bigint null");
+        addColumnIfMissing("device_command", "parameter_code", "varchar(100) null");
+        addColumnIfMissing("device_command", "atomic_group_id", "varchar(100) null");
+        addColumnIfMissing("device_command", "ai_decision_id", "varchar(100) null");
+        addColumnIfMissing("device_command", "correlation_id", "varchar(100) null");
         addColumnIfMissing("device_command", "recipe_version", "varchar(100) null");
         addColumnIfMissing("device_command", "old_value", "text null");
         addColumnIfMissing("device_command", "new_value", "text null");
@@ -97,7 +103,8 @@ public class OperationsPersistence {
         return jdbcTemplate.query(
                 "select command_id,client_request_id,client_type,line_id,stage_code,device_code,command_type,payload,"
                         + "source,trace_code,operator_name,operator_role,reason,expected_state_version,"
-                        + "accepted_state_version,recipe_version,old_value,new_value,safety_validation,status,message,"
+                        + "accepted_state_version,expected_parameter_version,accepted_parameter_version,parameter_code,"
+                        + "atomic_group_id,ai_decision_id,correlation_id,recipe_version,old_value,new_value,safety_validation,status,message,"
                         + "created_at,expires_at,acknowledged_at,edge_ack_id from device_command order by created_at desc limit 500",
                 (rs, rowNum) -> {
                     DeviceCommand value = new DeviceCommand();
@@ -116,6 +123,12 @@ public class OperationsPersistence {
                     value.setReason(rs.getString("reason"));
                     value.setExpectedStateVersion(rs.getObject("expected_state_version", Long.class));
                     value.setAcceptedStateVersion(rs.getObject("accepted_state_version", Long.class));
+                    value.setExpectedParameterVersion(rs.getObject("expected_parameter_version", Long.class));
+                    value.setAcceptedParameterVersion(rs.getObject("accepted_parameter_version", Long.class));
+                    value.setParameterCode(rs.getString("parameter_code"));
+                    value.setAtomicGroupId(rs.getString("atomic_group_id"));
+                    value.setAiDecisionId(rs.getString("ai_decision_id"));
+                    value.setCorrelationId(rs.getString("correlation_id"));
                     value.setRecipeVersion(rs.getString("recipe_version"));
                     value.setOldValue(rs.getString("old_value"));
                     value.setNewValue(rs.getString("new_value"));
@@ -178,15 +191,18 @@ public class OperationsPersistence {
         if (!enabled) return;
         jdbcTemplate.update("insert into device_command(command_id,client_request_id,client_type,line_id,stage_code,"
                         + "device_code,command_type,payload,source,trace_code,operator_name,operator_role,reason,"
-                        + "expected_state_version,accepted_state_version,recipe_version,old_value,new_value,"
+                        + "expected_state_version,accepted_state_version,expected_parameter_version,accepted_parameter_version,"
+                        + "parameter_code,atomic_group_id,ai_decision_id,correlation_id,recipe_version,old_value,new_value,"
                         + "safety_validation,status,message,created_at,expires_at,acknowledged_at,edge_ack_id) "
-                        + "values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        + "values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
                         + "on duplicate key update status=values(status),message=values(message),"
                         + "acknowledged_at=values(acknowledged_at),edge_ack_id=values(edge_ack_id)",
                 value.getCommandId(), value.getClientRequestId(), value.getClientType(), value.getLineId(),
                 value.getStageCode(), value.getDeviceCode(), value.getCommandType(), value.getPayload(),
                 value.getSource(), value.getTraceCode(), value.getOperator(), value.getOperatorRole(), value.getReason(),
-                value.getExpectedStateVersion(), value.getAcceptedStateVersion(), value.getRecipeVersion(),
+                value.getExpectedStateVersion(), value.getAcceptedStateVersion(), value.getExpectedParameterVersion(),
+                value.getAcceptedParameterVersion(), value.getParameterCode(), value.getAtomicGroupId(),
+                value.getAiDecisionId(), value.getCorrelationId(), value.getRecipeVersion(),
                 value.getOldValue(), value.getNewValue(), value.getSafetyValidation(), value.getStatus(), value.getMessage(),
                 Timestamp.valueOf(value.getCreatedAt()), timestamp(value.getExpiresAt()),
                 timestamp(value.getAcknowledgedAt()), value.getEdgeAckId());
