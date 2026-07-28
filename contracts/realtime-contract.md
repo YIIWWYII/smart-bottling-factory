@@ -2,7 +2,7 @@
 
 ## 边界
 
-- 生产实时通道：`ws://<backend-host>:8088/hdc/api/dataScreen/{groupId}`；AI 助手/决策通道由 AI 中枢提供 `ws://<ai-host>:8091/api/ws/{clientId}`。
+- 生产实时通道：`ws://<backend-host>:8088/hdc/api/dataScreen/{groupId}`；AI 助手会话事件通道由 AI 中枢提供 `ws://<ai-host>:8091/api/assistant/events?conversationId={conversationId}`。
 - WebSocket 用于主动通知和关键事件；HTTP 用于首屏快照、断线补偿、详情和所有有副作用的控制。
 - MQTT 是硬件/边缘层与生产后端之间的设备消息载体，三个鸿蒙前端和 AI 中枢不直接冒充边缘控制器发布设备命令。
 
