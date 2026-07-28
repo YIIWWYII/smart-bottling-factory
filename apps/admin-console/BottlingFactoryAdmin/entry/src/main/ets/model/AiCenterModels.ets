@@ -102,3 +102,55 @@ export interface AiDecisionRecord {
   completedAt: string
 }
 
+export interface AiModelConfig {
+  configId: string
+  provider: string
+  modelName: string
+  baseUrl: string
+  maskedApiKey: string
+  requestTimeoutMs: number
+  retryCount: number
+  streamEnabled: boolean
+  maxTokens: number
+  temperature: number
+  ragEnabled: boolean
+  vectorStore: string
+  embeddingModel: string
+  knowledgeVersion: string
+  status: string
+  updatedBy: string
+  updatedAt: string
+}
+
+export interface AiModelConfigUpdate {
+  provider: string
+  modelName: string
+  baseUrl: string
+  apiKey?: string
+  requestTimeoutMs: number
+  retryCount: number
+  streamEnabled: boolean
+  maxTokens: number
+  temperature: number
+  ragEnabled: boolean
+  vectorStore: string
+  embeddingModel: string
+}
+
+export interface AiConnectionTestRequest {
+  question: string
+  includeRag: boolean
+}
+
+export interface AiConnectionTestResult {
+  success: boolean
+  status: string
+  errorType: string
+  message: string
+  latencyMs: number
+  provider: string
+  modelName: string
+  ragReady: boolean
+  knowledgeVersion: string
+  occurredAt: string
+}

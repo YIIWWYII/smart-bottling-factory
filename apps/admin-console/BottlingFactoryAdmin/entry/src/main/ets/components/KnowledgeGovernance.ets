@@ -259,6 +259,20 @@ export struct KnowledgeGovernance {
     return 'application/octet-stream'
   }
 
+  private ragReadableLabel(submission: KnowledgeSubmission): string {
+    if (submission.status === 'INDEXED') return '已进入 RAG'
+    if (submission.status === 'REVOKED') return '已撤销停用'
+    if (submission.status === 'REJECTED') return '已拒绝'
+    if (submission.status === 'FAILED') return '索引失败'
+    return '未进入 RAG'
+  }
+
+  private ragReadableStatus(submission: KnowledgeSubmission): string {
+    if (submission.status === 'INDEXED') return 'PASS'
+    if (submission.status === 'REJECTED' || submission.status === 'FAILED' || submission.status === 'REVOKED') return 'FAILED'
+    return 'WAIT'
+  }
+
   build() {
     Column({ space: 14 }) {
       SectionTitle({ code: 'KNOWLEDGE GOVERNANCE', title: '知识资料与审核', description: '资料只写入独立 AI 中枢；批准并完成索引后才允许参与 RAG。' })
@@ -338,8 +352,10 @@ export struct KnowledgeGovernance {
             Column() {
               Text(review.submission.title).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold)
               Text(review.reviewId + ' · 提交人 ' + review.submission.submittedBy + ' · ' + review.submission.submittedAt).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
+              Text('知识版本：' + (review.submission.publishedVersion || '--') + ' · 索引时间：' + (review.submission.indexedAt || '--') + ' · 原因：' + (review.submission.statusReason || '--')).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             StateBadge({ status: review.submission.status, label: review.submission.status })
+            StateBadge({ status: this.ragReadableStatus(review.submission), label: this.ragReadableLabel(review.submission) })
             Text(review.conflicts.length.toString() + ' 个冲突').fontSize(10).fontColor(review.conflicts.length > 0 ? Theme.danger : Theme.muted).width(80)
             Button('解析预览').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => void this.openReview(review))
           }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
@@ -357,6 +373,12 @@ export struct KnowledgeGovernance {
       } else {
         Text(this.selectedReview?.submission.title || '--').fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold)
         Text('来源：' + (this.selectedReview?.submission.sourceOrganization || '--') + ' · 版本：' + (this.selectedReview?.submission.sourceVersion || '--')).fontSize(10).fontColor(Theme.muted)
+        Row({ space: 8 }) {
+          StateBadge({ status: this.ragReadableStatus((this.selectedReview as KnowledgeReview).submission), label: this.ragReadableLabel((this.selectedReview as KnowledgeReview).submission) })
+          Text('发布版本：' + ((this.selectedReview as KnowledgeReview).submission.publishedVersion || '--')).fontSize(10).fontColor(Theme.muted)
+          Text('索引时间：' + ((this.selectedReview as KnowledgeReview).submission.indexedAt || '--')).fontSize(10).fontColor(Theme.muted)
+          Text('失败/拒绝原因：' + ((this.selectedReview as KnowledgeReview).submission.statusReason || '--')).fontSize(10).fontColor(Theme.muted).layoutWeight(1)
+        }.width('100%')
         Row({ space: 8 }) {
           this.checkBadge('来源', this.selectedReview?.sourceVerified || false)
           this.checkBadge('单位', this.selectedReview?.unitsVerified || false)

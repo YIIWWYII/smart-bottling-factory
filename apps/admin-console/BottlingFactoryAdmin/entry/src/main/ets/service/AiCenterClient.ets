@@ -5,7 +5,11 @@ import { SessionStore } from './SessionStore'
 import { AiCenterConfig } from './AiCenterConfig'
 import {
   AiApiEnvelope,
+  AiConnectionTestRequest,
+  AiConnectionTestResult,
   AiDecisionRecord,
+  AiModelConfig,
+  AiModelConfigUpdate,
   KnowledgeReview,
   KnowledgeReviewAction,
   KnowledgeSubmission,
@@ -77,6 +81,18 @@ export class AiCenterClient {
     return await this.request<Array<AiDecisionRecord>>('/decisions')
   }
 
+  async getModelConfig(): Promise<AiModelConfig> {
+    return await this.request<AiModelConfig>('/admin/config/model')
+  }
+
+  async updateModelConfig(payload: AiModelConfigUpdate): Promise<AiModelConfig> {
+    return await this.request<AiModelConfig>('/admin/config/model', http.RequestMethod.POST, JSON.stringify(payload))
+  }
+
+  async testConnection(payload: AiConnectionTestRequest): Promise<AiConnectionTestResult> {
+    return await this.request<AiConnectionTestResult>('/admin/config/model/test', http.RequestMethod.POST, JSON.stringify(payload))
+  }
+
   async uploadKnowledge(fileUri: string, fileName: string, contentType: string, metadata: KnowledgeUploadMetadata): Promise<KnowledgeSubmission> {
     const boundary: string = '----BottlingKnowledge' + new Date().getTime().toString()
     const body: ArrayBuffer = this.buildMultipartBody(boundary, fileUri, fileName, contentType, metadata)
@@ -120,6 +136,10 @@ export class AiCenterClient {
       if (responseCode === 401) SessionStore.clear()
       if (responseCode === 401) throw new AiCenterError('AI 中枢鉴权已过期，请重新登录', responseCode)
       if (responseCode === 403) throw new AiCenterError('AI 中枢拒绝当前操作，请检查知识治理权限', responseCode)
+      if (responseCode === 404) throw new AiCenterError('AI 中枢配置接口未就绪，请先完成 /admin/config/model 契约实现', responseCode)
+      if (responseCode === 408) throw new AiCenterError('AI 中枢请求超时，请检查模型超时时间和网络链路', responseCode)
+      if (responseCode === 429) throw new AiCenterError('模型供应商触发速率限制，请稍后重试或更换 Key/模型', responseCode)
+      if (responseCode === 503) throw new AiCenterError('模型或 RAG 服务不可用，请检查模型地址、向量库和索引状态', responseCode)
       throw new AiCenterError('AI 中枢 HTTP ' + responseCode.toString(), responseCode)
     }
     const envelope: AiApiEnvelope<T> = JSON.parse(raw) as AiApiEnvelope<T>
@@ -164,4 +184,3 @@ export class AiCenterClient {
 }
 
 export const aiCenterClient = new AiCenterClient()
-

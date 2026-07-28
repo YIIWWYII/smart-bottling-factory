@@ -14,8 +14,10 @@ import { KnowledgeGovernance } from '../components/KnowledgeGovernance'
 import { FACTORY_STAGES, findStage } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { apiClient } from '../service/ApiClient'
+import { aiCenterClient } from '../service/AiCenterClient'
 import { SessionStore } from '../service/SessionStore'
 import { ApiConfig } from '../service/ApiConfig'
+import { AiCenterConfig } from '../service/AiCenterConfig'
 import {
   adminAssistantSelectionBus,
   assistantField,
@@ -24,6 +26,7 @@ import {
 import { AdminAssistantHostAdapter } from '../service/AdminAssistantHostAdapter'
 import {
   PERMISSION_INCIDENT_DISPOSE,
+  PERMISSION_SYSTEM_MANAGE,
   PERMISSION_THRESHOLD_MANAGE,
   PERMISSION_USER_MANAGE,
   canAccessAdminPage,
@@ -47,6 +50,12 @@ import {
   SystemPolicy,
   WarehouseZone
 } from '../model/FactoryModels'
+import {
+  AiConnectionTestRequest,
+  AiConnectionTestResult,
+  AiModelConfig,
+  AiModelConfigUpdate
+} from '../model/AiCenterModels'
 
 interface MenuItem {
   code: string
@@ -68,6 +77,7 @@ const MENU: Array<MenuItem> = [
   { code: 'MATERIALS', label: '产品与物料', description: '追踪、质量事件和箱码', minRole: 'VIEWER' },
   { code: 'LOGISTICS', label: '物流仓储', description: 'AGV、库位、库存和安全', minRole: 'VIEWER' },
   { code: 'AI_AUDIT', label: 'AI 决策审计', description: 'RAG、校验、建议和结果', minRole: 'VIEWER' },
+  { code: 'AI_CONFIG', label: 'AI 管理', description: '模型、Key、超时、RAG 和连接测试', minRole: 'VIEWER' },
   { code: 'KNOWLEDGE', label: '知识资料', description: '上传、解析、审核、撤销和索引', minRole: 'VIEWER' },
   { code: 'USERS', label: '用户权限', description: '账号、角色和状态', minRole: 'ADMIN' },
   { code: 'SETTINGS', label: '系统配置', description: '阈值和策略版本', minRole: 'VIEWER' },
@@ -104,6 +114,27 @@ struct AdminConsole {
   @State selectedDetail: string = '请选择一条记录查看详情。'
   @State message: string = ''
   @State loading: boolean = false
+  @State aiConfigLoading: boolean = false
+  @State aiConfigMessage: string = ''
+  @State aiConfigAvailable: boolean = false
+  @State aiProvider: string = ''
+  @State aiModelName: string = ''
+  @State aiBaseUrl: string = ''
+  @State aiApiKeyInput: string = ''
+  @State aiMaskedApiKey: string = ''
+  @State aiTimeoutMs: string = '12000'
+  @State aiRetryCount: string = '1'
+  @State aiStreamEnabled: boolean = true
+  @State aiMaxTokens: string = '2048'
+  @State aiTemperature: string = '0.2'
+  @State aiRagEnabled: boolean = true
+  @State aiVectorStore: string = ''
+  @State aiEmbeddingModel: string = ''
+  @State aiKnowledgeVersion: string = ''
+  @State aiConfigUpdatedAt: string = ''
+  @State aiTestQuestion: string = '当前 PLA 瓶 VOC 达标后是否可以进入瑕疵检测？'
+  @State aiTestResult: string = '尚未测试。'
+  @State aiTestStatus: string = 'WAIT'
   private timer: number = -1
   private readonly pageSize: number = 5
   private readonly assistantAdapter: AdminAssistantHostAdapter = new AdminAssistantHostAdapter()
@@ -148,6 +179,7 @@ struct AdminConsole {
     } else {
       this.users = []
     }
+    if (this.section === 'AI_CONFIG') await this.loadAiModelConfig()
     if (this.section === 'AUDIT') await this.loadAuditRecords()
     this.loading = false
   }
@@ -185,6 +217,152 @@ struct AdminConsole {
     }
   }
 
+  private async loadAiModelConfig(): Promise<void> {
+    this.aiConfigLoading = true
+    this.aiConfigMessage = ''
+    try {
+      const config: AiModelConfig = await aiCenterClient.getModelConfig()
+      this.applyAiModelConfig(config)
+      this.aiConfigAvailable = true
+    } catch (error) {
+      this.aiConfigAvailable = false
+      this.aiConfigMessage = 'AI 配置接口不可用：' + (error instanceof Error ? error.message : 'AI 中枢请求失败') + '。页面不会用本地常量伪造已保存配置。'
+      if (this.aiBaseUrl.length === 0) this.aiBaseUrl = AiCenterConfig.API_BASE
+      if (this.aiTimeoutMs.length === 0) this.aiTimeoutMs = AiCenterConfig.requestTimeoutMs.toString()
+    } finally {
+      this.aiConfigLoading = false
+    }
+  }
+
+  private applyAiModelConfig(config: AiModelConfig): void {
+    this.aiProvider = config.provider
+    this.aiModelName = config.modelName
+    this.aiBaseUrl = config.baseUrl
+    this.aiMaskedApiKey = config.maskedApiKey
+    this.aiApiKeyInput = ''
+    this.aiTimeoutMs = config.requestTimeoutMs.toString()
+    this.aiRetryCount = config.retryCount.toString()
+    this.aiStreamEnabled = config.streamEnabled
+    this.aiMaxTokens = config.maxTokens.toString()
+    this.aiTemperature = config.temperature.toString()
+    this.aiRagEnabled = config.ragEnabled
+    this.aiVectorStore = config.vectorStore
+    this.aiEmbeddingModel = config.embeddingModel
+    this.aiKnowledgeVersion = config.knowledgeVersion
+    this.aiConfigUpdatedAt = config.updatedAt + (config.updatedBy.length > 0 ? ' · ' + config.updatedBy : '')
+  }
+
+  private canManageAiConfig(): boolean {
+    return this.canWrite(PERMISSION_SYSTEM_MANAGE)
+  }
+
+  private parsePositiveInt(value: string, label: string): number {
+    const parsed: number = Number.parseInt(value.trim())
+    if (parsed.toString() === 'NaN' || parsed <= 0) {
+      throw new Error(label + '必须是大于 0 的整数')
+    }
+    return parsed
+  }
+
+  private parseNonNegativeInt(value: string, label: string): number {
+    const parsed: number = Number.parseInt(value.trim())
+    if (parsed.toString() === 'NaN' || parsed < 0) {
+      throw new Error(label + '必须是大于等于 0 的整数')
+    }
+    return parsed
+  }
+
+  private parseTemperature(value: string): number {
+    const parsed: number = Number.parseFloat(value.trim())
+    if (parsed.toString() === 'NaN' || parsed < 0 || parsed > 2) {
+      throw new Error('温度 temperature 必须在 0 到 2 之间')
+    }
+    return parsed
+  }
+
+  private buildAiConfigPayload(): AiModelConfigUpdate {
+    if (this.aiProvider.trim().length === 0 || this.aiModelName.trim().length === 0 || this.aiBaseUrl.trim().length === 0) {
+      throw new Error('供应商、模型名称和 baseUrl 必填')
+    }
+    const payload: AiModelConfigUpdate = {
+      provider: this.aiProvider.trim(),
+      modelName: this.aiModelName.trim(),
+      baseUrl: this.aiBaseUrl.trim(),
+      requestTimeoutMs: this.parsePositiveInt(this.aiTimeoutMs, '请求超时'),
+      retryCount: this.parseNonNegativeInt(this.aiRetryCount, '重试次数'),
+      streamEnabled: this.aiStreamEnabled,
+      maxTokens: this.parsePositiveInt(this.aiMaxTokens, '最大 token'),
+      temperature: this.parseTemperature(this.aiTemperature),
+      ragEnabled: this.aiRagEnabled,
+      vectorStore: this.aiVectorStore.trim(),
+      embeddingModel: this.aiEmbeddingModel.trim()
+    }
+    if (this.aiApiKeyInput.trim().length > 0) {
+      payload.apiKey = this.aiApiKeyInput.trim()
+    }
+    return payload
+  }
+
+  private async saveAiModelConfig(): Promise<void> {
+    if (!this.canManageAiConfig()) {
+      this.aiConfigMessage = this.writeDisabledReason(PERMISSION_SYSTEM_MANAGE)
+      this.appendClientActivity('保存 AI 模型配置', 'AI_CONFIG', 'DENIED', this.aiConfigMessage)
+      return
+    }
+    this.aiConfigLoading = true
+    try {
+      const payload: AiModelConfigUpdate = this.buildAiConfigPayload()
+      const result: AiModelConfig = await aiCenterClient.updateModelConfig(payload)
+      this.applyAiModelConfig(result)
+      this.aiConfigAvailable = true
+      this.aiConfigMessage = 'AI 中枢已返回配置事实状态：' + result.status + '，更新时间：' + result.updatedAt
+      this.appendClientActivity('保存 AI 模型配置', result.configId || 'AI_CONFIG', 'ACCEPTED', this.aiConfigMessage)
+      promptAction.showToast({ message: 'AI 配置已提交到 AI 中枢' })
+    } catch (error) {
+      const msg: string = error instanceof Error ? error.message : '保存 AI 配置失败'
+      this.aiConfigMessage = '保存失败：' + msg
+      this.appendClientActivity('保存 AI 模型配置', 'AI_CONFIG', 'FAILED', msg)
+    } finally {
+      this.aiConfigLoading = false
+    }
+  }
+
+  private async testAiConnection(): Promise<void> {
+    if (!this.canManageAiConfig()) {
+      this.aiTestStatus = 'DENIED'
+      this.aiTestResult = this.writeDisabledReason(PERMISSION_SYSTEM_MANAGE)
+      this.appendClientActivity('测试 AI 连接', 'AI_CONFIG', 'DENIED', this.aiTestResult)
+      return
+    }
+    const question: string = this.aiTestQuestion.trim().length > 0 ? this.aiTestQuestion.trim() : '请回答当前 AI 中枢是否可用。'
+    const payload: AiConnectionTestRequest = {
+      question: question,
+      includeRag: this.aiRagEnabled
+    }
+    this.aiConfigLoading = true
+    this.aiTestStatus = 'WAIT'
+    this.aiTestResult = '正在请求 AI 中枢测试接口...'
+    try {
+      const result: AiConnectionTestResult = await aiCenterClient.testConnection(payload)
+      this.aiTestStatus = result.success ? 'PASS' : 'FAILED'
+      this.aiTestResult = result.status + ' · ' + result.message +
+        '\n模型：' + result.provider + ' / ' + result.modelName +
+        '\n延迟：' + result.latencyMs.toString() + ' ms' +
+        '\nRAG：' + (result.ragReady ? 'READY' : 'NOT_READY') +
+        '\n知识版本：' + (result.knowledgeVersion || '--') +
+        '\n错误类型：' + (result.errorType || '--') +
+        '\n时间：' + result.occurredAt
+      this.appendClientActivity('测试 AI 连接', 'AI_CONFIG', result.success ? 'ACCEPTED' : 'FAILED', result.message)
+    } catch (error) {
+      const msg: string = error instanceof Error ? error.message : 'AI 中枢测试接口不可用'
+      this.aiTestStatus = 'FAILED'
+      this.aiTestResult = '测试失败：' + msg + '\n可能原因：鉴权失败、网络超时、模型不可用、速率限制、RAG 未就绪或接口尚未实现。'
+      this.appendClientActivity('测试 AI 连接', 'AI_CONFIG', 'FAILED', msg)
+    } finally {
+      this.aiConfigLoading = false
+    }
+  }
+
   private currentRole(): string {
     return SessionStore.user === undefined ? '' : SessionStore.user.role
   }
@@ -209,6 +387,7 @@ struct AdminConsole {
     this.message = ''
     if (code === 'USERS' && SessionStore.isAdmin) void this.loadUsers()
     if (code === 'INCIDENTS') void this.loadIncidents()
+    if (code === 'AI_CONFIG') void this.loadAiModelConfig()
     if (code === 'AUDIT') void this.loadAuditRecords()
   }
 
@@ -376,6 +555,7 @@ struct AdminConsole {
                 if (this.section === 'MATERIALS') this.materialView()
                 if (this.section === 'LOGISTICS') this.logisticsView()
                 if (this.section === 'AI_AUDIT') this.aiAuditView()
+                if (this.section === 'AI_CONFIG') this.aiConfigView()
                 if (this.section === 'KNOWLEDGE') this.knowledgeView()
                 if (this.section === 'USERS') this.userView()
                 if (this.section === 'SETTINGS') this.settingsView()
@@ -758,6 +938,115 @@ struct AdminConsole {
   }
 
   @Builder
+  aiConfigView() {
+    Column({ space: 14 }) {
+      SectionTitle({ code: 'AI MANAGEMENT', title: 'AI 模型与 RAG 配置', description: '管理供应商、模型、Key、超时、流式、RAG 和连接测试；不属于共享助手会话。' })
+      this.aiConfigState()
+      this.aiModelForm()
+      this.aiConnectionTestPanel()
+      this.aiRagStatusPanel()
+      if (this.aiConfigMessage.length > 0) {
+        Text(this.aiConfigMessage).fontSize(10).fontColor(this.aiConfigAvailable ? Theme.warning : Theme.danger).width('100%').padding(10).backgroundColor(this.aiConfigAvailable ? '#FFF7E6' : '#FFF1F2')
+      }
+    }.width('100%').alignItems(HorizontalAlign.Start).padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
+  }
+
+  @Builder
+  aiConfigState() {
+    Row({ space: 10 }) {
+      StateBadge({ status: this.aiConfigAvailable ? 'PASS' : 'FAILED', label: this.aiConfigAvailable ? '配置已加载' : '接口未就绪' })
+      Text('AI 中枢：' + AiCenterConfig.API_BASE).fontSize(9).fontColor(Theme.muted).layoutWeight(1)
+      Button('刷新配置').height(34).backgroundColor(Theme.blue).fontColor('#FFFFFF').onClick(() => void this.loadAiModelConfig())
+      Button('选择配置').height(34).fontColor(Theme.blue).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line }).onClick(() => this.selectAiConfig())
+    }.width('100%')
+    if (this.aiConfigLoading) {
+      Row({ space: 8 }) {
+        LoadingProgress().width(18).height(18).color(Theme.blue)
+        Text('正在访问 AI 中枢配置接口...').fontSize(10).fontColor(Theme.muted)
+      }.width('100%').padding(8).backgroundColor(Theme.panelSoft)
+    }
+  }
+
+  @Builder
+  aiModelForm() {
+    Column({ space: 10 }) {
+      Text('模型配置').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Row({ space: 8 }) {
+        TextInput({ text: this.aiProvider, placeholder: '供应商，例如 OpenAI / DeepSeek / 本地模型' }).layoutWeight(1).onChange((value: string) => this.aiProvider = value)
+        TextInput({ text: this.aiModelName, placeholder: '模型名称，例如 gpt-4.1 / deepseek-chat' }).layoutWeight(1).onChange((value: string) => this.aiModelName = value)
+        TextInput({ text: this.aiBaseUrl, placeholder: 'baseUrl，例如 https://api.xxx.com/v1' }).layoutWeight(1).onChange((value: string) => this.aiBaseUrl = value)
+      }.width('100%')
+      Row({ space: 8 }) {
+        Column() {
+          Text('当前 Key：' + (this.aiMaskedApiKey.length > 0 ? this.aiMaskedApiKey : '未设置或接口未返回')).fontSize(10).fontColor(Theme.muted)
+          TextInput({ text: this.aiApiKeyInput, placeholder: '填写新 API Key 才会更新；留空表示不变' })
+            .type(InputType.Password)
+            .width('100%')
+            .onChange((value: string) => this.aiApiKeyInput = value)
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        TextInput({ text: this.aiTimeoutMs, placeholder: '请求超时 ms' }).width(130).onChange((value: string) => this.aiTimeoutMs = value)
+        TextInput({ text: this.aiRetryCount, placeholder: '重试次数' }).width(110).onChange((value: string) => this.aiRetryCount = value)
+      }.width('100%').alignItems(VerticalAlign.Bottom)
+      Row({ space: 8 }) {
+        TextInput({ text: this.aiMaxTokens, placeholder: '最大 token' }).width(130).onChange((value: string) => this.aiMaxTokens = value)
+        TextInput({ text: this.aiTemperature, placeholder: '温度 0-2' }).width(130).onChange((value: string) => this.aiTemperature = value)
+        Button('流式：' + (this.aiStreamEnabled ? '开启' : '关闭')).fontColor('#FFFFFF').backgroundColor(this.aiStreamEnabled ? Theme.success : Theme.neutral).onClick(() => this.aiStreamEnabled = !this.aiStreamEnabled)
+        Button('RAG：' + (this.aiRagEnabled ? '开启' : '关闭')).fontColor('#FFFFFF').backgroundColor(this.aiRagEnabled ? Theme.success : Theme.neutral).onClick(() => this.aiRagEnabled = !this.aiRagEnabled)
+        Text(this.aiConfigUpdatedAt.length > 0 ? '最近更新：' + this.aiConfigUpdatedAt : '等待 AI 中枢返回配置版本').fontSize(9).fontColor(Theme.muted).layoutWeight(1)
+      }.width('100%')
+      Row({ space: 8 }) {
+        TextInput({ text: this.aiVectorStore, placeholder: '向量库，例如 Milvus / pgvector / Chroma' }).layoutWeight(1).onChange((value: string) => this.aiVectorStore = value)
+        TextInput({ text: this.aiEmbeddingModel, placeholder: 'Embedding 模型' }).layoutWeight(1).onChange((value: string) => this.aiEmbeddingModel = value)
+        TextInput({ text: this.aiKnowledgeVersion, placeholder: '当前知识版本（只读展示）' }).layoutWeight(1).enabled(false)
+      }.width('100%')
+      Row({ space: 10 }) {
+        Button('保存 AI 配置')
+          .enabled(this.canManageAiConfig() && !this.aiConfigLoading)
+          .fontColor('#FFFFFF')
+          .backgroundColor(this.canManageAiConfig() ? Theme.blue : Theme.neutral)
+          .onClick(() => this.confirmAction('确认保存 AI 配置', '配置将提交到 AI 中枢/后端配置 API；API Key 不会明文回显，留空表示沿用现有 Key。', () => void this.saveAiModelConfig()))
+        Text(this.canManageAiConfig() ? '具备 SYSTEM_MANAGE 权限' : '保存需要 ADMIN、非演示账号且后端在线。').fontSize(10).fontColor(this.canManageAiConfig() ? Theme.success : Theme.warning)
+      }.width('100%')
+    }.width('100%').padding(12).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  aiConnectionTestPanel() {
+    Column({ space: 8 }) {
+      Text('测试连接 / 测试问答').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      TextArea({ text: this.aiTestQuestion, placeholder: '输入一条用于诊断的测试问题' }).height(68).width('100%').onChange((value: string) => this.aiTestQuestion = value)
+      Row({ space: 10 }) {
+        Button('测试连接').enabled(this.canManageAiConfig() && !this.aiConfigLoading).fontColor('#FFFFFF').backgroundColor(this.canManageAiConfig() ? Theme.blue : Theme.neutral).onClick(() => void this.testAiConnection())
+        StateBadge({ status: this.aiTestStatus, label: this.aiTestStatus })
+        Text('失败会明确区分鉴权、超时、模型不可用、速率限制、RAG 未就绪或接口未实现。').fontSize(10).fontColor(Theme.muted).layoutWeight(1)
+      }.width('100%')
+      Text(this.aiTestResult).fontSize(10).fontColor(this.aiTestStatus === 'PASS' ? Theme.success : this.aiTestStatus === 'WAIT' ? Theme.muted : Theme.danger).width('100%').padding(10).backgroundColor('#FFFFFF').border({ width: 1, color: Theme.line })
+    }.width('100%').padding(12).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  aiRagStatusPanel() {
+    Column({ space: 8 }) {
+      Text('文档 / RAG 运维状态').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Row() {
+        Text('RAG 开关').fontSize(10).fontColor(Theme.muted).width(120)
+        StateBadge({ status: this.aiRagEnabled ? 'PASS' : 'WAIT', label: this.aiRagEnabled ? 'ENABLED' : 'DISABLED' })
+        Text('向量库：' + (this.aiVectorStore.length > 0 ? this.aiVectorStore : '--')).fontSize(10).fontColor(Theme.text).layoutWeight(1).margin({ left: 12 })
+      }.width('100%').padding(9).border({ width: { bottom: 1 }, color: Theme.line })
+      Row() {
+        Text('Embedding').fontSize(10).fontColor(Theme.muted).width(120)
+        Text(this.aiEmbeddingModel.length > 0 ? this.aiEmbeddingModel : '--').fontSize(10).fontColor(Theme.text).layoutWeight(1)
+      }.width('100%').padding(9).border({ width: { bottom: 1 }, color: Theme.line })
+      Row() {
+        Text('知识版本').fontSize(10).fontColor(Theme.muted).width(120)
+        Text(this.aiKnowledgeVersion.length > 0 ? this.aiKnowledgeVersion : '等待 AI 中枢返回已发布版本').fontSize(10).fontColor(Theme.text).layoutWeight(1)
+      }.width('100%').padding(9).border({ width: { bottom: 1 }, color: Theme.line })
+      Text('资料上传、解析预览、审核、拒绝、撤销、索引进度和失败原因在“知识资料”页面处理；只有 INDEXED 且未 REVOKED 的版本才允许参与 RAG。').fontSize(10).fontColor(Theme.muted).width('100%')
+      Button('进入知识资料管理').fontColor('#FFFFFF').backgroundColor(Theme.blue).onClick(() => this.selectSection('KNOWLEDGE'))
+    }.width('100%').padding(12).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
   knowledgeView() {
     KnowledgeGovernance({ query: this.query, filter: this.filter, stateVersion: this.currentStateVersion() })
   }
@@ -977,6 +1266,11 @@ struct AdminConsole {
       return { handled: false, reason: this.message }
     }
     if (entityType === AssistantEntityType.CONFIG) {
+      if (entityId === 'AI_MODEL_CONFIG') {
+        this.selectSection('AI_CONFIG')
+        this.selectAiConfig()
+        return { handled: true }
+      }
       let target: SystemPolicy | undefined = undefined
       SYSTEM_POLICIES.forEach((policy: SystemPolicy) => {
         if (policy.policyCode === entityId) target = policy
@@ -1090,6 +1384,36 @@ struct AdminConsole {
         assistantField('version', policy.version),
         assistantField('updatedAt', policy.updatedAt),
         assistantField('title', policy.name)
+      ]
+    )
+    adminAssistantSelectionBus.publish(selection)
+  }
+
+  private selectAiConfig(): void {
+    this.selectedDetail = 'AI 配置：AI_MODEL_CONFIG\n供应商：' + (this.aiProvider || '--') +
+      '\n模型：' + (this.aiModelName || '--') +
+      '\nbaseUrl：' + (this.aiBaseUrl || '--') +
+      '\nAPI Key：' + (this.aiMaskedApiKey || '未设置或接口未返回') +
+      '\n超时：' + this.aiTimeoutMs + ' ms' +
+      '\n重试：' + this.aiRetryCount +
+      '\n流式：' + (this.aiStreamEnabled ? '开启' : '关闭') +
+      '\nRAG：' + (this.aiRagEnabled ? '开启' : '关闭') +
+      '\n向量库：' + (this.aiVectorStore || '--') +
+      '\n知识版本：' + (this.aiKnowledgeVersion || '--') +
+      '\n说明：助手只能引用该配置状态，不能通过引用导航修改配置。'
+    const selection = createAdminSelection(
+      'CONFIGURATION',
+      'AI_MODEL_CONFIG',
+      'AI 模型配置 · ' + (this.aiModelName || '未加载'),
+      'AdminConsole/AI_CONFIG',
+      this.currentStateVersion(),
+      [
+        assistantField('provider', this.aiProvider),
+        assistantField('modelName', this.aiModelName),
+        assistantField('baseUrl', this.aiBaseUrl),
+        assistantField('status', this.aiConfigAvailable ? 'LOADED' : 'UNAVAILABLE'),
+        assistantField('knowledgeVersion', this.aiKnowledgeVersion),
+        assistantField('updatedAt', this.aiConfigUpdatedAt)
       ]
     )
     adminAssistantSelectionBus.publish(selection)
