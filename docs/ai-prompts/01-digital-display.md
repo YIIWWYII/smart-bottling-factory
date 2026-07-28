@@ -1,6 +1,6 @@
 # 数字展板补救开发对话提示词
 
-你负责智慧装瓶工厂的鸿蒙数字展板。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-display`，分支是 `codex/display`，唯一业务写入范围是 `apps/digital-display/BottlingFactoryDisplay`。不要修改小屏、后台管理、生产后端或 AI 中枢；如契约不足，只提交契约变更提案。
+你负责智慧装瓶工厂的鸿蒙数字展板。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-display`，分支是 `codex/display`，唯一业务写入范围是 `apps/digital-display/BottlingFactoryDisplay`。不要修改小屏、后台管理、生产后端、AI 中枢或 `packages/harmony-assistant`；如契约不足，只提交契约变更提案。
 
 ## 当前阶段
 
@@ -8,8 +8,8 @@
 
 ## 先做
 
-1. 先 `git fetch origin`、`git pull --ff-only origin codex/display`，再阅读 GitHub 最新架构分支的根 `README.md`、`contracts/`、开发标准、测试规范和本工程 README。
-2. 检查 `git status --short` 和当前分支，保护已有改动。
+1. 先检查 `git status --short` 和当前分支，保护已有改动；工作树干净时再 `git fetch origin`、`git pull --ff-only origin codex/display`。
+2. 阅读 GitHub 最新架构分支的根 `README.md`、全部 `contracts/`，重点阅读 `assistant-host-contract.md`、开发标准、测试规范和本工程 README。
 3. 必须调用 `$deveco-cli`；会话可见时优先使用官方 `deveco-cli` MCP。鸿蒙错误先查 `D:\HarmonyOS-Dev\Logs\devecocli-official-docs.md`，再查 `devecocli docs`，再查华为官方文档；开发记录只写入 D 盘开发日志。
 4. Three.js rawfile 有独立浏览器测试入口时调用 `$playwright`；它只验证 Web 层，不能替代鸿蒙模拟器。只有 DevEco Test Runner、模拟器窗口或 Web 调试必须操作 UI 时才调用 `$computer-use:computer-use`。
 
@@ -23,11 +23,19 @@ HTTP 首屏快照，WebSocket 实时通知；断线后清楚标识并重连、�
 
 ## 上下文 AI 助手
 
-在总览和工位详情提供可收起的原生 ArkUI 助手侧栏。支持自由问询，以及选中工位、KPI、报警、产品、文字和 Three.js 设备/物料后“问 AI”。调用独立 AI 中枢，发送统一 `AssistantContext`；Three.js 选中对象通过 JS Bridge 上报实体类型和 ID。展板助手只回答全局/当前工位的只读问题，实时回答显示数据时间和 `stateVersion`，文档回答显示知识版本和引用。AI 不可达时显示真实错误，不生成本地假回答。
+不要开发助手 UI、AI ApiClient、会话存储或流式状态机。依赖 AI 中枢任务提供的同一 `@bottling/harmony-assistant` HAR，只完成以下宿主工作：
+
+- 在总览和工位详情挂载共享 `AssistantPanel`，持有并在页面销毁时释放 `AssistantController`。
+- 实现 `AssistantHostAdapter`：`sourceApp='DISPLAY'`；`getContext()` 返回当前总览/工位、`lineId/stageCode/stateVersion/dataGeneratedAt`；`getAccessToken()` 返回展板只读客户端凭据；`getServiceEndpoint()` 读取 AI 中枢配置；实现 `subscribeSelection()`、`subscribeVisibility()` 和只读 `navigateToEntity()`。
+- ArkUI 工位、KPI、报警、产品和文字选择转换为 `AssistantSelection`。实体 ID 使用 `stageCode`、`lineId:kpiCode`、后端报警 ID、`traceCode` 或稳定文字字段 ID。
+- Three.js 2D/3D 只从 `userData` 上报稳定 `deviceCode/traceCode`，ArkTS 补齐页面路由和 `stateVersion`；禁止使用 Three.js `uuid/name` 或显示文本作为 ID。
+- 展板范围始终只读。回答引用导航只能定位页面/对象，不能产生参数修改、审批或设备控制。
+
+共享包统一负责自由/选中问询、会话、流式回答、停止/重试、引用、数据时间、知识版本、错误和权限反馈。AI 不可达时由共享包显示真实错误，不生成本地假回答。
 
 ## 补救顺序
 
-1. 对照 `client-capability-matrix.md`、`shared-snapshot-contract.md` 和实时契约审计现有 Repository、ArkTS 页面、ArkWeb bridge、2D/3D rawfile。
+1. 对照 `client-capability-matrix.md`、`shared-snapshot-contract.md`、`assistant-host-contract.md` 和实时契约审计现有 Repository、ArkTS 页面、ArkWeb bridge、2D/3D rawfile。
 2. 先修崩溃、白屏、假按钮、不可滚动、导航错误、资源泄漏和假数据来源，再补视觉细节。
 3. 统一 2D/3D 使用后端 `stateVersion` 快照。后端目标端点尚未完成时允许兼容当前组合接口，但必须显式记录映射；禁止前端各自随机生成跨端数据。
 4. 增加开发态 `window.__factoryTest__` 只读探针和测试入口，不得暴露生产控制能力。
@@ -36,6 +44,7 @@ HTTP 首屏快照，WebSocket 实时通知；断线后清楚标识并重连、�
 ## 禁止
 
 - 不加登录、注册、后台管理、设备控制或参数写入；AI 助手也不能成为控制入口。
+- 不复制共享助手源码，不实现本地聊天 UI，不直接调用 `/assistant/**` 或解析 `ai.conversation.*`。
 - 不连接 MQTT，不在前端实现业务真相或随机生成彼此不一致的数据。
 - 不引入网络 CDN，Three.js 及许可证都随 HAP 本地打包。
 - 不做只有样式不能点击的按钮，不牺牲滚动和小尺寸可用性。
@@ -50,4 +59,4 @@ HTTP 首屏快照，WebSocket 实时通知；断线后清楚标识并重连、�
   -BuildProject "D:\HarmonyOS-Dev\Build\BottlingFactoryDisplay" -Modules entry -BuildMode debug
 ```
 
-要求 `BUILD SUCCESSFUL`、HAP 生成、模拟器启动、总览到九工位导航、2D/3D canvas 非空像素、同版本联动、暂停/恢复、点击/拖拽、资源释放和断线冒烟通过。提交到 `codex/display` 并推送，最终报告提交号、文件、测试命令与计数、截图/日志、未完成 P1 和契约提案，不直接推 `main`。
+要求 `BUILD SUCCESSFUL`、HAP 生成、模拟器启动、总览到九工位导航、2D/3D canvas 非空像素、同版本联动、暂停/恢复、点击/拖拽、资源释放和断线冒烟通过；另须证明使用统一助手包版本、适配器七项能力、稳定实体 ID、只读引用导航和无本地助手实现。提交到 `codex/display` 并推送，最终报告提交号、文件、测试命令与计数、截图/日志、未完成 P1 和契约提案，不直接推 `main`。
