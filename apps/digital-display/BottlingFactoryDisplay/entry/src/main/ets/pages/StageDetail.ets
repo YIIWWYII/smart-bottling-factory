@@ -1,8 +1,11 @@
 import { router } from '@kit.ArkUI'
 import { Theme, statusColor } from '../common/Theme'
+import { AssistantMountPoint } from '../components/AssistantMountPoint'
 import { DeviceStateRow, QualityGateRow, SectionTitle, StateBadge } from '../components/IndustrialComponents'
+import { FactoryPlanScene } from '../components/FactoryPlanScene'
 import { FactoryThreeScene } from '../components/FactoryThreeScene'
 import { FACTORY_STAGES, findStage } from '../config/FactoryStages'
+import { AssistantHostAdapter, AssistantSelection } from '../assistant/AssistantHostAdapter'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { AlarmRecord, DeviceDefinition, FactoryBundle, FactoryRun, QualityGateView, RuntimeStage, StageDefinition } from '../model/FactoryModels'
 import { ApiConfig } from '../service/ApiConfig'
@@ -27,6 +30,7 @@ class ThreeProductPayload {
 interface ThreeScenePayload {
   stageCode: string
   stageName: string
+  stateVersion: string
   source: string
   paused: boolean
   statusColors: boolean
@@ -42,10 +46,15 @@ interface ThreeScenePayload {
 struct StageDetail {
   @State stageCode: string = 'PRETREATMENT'
   @State bundle: FactoryBundle = FactoryRepository.bundle
-  @State selectedDeviceCode: string = ''
-  @State selectedTraceCode: string = ''
-  @State planarEnabled: boolean = false
-  @State threeEnabled: boolean = true
+  @State @Watch('onDeviceSelectionChanged') selectedDeviceCode: string = ''
+  @State @Watch('onTraceSelectionChanged') selectedTraceCode: string = ''
+  @State assistantOpen: boolean = false
+  @State assistantSelectionType: string = ''
+  @State assistantSelectionId: string = ''
+  @State assistantSelectionLabel: string = ''
+  @State assistantSelectedText: string = ''
+  @State planarEnabled: boolean = true
+  @State threeEnabled: boolean = false
   @State statusColorsEnabled: boolean = true
   @State layoutEditEnabled: boolean = false
   @State paused: boolean = false
@@ -55,19 +64,21 @@ struct StageDetail {
   private motionTimer: number = -1
   private listener: () => void = () => {
     this.bundle = FactoryRepository.bundle
+    this.syncAssistantContext()
     this.revision += 1
   }
 
-  get stage(): StageDefinition { return findStage(this.stageCode) }
-  get stageIndex(): number { return FACTORY_STAGES.findIndex(item => item.code === this.stageCode) }
-  get runtimeStage(): RuntimeStage { return this.findRuntimeStage(this.stageCode) }
-  get stageAlarms(): number { return this.bundle.operations.alarms.filter(item => item.status === 'OPEN' && this.normalizeStage(item.stage || '', item.deviceCode) === this.stageCode).length }
-  get wipCount(): number { return this.bundle.dashboard.runs.filter(item => item.currentStage === this.stageCode && (item.status === 'RUNNING' || item.status === 'HOLD')).length }
+  private stage(): StageDefinition { return findStage(this.stageCode) }
+  private stageIndex(): number { return FACTORY_STAGES.findIndex(item => item.code === this.stageCode) }
+  private runtimeStage(): RuntimeStage { return this.findRuntimeStage(this.stageCode) }
+  private stageAlarms(): number { return this.bundle.operations.alarms.filter(item => item.status === 'OPEN' && this.normalizeStage(item.stage || '', item.deviceCode) === this.stageCode).length }
+  private wipCount(): number { return this.bundle.dashboard.runs.filter(item => item.currentStage === this.stageCode && (item.status === 'RUNNING' || item.status === 'HOLD')).length }
 
   aboutToAppear(): void {
     const params = router.getParams() as StageParams
     if (params !== undefined && params.stageCode !== undefined) this.stageCode = params.stageCode
     FactoryRepository.subscribe(this.listener)
+    this.syncAssistantContext()
     void FactoryRepository.refresh()
     FactoryRepository.connectRealtime()
     this.refreshTimer = setInterval(() => void FactoryRepository.refresh(), ApiConfig.refreshIntervalMs)
@@ -91,8 +102,30 @@ struct StageDetail {
 
   private normalizeStage(stage: string, deviceCode: string): string { return stage === 'WAREHOUSE_SAFETY' || deviceCode.indexOf('WAREHOUSE') === 0 ? 'WAREHOUSE_INBOUND' : stage }
   private formatTime(value: string | undefined): string { return value === undefined ? '--' : value.replace('T', ' ').slice(0, 19) }
-  private statusText(): string { return this.stageAlarms > 0 ? '异常待处理' : this.runtimeStage.state === 'RUNNING' ? '持续运行' : '待机' }
-  private statusValue(): string { return this.stageAlarms > 0 ? 'ALARM' : this.runtimeStage.state === 'RUNNING' ? 'RUNNING' : 'STANDBY' }
+  private statusText(): string { return this.stageAlarms() > 0 ? '异常待处理' : this.runtimeStage().state === 'RUNNING' ? '持续运行' : '待机' }
+  private statusValue(): string { return this.stageAlarms() > 0 ? 'ALARM' : this.runtimeStage().state === 'RUNNING' ? 'RUNNING' : 'STANDBY' }
+  private assistantStateVersion(): string { return AssistantHostAdapter.stateVersionOf(this.bundle) }
+  private syncAssistantContext(): void {
+    AssistantHostAdapter.updateContext(AssistantHostAdapter.buildContext('pages/StageDetail', this.bundle, this.stageCode, this.selectedDeviceCode, this.selectedTraceCode))
+  }
+  private selectAssistant(entityType: string, entityId: string, label: string, origin: string, selectedText: string = ''): void {
+    const selection: AssistantSelection = AssistantHostAdapter.createSelection(entityType, entityId, label, origin, this.assistantStateVersion(), selectedText)
+    AssistantHostAdapter.select(selection)
+    this.assistantSelectionType = selection.entityType
+    this.assistantSelectionId = selection.entityId
+    this.assistantSelectionLabel = selection.label
+    this.assistantSelectedText = selection.selectedText
+    this.assistantOpen = true
+    this.syncAssistantContext()
+  }
+  private onDeviceSelectionChanged(): void {
+    if (this.selectedDeviceCode.length === 0) return
+    this.selectAssistant('DEVICE', 'device:' + this.selectedDeviceCode, this.selectedDeviceCode + ' · ' + this.selectedDeviceRole(), 'stage-visual-device')
+  }
+  private onTraceSelectionChanged(): void {
+    if (this.selectedTraceCode.length === 0) return
+    this.selectAssistant('PRODUCT', 'product:' + this.selectedTraceCode, this.productLabel(this.selectedTraceCode), 'stage-visual-product')
+  }
   private deviceRuntime(code: string): string {
     let state: string = 'STANDBY'
     this.bundle.runtime.devices.forEach(item => { if (item.deviceCode === code) state = item.state })
@@ -125,10 +158,10 @@ struct StageDetail {
     const eventExists = this.bundle.dashboard.runs.some(run => run.events.some(event => event.stage === this.stageCode && event.status === 'PASSED'))
     const eventFail = this.bundle.dashboard.runs.some(run => run.events.some(event => event.stage === this.stageCode && event.status === 'FAILED'))
     const eventGate: QualityGateView = { label: '工序事件判定', standard: '产品工序事件 PASSED', actual: eventFail ? '存在失败事件' : eventExists ? '最近记录通过' : '等待产品判定', status: eventFail ? 'FAIL' : eventExists ? 'PASS' : 'WAIT', source: '产品事件链' }
-    const interlock: QualityGateView = { label: '设备联锁', standard: 'RUNNING 且无开放报警', actual: this.runtimeStage.state, status: this.stageAlarms > 0 ? 'FAIL' : this.runtimeStage.state === 'RUNNING' ? 'PASS' : 'WAIT', source: '工位运行态与报警' }
+    const interlock: QualityGateView = { label: '设备联锁', standard: 'RUNNING 且无开放报警', actual: this.runtimeStage().state, status: this.stageAlarms() > 0 ? 'FAIL' : this.runtimeStage().state === 'RUNNING' ? 'PASS' : 'WAIT', source: '工位运行态与报警' }
     if (this.stageCode === 'GAS_INSPECTION') {
       const reading = this.bundle.operations.latestReadings.find(item => item.sensorType === 'VOC' && item.stage === this.stageCode)
-      return [{ label: 'VOC 安全浓度', standard: '<= 10 ppm 且无开放报警', actual: reading === undefined ? '等待传感器上报' : reading.value + ' ' + reading.unit, status: reading === undefined ? 'WAIT' : reading.value <= 10 && this.stageAlarms === 0 ? 'PASS' : 'FAIL', source: reading === undefined ? 'VOC 传感器' : reading.mode }, interlock]
+      return [{ label: 'VOC 安全浓度', standard: '<= 10 ppm 且无开放报警', actual: reading === undefined ? '等待传感器上报' : reading.value + ' ' + reading.unit, status: reading === undefined ? 'WAIT' : reading.value <= 10 && this.stageAlarms() === 0 ? 'PASS' : 'FAIL', source: reading === undefined ? 'VOC 传感器' : reading.mode }, interlock]
     }
     if (this.stageCode === 'BEVERAGE_READY') {
       const reading = this.bundle.operations.latestReadings.find(item => item.sensorType === 'TEMPERATURE' && item.stage === this.stageCode)
@@ -153,7 +186,7 @@ struct StageDetail {
   }
 
   private navigateStage(offset: number): void {
-    const next = this.stageIndex + offset
+    const next = this.stageIndex() + offset
     if (next >= 0 && next < FACTORY_STAGES.length) router.replaceUrl({ url: 'pages/StageDetail', params: { stageCode: FACTORY_STAGES[next].code } })
   }
 
@@ -186,7 +219,7 @@ struct StageDetail {
 
   private scenePayload(): string {
     const devices: Array<ThreeDevicePayload> = []
-    this.stage.devices.forEach((device: DeviceDefinition) => {
+    this.stage().devices.forEach((device: DeviceDefinition) => {
       const item = new ThreeDevicePayload()
       item.code = device.code
       item.name = device.name
@@ -209,7 +242,8 @@ struct StageDetail {
       })
     const payload: ThreeScenePayload = {
       stageCode: this.stageCode,
-      stageName: this.stage.name,
+      stageName: this.stage().name,
+      stateVersion: this.assistantStateVersion(),
       source: this.bundle.source,
       paused: this.paused,
       statusColors: this.statusColorsEnabled,
@@ -228,24 +262,30 @@ struct StageDetail {
         Row() {
           Button('← 总览').type(ButtonType.Normal).fontColor('#FFFFFF').backgroundColor(Color.Transparent).onClick(() => router.back())
           Blank()
-          Text(this.stage.code + ' · 工位 ' + (this.stageIndex + 1) + ' / ' + FACTORY_STAGES.length).fontSize(10).fontColor('#C8DCE9')
+          Button(this.assistantOpen ? '收起助手' : '助手上下文').type(ButtonType.Normal).fontColor('#FFFFFF').backgroundColor(Color.Transparent).onClick(() => this.assistantOpen = !this.assistantOpen)
+          Text(this.stage().code + ' · 工位 ' + (this.stageIndex() + 1) + ' / ' + FACTORY_STAGES.length).fontSize(10).fontColor('#C8DCE9')
         }.width('100%').padding({ left: 10, right: 10, top: 7, bottom: 7 }).backgroundColor(Theme.navy)
         Row() {
-          Column() { Text(this.stage.code).fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Text(this.stage.name + '工位').fontSize(30).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7 }); Text(this.stage.description).fontSize(12).fontColor(Theme.muted).lineHeight(18).margin({ top: 6 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+          Column() { Text(this.stage().code).fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Text(this.stage().name + '工位').fontSize(30).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7 }); Text(this.stage().description).fontSize(12).fontColor(Theme.muted).lineHeight(18).margin({ top: 6 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           StateBadge({ status: this.statusValue(), label: this.statusText() })
         }.width('100%').alignItems(VerticalAlign.Bottom).padding(18).border({ width: { bottom: 3 }, color: Theme.blue })
         Row() {
-          Button('← 上一工位').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.stageIndex > 0).onClick(() => this.navigateStage(-1))
+          Button('← 上一工位').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.stageIndex() > 0).onClick(() => this.navigateStage(-1))
           Blank()
-          Button('下一工位 →').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.stageIndex < FACTORY_STAGES.length - 1).onClick(() => this.navigateStage(1))
+          Button('问 AI 当前工位').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectAssistant('STAGE', 'stage:' + this.stageCode, this.stage().name + '工位', 'stage-header'))
+          Button('下一工位 →').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.stageIndex() < FACTORY_STAGES.length - 1).onClick(() => this.navigateStage(1))
         }.width('100%').padding({ left: 10, right: 10 })
 
+        if (this.assistantOpen) {
+          this.assistantPanel()
+        }
+
         Column() {
-          SectionTitle({ code: '01', title: '工位可视化', description: '二维工艺图与 Three.js 三维场景均由同一份设备、物料和速度数据驱动，可独立关闭以降低性能占用。' })
+          SectionTitle({ code: '01', title: '工位可视化', description: '2D 平面工艺图与 Three.js 三维场景使用同一份设备、物料和速度数据，可分别开启、暂停和查看对象详情。' })
           Scroll() {
             Row({ space: 8 }) {
-              this.visualToggle('二维', this.planarEnabled, 'PLANAR')
-              this.visualToggle('三维', this.threeEnabled, 'THREE')
+              this.visualToggle('平面工艺图', this.planarEnabled, 'PLANAR')
+              this.visualToggle('三维运行图', this.threeEnabled, 'THREE')
               this.visualToggle('状态颜色', this.statusColorsEnabled, 'COLORS')
               this.visualToggle('布局编辑', this.layoutEditEnabled, 'LAYOUT')
               Button(this.paused ? '恢复实时' : '暂停画面')
@@ -259,14 +299,14 @@ struct StageDetail {
             }.padding({ top: 12, bottom: 8 })
           }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
 
-          if (this.threeEnabled) {
+          if (this.planarEnabled) {
             Column() {
               Row() {
-                Text('THREE.JS 3D').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+                Text('2D FLOOR PLAN').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
                 Blank()
-                Text(this.layoutEditEnabled ? '拖拽设备调整位置' : '拖拽旋转 · 滚轮缩放 · 点击查看').fontSize(9).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.muted)
+                Text(this.layoutEditEnabled ? '拖拽设备调整平面位置' : '点击设备 / 产品查看详情').fontSize(9).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.muted)
               }.width('100%').padding({ bottom: 8 })
-              FactoryThreeScene({
+              FactoryPlanScene({
                 payload: this.scenePayload(),
                 selectedDeviceCode: $selectedDeviceCode,
                 selectedTraceCode: $selectedTraceCode
@@ -274,8 +314,19 @@ struct StageDetail {
             }.width('100%').padding(12).margin({ top: 4 }).backgroundColor(Theme.panelSoft)
           }
 
-          if (this.planarEnabled) {
-            this.nativeProcessView()
+          if (this.threeEnabled) {
+            Column() {
+              Row() {
+                Text('THREE.JS 3D').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+                Blank()
+                Text(this.layoutEditEnabled ? '拖拽设备调整三维位置' : '拖拽旋转 · 滚轮缩放 · 点击查看').fontSize(9).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.muted)
+              }.width('100%').padding({ bottom: 8 })
+              FactoryThreeScene({
+                payload: this.scenePayload(),
+                selectedDeviceCode: $selectedDeviceCode,
+                selectedTraceCode: $selectedTraceCode
+              })
+            }.width('100%').padding(12).margin({ top: 12 }).backgroundColor(Theme.panelSoft)
           }
 
           if (!this.threeEnabled && !this.planarEnabled) {
@@ -286,9 +337,9 @@ struct StageDetail {
           }
         }.width('100%').padding(18).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.blue }).borderRadius(3).margin({ top: 12 })
 
-        Scroll() { Row({ space: 8 }) { this.metric('当前速度', this.stageCode === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s', '数据驱动画面'); this.metric('缓冲占用', this.runtimeStage.bufferLevel + '/' + this.runtimeStage.bufferCapacity, '工位间解耦缓冲'); this.metric('本站在制品', this.wipCount.toString(), '运行或待处理'); this.metric('设备在线', this.bundle.runtime.devices.filter(item => item.stageCode === this.stageCode && item.state !== 'OFFLINE').length + '/' + this.stage.devices.length, this.bundle.source) } }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 12 })
+        Scroll() { Row({ space: 8 }) { this.metric('当前速度', this.stageCode === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s', '数据驱动画面'); this.metric('缓冲占用', this.runtimeStage().bufferLevel + '/' + this.runtimeStage().bufferCapacity, '工位间解耦缓冲'); this.metric('本站在制品', this.wipCount().toString(), '运行或待处理'); this.metric('设备在线', this.bundle.runtime.devices.filter(item => item.stageCode === this.stageCode && item.state !== 'OFFLINE').length + '/' + this.stage().devices.length, this.bundle.source) } }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 12 })
 
-        Column() { SectionTitle({ code: '02', title: '设备运行清单', description: '点击设备查看其作用、数据源、参数和关联传感器读数。' }); ForEach(this.stage.devices, (device: DeviceDefinition, index: number) => { Row() { DeviceStateRow({ index: index, device: device, state: this.deviceRuntime(device.code), source: this.deviceSource(device.code), reading: this.deviceReading(device.code) }); Blank() }.width('100%').onClick(() => this.selectedDeviceCode = device.code) }, (device: DeviceDefinition) => device.code) }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
+        Column() { SectionTitle({ code: '02', title: '设备运行清单', description: '点击设备查看其作用、数据源、参数和关联传感器读数，并发出 DEVICE 选择上下文。' }); ForEach(this.stage().devices, (device: DeviceDefinition, index: number) => { Row() { DeviceStateRow({ index: index, device: device, state: this.deviceRuntime(device.code), source: this.deviceSource(device.code), reading: this.deviceReading(device.code) }); Blank() }.width('100%').onClick(() => this.selectedDeviceCode = device.code) }, (device: DeviceDefinition) => device.code) }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
 
         if (this.selectedDeviceCode.length > 0) { this.deviceInfoPanel() }
         if (this.selectedTraceCode.length > 0) { this.selectedProductPanel() }
@@ -299,6 +350,25 @@ struct StageDetail {
         this.tracePanel()
       }.width('100%').alignItems(HorizontalAlign.Start).padding({ bottom: 28 })
     }.width('100%').height('100%').backgroundColor(Theme.page)
+  }
+
+  @Builder
+  assistantPanel() {
+    AssistantMountPoint({
+      sourceApp: 'DISPLAY',
+      pageRoute: 'pages/StageDetail',
+      lineId: 'LINE-1',
+      stageCode: this.stageCode,
+      deviceCode: this.selectedDeviceCode,
+      traceCode: this.selectedTraceCode,
+      stateVersion: this.assistantStateVersion(),
+      selectionType: this.assistantSelectionType,
+      selectionId: this.assistantSelectionId,
+      selectionLabel: this.assistantSelectionLabel,
+      selectedText: this.assistantSelectedText,
+      aiBase: AssistantHostAdapter.status().aiBase,
+      unavailableReason: AssistantHostAdapter.status().unavailableReason
+    }).margin({ left: 16, right: 16, top: 10, bottom: 8 })
   }
 
   @Builder
@@ -314,23 +384,9 @@ struct StageDetail {
   }
 
   @Builder
-  nativeProcessView() {
-    Column() {
-      Text(this.paused ? '画面已暂停 · 数据快照保持不变' : this.bundle.source + ' · 设备与物料动作联动').fontSize(9).fontColor(this.paused ? Theme.warning : Theme.blue).margin({ bottom: 9 })
-      Stack() {
-        Column() {
-          Row({ space: 4 }) { ForEach(this.stage.devices, (device: DeviceDefinition, index: number) => { Column() { Text((index + 1).toString().padStart(2, '0')).fontSize(8).fontColor(Theme.muted); Circle().width(12).height(12).fill(statusColor(this.deviceRuntime(device.code))).margin({ top: 6 }); Text(device.name).fontSize(8).fontColor(Theme.text).maxLines(1).margin({ top: 5 }) }.alignItems(HorizontalAlign.Center).layoutWeight(1) }, (device: DeviceDefinition) => device.code) }.width('100%').padding({ left: 8, right: 8, bottom: 18 })
-          Progress({ value: this.motion, total: 100, type: ProgressType.Linear }).width('100%').height(10).color(Theme.accent).backgroundColor('#DCE7EF')
-          Row() { Text('物料入口').fontSize(9).fontColor(Theme.muted); Blank(); Text('→ 数据联动 →').fontSize(9).fontColor(Theme.accent); Blank(); Text('工位出口').fontSize(9).fontColor(Theme.muted) }.width('100%').margin({ top: 8 })
-        }.width('100%').padding(16).backgroundColor('#F6FAFC')
-      }.width('100%').backgroundColor('#E7F0F5').border({ width: 1, color: Theme.line }).padding(10)
-    }.width('100%').padding(12).margin({ top: 12 }).backgroundColor(Theme.panelSoft)
-  }
-
-  @Builder
   selectedProductPanel() {
     Column() {
-      SectionTitle({ code: 'PRODUCT PROFILE', title: this.selectedTraceCode, description: '三维场景选中的在制品；详细信息来自产品追踪记录和传感器事件。' })
+      SectionTitle({ code: 'PRODUCT PROFILE', title: this.selectedTraceCode, description: '可视化场景选中的在制品；详细信息来自产品追踪记录和传感器事件。' })
       ForEach(this.bundle.dashboard.runs.filter(item => item.traceCode === this.selectedTraceCode), (run: FactoryRun) => {
         Row() { Text('瓶型').fontSize(10).fontColor(Theme.muted); Blank(); Text(run.bottleType || '待识别').fontSize(11).fontColor(Theme.navy).fontWeight(FontWeight.Bold) }.width('100%').padding(10)
         Row() { Text('当前工位').fontSize(10).fontColor(Theme.muted); Blank(); Text(run.currentStage).fontSize(11).fontColor(Theme.blue).fontWeight(FontWeight.Bold) }.width('100%').padding(10).backgroundColor(Theme.panelSoft)
@@ -352,18 +408,26 @@ struct StageDetail {
 
   private selectedDeviceRole(): string {
     let role: string = '设备作用'
-    this.stage.devices.forEach(item => { if (item.code === this.selectedDeviceCode) role = item.code + ' · ' + item.role })
+    this.stage().devices.forEach(item => { if (item.code === this.selectedDeviceCode) role = item.code + ' · ' + item.role })
     return role
+  }
+
+  private productLabel(traceCode: string): string {
+    let label: string = traceCode
+    this.bundle.dashboard.runs.forEach(run => {
+      if (run.traceCode === traceCode) label = run.traceCode + ' · ' + (run.bottleType || '待识别') + ' · ' + this.statusTextForRun(run.status)
+    })
+    return label
   }
 
   @Builder
   materialPanel() {
-    Column() { SectionTitle({ code: '04', title: '物料与在制品', description: '展示当前工位相关产品的追踪号、瓶型、状态和质量结果。' }); ForEach(this.bundle.dashboard.runs.filter(item => item.currentStage === this.stageCode).slice(0, 6), (run: FactoryRun) => { Row({ space: 9 }) { Circle().width(9).height(9).fill(statusColor(run.status)); Column() { Text(run.traceCode).fontSize(10).fontColor(Theme.blue).fontWeight(FontWeight.Bold); Text((run.bottleType || '待识别') + ' · ' + this.statusTextForRun(run.status)).fontSize(9).fontColor(Theme.muted).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text(run.defectType === undefined ? '检测结果待确认' : run.defectType).fontSize(9).fontColor(run.defectType === undefined ? Theme.muted : Theme.danger) }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }) }, (run: FactoryRun) => run.traceCode) }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
+    Column() { SectionTitle({ code: '04', title: '物料与在制品', description: '展示当前工位相关产品的追踪号、瓶型、状态和质量结果。' }); ForEach(this.bundle.dashboard.runs.filter(item => item.currentStage === this.stageCode).slice(0, 6), (run: FactoryRun) => { Row({ space: 9 }) { Circle().width(9).height(9).fill(statusColor(run.status)); Column() { Text(run.traceCode).fontSize(10).fontColor(Theme.blue).fontWeight(FontWeight.Bold); Text((run.bottleType || '待识别') + ' · ' + this.statusTextForRun(run.status)).fontSize(9).fontColor(Theme.muted).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text(run.defectType === undefined ? '检测结果待确认' : run.defectType).fontSize(9).fontColor(run.defectType === undefined ? Theme.muted : Theme.danger) }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectedTraceCode = run.traceCode) }, (run: FactoryRun) => run.traceCode) }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
   }
 
   @Builder
   tracePanel() {
-    Column() { SectionTitle({ code: '05', title: '工位异常与影响', description: '设备报警、异常策略和上下游影响。' }); if (this.stageAlarms === 0) { Text('当前没有本站开放报警。').fontSize(10).fontColor(Theme.muted).padding(12) } else { ForEach(this.bundle.operations.alarms.filter(item => item.status === 'OPEN' && this.normalizeStage(item.stage || '', item.deviceCode) === this.stageCode), (alarm: AlarmRecord) => { Row() { Circle().width(8).height(8).fill(Theme.danger); Column() { Text(alarm.alarmType + ' · ' + alarm.deviceCode).fontSize(10).fontColor(Theme.danger).fontWeight(FontWeight.Bold); Text(alarm.message).fontSize(9).fontColor(Theme.muted).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text('需管理端确认').fontSize(9).fontColor(Theme.warning) }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }) }, (alarm: AlarmRecord) => alarm.alarmId) } }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
+    Column() { SectionTitle({ code: '05', title: '工位异常与影响', description: '设备报警、异常策略和上下游影响。' }); if (this.stageAlarms() === 0) { Text('当前没有本站开放报警。').fontSize(10).fontColor(Theme.muted).padding(12) } else { ForEach(this.bundle.operations.alarms.filter(item => item.status === 'OPEN' && this.normalizeStage(item.stage || '', item.deviceCode) === this.stageCode), (alarm: AlarmRecord) => { Row() { Circle().width(8).height(8).fill(Theme.danger); Column() { Text(alarm.alarmType + ' · ' + alarm.deviceCode).fontSize(10).fontColor(Theme.danger).fontWeight(FontWeight.Bold); Text(alarm.message).fontSize(9).fontColor(Theme.muted).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text('需管理端确认').fontSize(9).fontColor(Theme.warning) }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }) }, (alarm: AlarmRecord) => alarm.alarmId) } }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
   }
 
   private statusTextForRun(status: string): string { return status === 'COMPLETED' ? '已入库' : status === 'REJECTED' ? '已剔除' : status === 'HOLD' ? '待处理' : '运行中' }

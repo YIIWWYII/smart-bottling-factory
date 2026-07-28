@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="color-scheme" content="light">
+  <title>Factory 2D Plan</title>
+  <link rel="stylesheet" href="./scene.css">
+</head>
+<body>
+  <main id="plan" class="plan-view state-colors">
+    <header class="plan-header">
+      <div class="plan-title">
+        <strong id="stage-title">瓶体预处理单元</strong>
+        <span id="stage-subtitle">二维工艺布置示意</span>
+      </div>
+      <div class="plan-actions">
+        <span id="live-state" class="live-state"><i></i>实时联动</span>
+        <div class="state-legend" aria-label="状态颜色图例">
+          <span class="running">运行</span><span class="hold">待处理</span><span class="alarm">异常</span><span class="passed">通过</span>
+        </div>
+        <button id="reset-layout" type="button" title="恢复当前工位默认布局">恢复默认</button>
+      </div>
+    </header>
+
+    <section id="plan-canvas" class="plan-canvas conveyor-route" aria-label="工位二维平面工艺图">
+      <div class="factory-zone"><span>设备作业边界</span></div>
+      <div id="special-zone" class="special-zone hidden"></div>
+      <div id="process-route" class="process-route"><i></i></div>
+      <span id="flow-input" class="flow-caption input">物料入口</span>
+      <span id="flow-output" class="flow-caption output">工位出口</span>
+      <div id="device-layer" class="device-layer"></div>
+      <div id="product-layer" class="product-layer"></div>
+      <div id="empty-products" class="empty-products hidden">等待带追踪码的产品进入本工位</div>
+    </section>
+
+    <section class="flow-footer" aria-label="工艺流向">
+      <div><span>投入</span><strong id="flow-material">PLA 瓶</strong></div><i>→</i>
+      <div class="linked-devices"><span>设备联动</span><strong id="flow-devices">等待设备数据</strong></div><i>→</i>
+      <div><span>产出</span><strong id="flow-result">洁净干燥瓶</strong></div>
+    </section>
+    <section id="product-strip" class="product-strip"></section>
+    <section class="runtime-strip">
+      <div><span>联动数据源</span><strong id="data-source">LOCAL DEMO</strong></div>
+      <div><span>当前速度</span><strong id="runtime-speed">120 mm/s</strong></div>
+      <div><span>画面进度</span><strong id="runtime-progress">0%</strong></div>
+      <div><span>画面状态</span><strong id="runtime-status">平面图实时运行</strong></div>
+    </section>
+  </main>
+  <aside id="selection" class="selection hidden"></aside>
+  <script src="./scene.js"></script>
+</body>
+</html>

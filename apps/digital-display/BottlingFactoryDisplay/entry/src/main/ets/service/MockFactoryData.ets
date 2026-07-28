@@ -29,6 +29,7 @@ export function createMockBundle(): FactoryBundle {
       aiAudits: []
     },
     runtime: {
+      stateVersion: 'LOCAL-DEMO-20260721T120000',
       generatedAt: now,
       stages: stages,
       devices: devices,
@@ -39,6 +40,6 @@ export function createMockBundle(): FactoryBundle {
       zones: [{ zoneCode: 'A-01', vocPpm: 3, smoke: .1, temperatureC: 25, status: 'SAFE', updatedAt: now }],
       stock: [{ boxCode: 'BOX-DEMO-003', bottleType: 'PLA-500', zoneCode: 'A-01', locationCode: 'A-01-01', status: 'IN_STOCK', inboundAt: now }]
     },
-    source: 'LOCAL DEMO', online: false, updatedAt: now, errorMessage: '后端暂不可用，当前显示本地演示数据'
+    source: 'LOCAL DEMO', online: false, stateVersion: 'LOCAL-DEMO-20260721T120000', updatedAt: now, errorMessage: '后端暂不可用，当前显示本地演示数据'
   }
 }

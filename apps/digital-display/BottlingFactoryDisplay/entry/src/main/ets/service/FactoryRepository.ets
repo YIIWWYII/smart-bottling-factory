@@ -29,15 +29,20 @@ class FactoryRepositoryImpl {
     this.listeners.forEach(listener => listener())
   }
 
+  private resolveStateVersion(runtime: RuntimeSnapshot): string {
+    return runtime.stateVersion || runtime.generatedAt || this.bundle.updatedAt
+  }
+
   async refresh(): Promise<void> {
     try {
       const dashboard: FactoryDashboard = await this.client.request<FactoryDashboard>('/factory/dashboard')
       const operations: OperationsOverview = await this.client.request<OperationsOverview>('/operations/overview')
       const logistics: LogisticsOverview = await this.client.request<LogisticsOverview>('/logistics/overview')
       const runtime: RuntimeSnapshot = await this.client.request<RuntimeSnapshot>('/factory/runtime')
-      this.bundle = { dashboard, operations, logistics, runtime, source: 'BACKEND', online: true, updatedAt: runtime.generatedAt || new Date().toISOString(), errorMessage: '' }
+      const version: string = this.resolveStateVersion(runtime)
+      this.bundle = { dashboard, operations, logistics, runtime, source: 'BACKEND', online: true, stateVersion: version, updatedAt: runtime.generatedAt || new Date().toISOString(), errorMessage: '' }
     } catch (error) {
-      this.bundle = { dashboard: this.bundle.dashboard, operations: this.bundle.operations, logistics: this.bundle.logistics, runtime: this.bundle.runtime, source: 'LOCAL DEMO', online: false, updatedAt: this.bundle.updatedAt, errorMessage: error instanceof Error ? error.message : '后端请求失败' }
+      this.bundle = { dashboard: this.bundle.dashboard, operations: this.bundle.operations, logistics: this.bundle.logistics, runtime: this.bundle.runtime, source: 'LOCAL DEMO', online: false, stateVersion: this.bundle.stateVersion, updatedAt: this.bundle.updatedAt, errorMessage: error instanceof Error ? error.message : '后端请求失败' }
     }
     this.notify()
   }

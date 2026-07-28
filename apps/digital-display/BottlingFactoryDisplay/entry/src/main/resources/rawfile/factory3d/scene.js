@@ -33,6 +33,7 @@
   var state = {
     stageCode: 'PRETREATMENT',
     stageName: '预处理',
+    stateVersion: 'UNKNOWN',
     source: 'LOCAL DEMO',
     paused: false,
     statusColors: true,
@@ -852,6 +853,16 @@
       clearObject(stageRoot);
       if (renderer) renderer.dispose();
     }
+  };
+
+  window.__factoryTest__ = {
+    mode: 'THREE_3D',
+    ready: function () { return Boolean(renderer && scene && camera); },
+    stateVersion: function () { return state.stateVersion || 'UNKNOWN'; },
+    deviceCount: function () { return state.devices.length; },
+    productCount: function () { return state.products.length; },
+    paused: function () { return Boolean(state.paused); },
+    rendererCalls: function () { return renderer ? renderer.info.render.calls : 0; }
   };
 
   init();

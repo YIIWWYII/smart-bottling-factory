@@ -3,7 +3,7 @@ import { BusinessError } from '@kit.BasicServicesKit'
 import { Theme } from '../common/Theme'
 
 @Component
-export struct FactoryThreeScene {
+export struct FactoryPlanScene {
   @Prop @Watch('onPayloadChanged') payload: string = '{}'
   @Link selectedDeviceCode: string
   @Link selectedTraceCode: string
@@ -16,9 +16,9 @@ export struct FactoryThreeScene {
 
   private pushPayload(): void {
     if (!this.webReady) return
-    const script = `window.FactoryScene && window.FactoryScene.update(${this.payload})`
+    const script = `window.FactoryPlan && window.FactoryPlan.update(${this.payload})`
     this.controller.runJavaScript(script)
-      .catch((error: BusinessError) => console.error(`Factory 3D sync failed: ${error.code} ${error.message}`))
+      .catch((error: BusinessError) => console.error(`Factory 2D sync failed: ${error.code} ${error.message}`))
   }
 
   private decodeRouteValue(url: string, prefix: string): string {
@@ -27,7 +27,7 @@ export struct FactoryThreeScene {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      Web({ src: $rawfile('factory3d/index.html'), controller: this.controller })
+      Web({ src: $rawfile('factory2d/index.html'), controller: this.controller })
         .javaScriptAccess(true)
         .domStorageAccess(true)
         .fileAccess(true)
@@ -51,22 +51,22 @@ export struct FactoryThreeScene {
           return false
         })
         .width('100%')
-        .height(360)
-        .backgroundColor('#DFEAF1')
+        .height(520)
+        .backgroundColor('#EAF1F6')
 
       if (!this.webReady) {
         Column({ space: 8 }) {
           LoadingProgress().width(28).height(28).color(Theme.accent)
-          Text('正在初始化本地 Three.js 场景').fontSize(10).fontColor(Theme.muted)
+          Text('正在初始化 2D 平面工艺图').fontSize(10).fontColor(Theme.muted)
         }
         .width('100%')
-        .height(360)
+        .height(520)
         .justifyContent(FlexAlign.Center)
-        .backgroundColor('#DFEAF1')
+        .backgroundColor('#EAF1F6')
       }
     }
     .width('100%')
-    .height(360)
+    .height(520)
     .border({ width: 1, color: Theme.line })
   }
 }

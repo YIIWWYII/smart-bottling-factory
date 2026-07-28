@@ -151,6 +151,7 @@ export interface FactoryIncident {
 }
 
 export interface RuntimeSnapshot {
+  stateVersion?: string
   generatedAt?: string
   devices: Array<RuntimeDevice>
   stages: Array<RuntimeStage>
@@ -204,6 +205,7 @@ export interface FactoryBundle {
   logistics: LogisticsOverview
   source: string
   online: boolean
+  stateVersion: string
   updatedAt: string
   errorMessage: string
 }
