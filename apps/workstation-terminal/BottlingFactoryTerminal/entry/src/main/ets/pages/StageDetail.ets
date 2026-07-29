@@ -51,6 +51,9 @@ class ThreeDevicePayload {
   state: string = ''
   source: string = ''
   reading: string = ''
+  role: string = ''
+  actionCode: string = ''
+  progress: number = 0
 }
 
 class ThreeProductPayload {
@@ -58,6 +61,47 @@ class ThreeProductPayload {
   bottleType: string = ''
   status: string = ''
   defectType: string = ''
+  currentStage: string = ''
+  progress: number = 0
+  animationState: string = ''
+}
+
+class ThreeSensorPayload {
+  readingId: string = ''
+  deviceCode: string = ''
+  sensorType: string = ''
+  value: number = 0
+  unit: string = ''
+  quality: string = ''
+}
+
+class ThreeQualityGatePayload {
+  label: string = ''
+  status: string = ''
+  actual: string = ''
+}
+
+class ThreeAlarmPayload {
+  alarmId: string = ''
+  deviceCode: string = ''
+  alarmType: string = ''
+  status: string = ''
+  message: string = ''
+}
+
+class ThreeIncidentPayload {
+  incidentId: string = ''
+  deviceCode: string = ''
+  strategy: string = ''
+  status: string = ''
+  targetStage: string = ''
+}
+
+class ThreeBufferPayload {
+  inputLevel: number = 0
+  outputLevel: number = 0
+  capacity: number = 0
+  blockedReason: string = ''
 }
 
 class ThreeScenePayload {
@@ -73,6 +117,13 @@ class ThreeScenePayload {
   stateVersion: number = 0
   devices: Array<ThreeDevicePayload> = []
   products: Array<ThreeProductPayload> = []
+  sensors: Array<ThreeSensorPayload> = []
+  qualityGates: Array<ThreeQualityGatePayload> = []
+  alarms: Array<ThreeAlarmPayload> = []
+  incidents: Array<ThreeIncidentPayload> = []
+  buffer: ThreeBufferPayload = new ThreeBufferPayload()
+  upstreamImpact: string = ''
+  downstreamImpact: string = ''
 }
 
 class ParameterEdit {
@@ -401,13 +452,27 @@ struct StageDetail {
     payload.speed = this.sceneSpeed()
     payload.progress = this.sceneProgress()
     payload.stateVersion = this.snapshot.stateVersion
+    payload.buffer.inputLevel = this.snapshot.buffer.inputLevel
+    payload.buffer.outputLevel = this.snapshot.buffer.outputLevel
+    payload.buffer.capacity = this.snapshot.buffer.capacity
+    payload.buffer.blockedReason = this.snapshot.buffer.blockedReason || ''
+    payload.upstreamImpact = this.runtimeStageValue().upstreamImpact || '等待数据'
+    payload.downstreamImpact = this.runtimeStageValue().downstreamImpact || '等待数据'
     this.currentStage().devices.forEach((device: DeviceDefinition) => {
       const item = new ThreeDevicePayload()
+      const runtime = this.runtimeDevice(device.code)
       item.code = device.code
       item.name = device.name
       item.state = this.deviceRuntime(device.code)
       item.source = this.deviceSource(device.code)
       item.reading = this.deviceReading(device.code)
+      item.role = device.role
+      item.actionCode = runtime === undefined || runtime.actionCode === undefined ? '' : runtime.actionCode
+      if (runtime !== undefined && runtime.cycleProgressPct !== undefined) {
+        item.progress = runtime.cycleProgressPct
+      } else if (runtime !== undefined && runtime.progress !== undefined) {
+        item.progress = runtime.progress
+      }
       payload.devices.push(item)
     })
     this.stationRunsValue().slice(0, 8).forEach((run: FactoryRun) => {
@@ -416,7 +481,45 @@ struct StageDetail {
       item.bottleType = run.bottleType || '待识别'
       item.status = run.status
       item.defectType = run.defectType || ''
+      item.currentStage = run.currentStage
+      item.progress = run.stageProgressPct === undefined ? payload.progress : run.stageProgressPct
+      item.animationState = run.animationState || ''
       payload.products.push(item)
+    })
+    this.stationReadingsValue().slice(0, 12).forEach((reading: SensorReading) => {
+      const item = new ThreeSensorPayload()
+      item.readingId = reading.readingId
+      item.deviceCode = reading.deviceCode
+      item.sensorType = reading.sensorType
+      item.value = reading.value
+      item.unit = reading.unit
+      item.quality = reading.quality
+      payload.sensors.push(item)
+    })
+    this.qualityGates().forEach((gate: QualityGateView) => {
+      const item = new ThreeQualityGatePayload()
+      item.label = gate.label
+      item.status = gate.status
+      item.actual = gate.actual
+      payload.qualityGates.push(item)
+    })
+    this.stationAlarmsValue().slice(0, 6).forEach((alarm: AlarmRecord) => {
+      const item = new ThreeAlarmPayload()
+      item.alarmId = alarm.alarmId
+      item.deviceCode = alarm.deviceCode
+      item.alarmType = alarm.alarmType
+      item.status = alarm.status
+      item.message = alarm.message
+      payload.alarms.push(item)
+    })
+    this.stationIncidentsValue().slice(0, 6).forEach((incident: FactoryIncident) => {
+      const item = new ThreeIncidentPayload()
+      item.incidentId = incident.incidentId
+      item.deviceCode = incident.deviceCode || ''
+      item.strategy = incident.strategy
+      item.status = incident.status
+      item.targetStage = incident.targetStage || ''
+      payload.incidents.push(item)
     })
     return JSON.stringify(payload)
   }
