@@ -2,6 +2,7 @@ import { router } from '@kit.ArkUI'
 import { Theme, statusColor } from '../common/Theme'
 import { DeviceStateRow, QualityGateRow, SectionTitle, StateBadge } from '../components/IndustrialComponents'
 import { FactoryThreeScene } from '../components/FactoryThreeScene'
+import { FactoryPlanScene } from '../components/FactoryPlanScene'
 import { FACTORY_STAGES, findStage } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { createMockBundle } from '../service/MockFactoryData'
@@ -460,7 +461,8 @@ struct StageDetail {
                 selectedDeviceCode: $selectedDeviceCode,
                 selectedTraceCode: $selectedTraceCode,
                 onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source),
-                onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source)
+                onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source),
+                onSelectionCleared: (source: string): void => this.clearSceneSelection(source)
               })
             }.width('100%').padding(12).margin({ top: 4 }).backgroundColor(Theme.panelSoft)
           }
@@ -468,20 +470,21 @@ struct StageDetail {
           if (this.planarEnabled && this.activeVisual === 'PLANAR') {
             Column() {
               Row() {
-                Text('THREE.JS 2D PLAN').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+                Text('THREE.JS 2D PROCESS PLAN').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
                 Blank()
                 Text(this.layoutEditEnabled ? '拖拽平面符号调整布局' : '平面路径 · 物料流向 · 点击查看').fontSize(9).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.muted)
               }.width('100%').padding({ bottom: 8 })
-              FactoryThreeScene({
+              FactoryPlanScene({
                 payload: this.scenePayload(),
-                viewMode: 'PLANAR',
                 caption: '平面工艺图',
                 heightValue: 300,
                 selectionSource: 'THREE_2D',
                 selectedDeviceCode: $selectedDeviceCode,
                 selectedTraceCode: $selectedTraceCode,
+                onStageSelected: (stageCode: string, source: string): void => this.selectSceneStage(stageCode, source),
                 onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source),
-                onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source)
+                onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source),
+                onSelectionCleared: (source: string): void => this.clearSceneSelection(source)
               })
             }.width('100%').padding(12).margin({ top: 12 }).backgroundColor(Theme.panelSoft)
           }
@@ -671,6 +674,26 @@ struct StageDetail {
   private selectSceneProduct(traceCode: string, source: string): void {
     const assistantSource: AssistantSelectionSource = source === 'THREE_2D' ? 'THREE_2D' : 'THREE_3D'
     this.selectProductByTrace(traceCode, assistantSource)
+  }
+
+  private selectSceneStage(stageCode: string, source: string): void {
+    const assistantSource: AssistantSelectionSource = source === 'THREE_2D' ? 'THREE_2D' : 'THREE_3D'
+    let stageName: string = stageCode
+    FACTORY_STAGES.forEach((stage: StageDefinition) => {
+      if (stage.code === stageCode) stageName = stage.name
+    })
+    displayAssistantHost.publishSelection(AssistantEntityType.STAGE, stageCode, stageName, assistantSource, [
+      { code: 'stageCode', label: '工位', displayValue: stageCode },
+      { code: 'state', label: '状态', displayValue: this.runtimeStage.state },
+      { code: 'wip', label: '在制品', displayValue: this.wipCount.toString() }
+    ])
+  }
+
+  private clearSceneSelection(source: string): void {
+    const assistantSource: AssistantSelectionSource = source === 'THREE_2D' ? 'THREE_2D' : 'THREE_3D'
+    this.selectedDeviceCode = ''
+    this.selectedTraceCode = ''
+    displayAssistantHost.clearSelection(assistantSource)
   }
 
   private deviceTitle(deviceCode: string): string {

@@ -1,0 +1,109 @@
+:root {
+  color: #17344c;
+  background: #dfeaf1;
+  font-family: "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #plan-host {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  position: relative;
+  background:
+    linear-gradient(rgba(20, 93, 160, .06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 93, 160, .06) 1px, transparent 1px),
+    #dfeaf1;
+  background-size: 22px 22px;
+  touch-action: none;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hud {
+  position: absolute;
+  top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 7px 10px;
+  border: 1px solid rgba(78, 113, 138, .38);
+  border-top: 3px solid #145da0;
+  background: rgba(246, 250, 252, .94);
+  box-shadow: 0 5px 18px rgba(18, 58, 91, .14);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.hud-left { left: 10px; }
+.hud-right { right: 10px; }
+.hud strong { font-size: 11px; }
+.hud-left > span:last-child { color: #61788b; }
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #238b5a;
+  box-shadow: 0 0 0 4px rgba(35, 139, 90, .13);
+}
+
+.legend {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+}
+
+.legend.running { background: #238b5a; }
+.legend.warning { background: #d89016; }
+.legend.alarm { background: #c83f49; }
+
+.selection {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  padding: 8px 11px;
+  border-left: 4px solid #1f7acb;
+  background: rgba(18, 58, 91, .92);
+  color: #fff;
+  box-shadow: 0 5px 18px rgba(18, 58, 91, .2);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.hidden { display: none !important; }
+
+.fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  background: #edf4f8;
+  color: #123a5b;
+  text-align: center;
+}
+
+.fallback strong { font-size: 16px; }
+.fallback span { color: #61788b; font-size: 11px; }
+
+@media (max-width: 620px) {
+  .hud-right { top: auto; right: 10px; bottom: 10px; }
+  .selection { right: 10px; bottom: 48px; }
+}
