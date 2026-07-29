@@ -41,24 +41,48 @@ DEFAULT_AI_CONFIG = {
 DEFAULT_RAG_DOCUMENTS = [
     {
         "documentId": "doc-local-pla-safety",
+        "submissionId": "doc-local-pla-safety",
+        "reviewId": "review-doc-local-pla-safety",
         "title": "PLA bottle pretreatment safety SOP",
+        "fileName": "pla-safety-sop.md",
+        "contentType": "text/markdown",
+        "category": "PROCESS_SAFETY",
+        "scopeApps": ["ALL"],
+        "tags": ["PLA", "VOC", "pretreatment"],
         "status": "INDEXED",
         "indexStatus": "READY",
         "version": KNOWLEDGE_VERSION,
+        "sourceVersion": "LOCAL-DEMO-1",
         "chunkCount": 8,
         "source": SOURCE_MARK,
         "failureReason": "",
+        "submittedBy": "LOCAL_DEMO",
+        "submittedAt": "2026-07-28T00:00:00Z",
+        "reviewedBy": "LOCAL_DEMO",
+        "reviewedAt": "2026-07-28T00:00:00Z",
         "updatedAt": "2026-07-28T00:00:00Z",
     },
     {
         "documentId": "doc-local-filling-quality",
+        "submissionId": "doc-local-filling-quality",
+        "reviewId": "review-doc-local-filling-quality",
         "title": "Filling quality inspection guide",
+        "fileName": "filling-quality-guide.md",
+        "contentType": "text/markdown",
+        "category": "QUALITY_INSPECTION",
+        "scopeApps": ["DISPLAY", "WORKSTATION", "ADMIN", "AI_CENTER"],
+        "tags": ["filling", "inspection", "quality"],
         "status": "INDEXED",
         "indexStatus": "READY",
         "version": KNOWLEDGE_VERSION,
+        "sourceVersion": "LOCAL-DEMO-1",
         "chunkCount": 6,
         "source": SOURCE_MARK,
         "failureReason": "",
+        "submittedBy": "LOCAL_DEMO",
+        "submittedAt": "2026-07-28T00:00:00Z",
+        "reviewedBy": "LOCAL_DEMO",
+        "reviewedAt": "2026-07-28T00:00:00Z",
         "updatedAt": "2026-07-28T00:00:00Z",
     },
 ]
@@ -135,8 +159,10 @@ class AiCenterState:
         self.conversations: dict[str, dict[str, Any]] = {}
         self.messages: dict[str, list[dict[str, Any]]] = {}
         self.active_messages: dict[str, dict[str, Any]] = {}
-        self.knowledge_submissions: dict[str, dict[str, Any]] = {}
         self.rag_documents: dict[str, dict[str, Any]] = {item["documentId"]: deepcopy(item) for item in DEFAULT_RAG_DOCUMENTS}
+        self.knowledge_submissions: dict[str, dict[str, Any]] = {
+            item["submissionId"]: document_to_submission(item) for item in self.rag_documents.values()
+        }
         self.decisions: dict[str, dict[str, Any]] = {}
         self.recognitions: dict[str, dict[str, Any]] = {}
         self.command_intents: dict[str, dict[str, Any]] = {}
@@ -174,7 +200,7 @@ def create_app() -> FastAPI:
     async def get_ai_config() -> dict[str, Any]:
         return envelope({"config": mask_ai_config(state.ai_config), "source": SOURCE_MARK})
 
-    @app.put(f"{API_PREFIX}/admin/ai/config")
+    @app.api_route(f"{API_PREFIX}/admin/ai/config", methods=["PUT", "POST"])
     async def update_ai_config(request_body: dict[str, Any]) -> dict[str, Any]:
         merged = deepcopy(state.ai_config)
         updates = normalize_ai_config(request_body)
@@ -236,25 +262,38 @@ def create_app() -> FastAPI:
         )
 
     @app.get(f"{API_PREFIX}/admin/ai/rag/documents")
-    async def rag_documents() -> dict[str, Any]:
-        return envelope({"items": list(state.rag_documents.values()), "source": SOURCE_MARK})
+    async def rag_documents(scopeApp: str | None = None, category: str | None = None, status: str | None = None) -> dict[str, Any]:
+        items = list(state.rag_documents.values())
+        if scopeApp:
+            items = [item for item in items if document_visible_to_app(item, scopeApp)]
+        if category:
+            items = [item for item in items if str(item.get("category", "")).upper() == category.upper()]
+        if status:
+            items = [item for item in items if str(item.get("status", "")).upper() == status.upper()]
+        return envelope({"items": items, "source": SOURCE_MARK})
 
     @app.post(f"{API_PREFIX}/admin/ai/rag/documents")
     async def create_rag_document(request_body: dict[str, Any]) -> dict[str, Any]:
-        document_id = request_body.get("documentId") or new_id("doc")
-        document = {
-            "documentId": document_id,
-            "title": request_body.get("title", "LOCAL DEMO uploaded document"),
-            "status": "PENDING_REVIEW",
-            "indexStatus": "PENDING",
-            "version": request_body.get("version", KNOWLEDGE_VERSION),
-            "chunkCount": 0,
-            "failureReason": "",
-            "source": SOURCE_MARK,
-            "updatedAt": now_iso(),
-            "note": "LOCAL DEMO: document metadata accepted; admin review must approve before production indexing.",
-        }
-        state.rag_documents[document_id] = document
+        document = create_rag_document_record(request_body, body_size=0)
+        state.rag_documents[document["documentId"]] = document
+        state.knowledge_submissions[document["submissionId"]] = document_to_submission(document)
+        return envelope(document)
+
+    @app.get(f"{API_PREFIX}/admin/ai/rag/documents/{{document_id}}")
+    async def rag_document(document_id: str) -> dict[str, Any]:
+        document = state.rag_documents.get(document_id)
+        if document is None:
+            return error_envelope("rag document not found", 404)
+        return envelope(document)
+
+    @app.api_route(f"{API_PREFIX}/admin/ai/rag/documents/{{document_id}}/classification", methods=["PUT", "POST"])
+    async def update_rag_document_classification(document_id: str, request_body: dict[str, Any]) -> dict[str, Any]:
+        document = state.rag_documents.get(document_id)
+        if document is None:
+            return error_envelope("rag document not found", 404)
+        apply_document_classification(document, request_body)
+        document["updatedAt"] = now_iso()
+        state.knowledge_submissions[document["submissionId"]] = document_to_submission(document)
         return envelope(document)
 
     @app.post(f"{API_PREFIX}/admin/ai/rag/reindex")
@@ -455,30 +494,11 @@ def create_app() -> FastAPI:
     async def knowledge_submissions(request: Request) -> dict[str, Any]:
         if request.method == "GET":
             return envelope({"items": list(state.knowledge_submissions.values()), "source": SOURCE_MARK})
-        submission_id = new_id("know")
-        body = await request.body()
-        submission = {
-            "knowledgeId": submission_id,
-            "status": "PENDING_REVIEW",
-            "indexStatus": "NOT_INDEXED",
-            "source": SOURCE_MARK,
-            "note": "LOCAL DEMO: file/body accepted as a review placeholder; not indexed until approved.",
-            "size": len(body),
-            "createdAt": now_iso(),
-        }
-        state.knowledge_submissions[submission_id] = submission
-        state.rag_documents[submission_id] = {
-            "documentId": submission_id,
-            "title": "LOCAL DEMO uploaded knowledge",
-            "status": "PENDING_REVIEW",
-            "indexStatus": "PENDING",
-            "version": KNOWLEDGE_VERSION,
-            "chunkCount": 0,
-            "failureReason": "",
-            "source": SOURCE_MARK,
-            "updatedAt": now_iso(),
-            "note": "Awaiting admin review before indexing.",
-        }
+        upload = await parse_knowledge_upload_request(request)
+        document = create_rag_document_record(upload["metadata"], body_size=upload["size"], file_info=upload)
+        state.rag_documents[document["documentId"]] = document
+        submission = document_to_submission(document)
+        state.knowledge_submissions[submission["submissionId"]] = submission
         return envelope(submission)
 
     @app.get(f"{API_PREFIX}/knowledge/submissions/{{knowledge_id}}")
@@ -490,22 +510,22 @@ def create_app() -> FastAPI:
 
     @app.get(f"{API_PREFIX}/admin/knowledge/reviews")
     async def list_reviews() -> dict[str, Any]:
-        return envelope({"items": list(state.knowledge_submissions.values()), "source": SOURCE_MARK})
+        reviews = [document_to_review(item) for item in state.rag_documents.values()]
+        return envelope({"items": reviews, "source": SOURCE_MARK})
 
     @app.get(f"{API_PREFIX}/admin/knowledge/reviews/{{knowledge_id}}")
     async def get_review(knowledge_id: str) -> dict[str, Any]:
-        return await knowledge_submission(knowledge_id)
+        document = find_document_by_any_id(state, knowledge_id)
+        if document is None:
+            return error_envelope("knowledge review not found", 404)
+        return envelope(document_to_review(document))
 
     @app.post(f"{API_PREFIX}/admin/knowledge/reviews/{{knowledge_id}}/{{action}}")
     async def review_action(knowledge_id: str, action: str, request_body: dict[str, Any] | None = None) -> dict[str, Any]:
-        item = state.knowledge_submissions.get(knowledge_id)
-        if item is None:
-            item = {
-                "knowledgeId": knowledge_id,
-                "createdAt": now_iso(),
-                "source": SOURCE_MARK,
-            }
-            state.knowledge_submissions[knowledge_id] = item
+        document = find_document_by_any_id(state, knowledge_id)
+        if document is None:
+            document = create_rag_document_record({"documentId": knowledge_id, "title": "LOCAL DEMO review placeholder"}, body_size=0)
+            state.rag_documents[document["documentId"]] = document
         status_by_action = {
             "approve": ("INDEXED", "APPROVED"),
             "reject": ("REJECTED", "REJECTED"),
@@ -514,22 +534,18 @@ def create_app() -> FastAPI:
         if action not in status_by_action:
             return error_envelope("unsupported review action", 400)
         index_status, status = status_by_action[action]
-        item.update(
-            {
-                "status": status,
-                "indexStatus": index_status,
-                "reviewNote": (request_body or {}).get("note", "LOCAL DEMO review action"),
-                "reviewedAt": now_iso(),
-            }
-        )
-        document = state.rag_documents.get(knowledge_id)
-        if document is not None:
-            document["status"] = status
-            document["indexStatus"] = "READY" if index_status == "INDEXED" else index_status
-            document["failureReason"] = "" if action == "approve" else item["reviewNote"]
-            document["chunkCount"] = max(int(document.get("chunkCount", 0)), 1 if action == "approve" else 0)
-            document["updatedAt"] = now_iso()
-        return envelope(item)
+        review_note = (request_body or {}).get("note") or (request_body or {}).get("comment") or "LOCAL DEMO review action"
+        document["status"] = status
+        document["indexStatus"] = "READY" if index_status == "INDEXED" else index_status
+        document["failureReason"] = "" if action == "approve" else review_note
+        document["reviewNote"] = review_note
+        document["reviewedBy"] = (request_body or {}).get("reviewedBy", "LOCAL_DEMO_ADMIN")
+        document["reviewedAt"] = now_iso()
+        document["chunkCount"] = max(int(document.get("chunkCount", 0)), 1 if action == "approve" else 0)
+        document["updatedAt"] = now_iso()
+        submission = document_to_submission(document)
+        state.knowledge_submissions[submission["submissionId"]] = submission
+        return envelope(submission)
 
     @app.api_route(f"{API_PREFIX}/ai-integration/facts", methods=["GET", "POST"])
     async def local_backend_facts() -> dict[str, Any]:
@@ -709,6 +725,243 @@ def is_masked_secret(value: Any) -> bool:
 
 def get_request_timeout_seconds(config: dict[str, Any]) -> int:
     return clamp_int(config.get("requestTimeoutSeconds"), 3, 40, 12)
+
+
+async def parse_knowledge_upload_request(request_obj: Request) -> dict[str, Any]:
+    body = await request_obj.body()
+    content_type = request_obj.headers.get("content-type", "")
+    if "multipart/form-data" in content_type.lower():
+        return parse_multipart_upload(body, content_type)
+    try:
+        metadata = json.loads(body.decode("utf-8")) if body else {}
+        if not isinstance(metadata, dict):
+            metadata = {"description": str(metadata)}
+    except Exception:
+        metadata = {"description": body[:500].decode("utf-8", errors="ignore")}
+    return {
+        "metadata": metadata,
+        "size": len(body),
+        "fileName": metadata.get("fileName", "knowledge-inline.json"),
+        "contentType": content_type or "application/json",
+    }
+
+
+def parse_multipart_upload(body: bytes, content_type: str) -> dict[str, Any]:
+    boundary_token = "boundary="
+    boundary_index = content_type.find(boundary_token)
+    if boundary_index < 0:
+        return {"metadata": {}, "size": len(body), "fileName": "knowledge-upload.bin", "contentType": "application/octet-stream"}
+    boundary = content_type[boundary_index + len(boundary_token) :].strip().strip('"')
+    delimiter = ("--" + boundary).encode("utf-8")
+    metadata: dict[str, Any] = {}
+    file_name = "knowledge-upload.bin"
+    file_content_type = "application/octet-stream"
+    file_size = 0
+    for raw_part in body.split(delimiter):
+        part = raw_part.strip(b"\r\n")
+        if not part or part == b"--" or b"\r\n\r\n" not in part:
+            continue
+        header_blob, payload = part.split(b"\r\n\r\n", 1)
+        headers = header_blob.decode("utf-8", errors="ignore")
+        payload = payload.rstrip(b"\r\n-")
+        if 'name="metadata"' in headers:
+            try:
+                parsed = json.loads(payload.decode("utf-8"))
+                if isinstance(parsed, dict):
+                    metadata = parsed
+            except Exception:
+                metadata = {"description": payload[:500].decode("utf-8", errors="ignore")}
+        elif 'name="file"' in headers:
+            file_size = len(payload)
+            file_name = extract_multipart_filename(headers) or file_name
+            file_content_type = extract_multipart_content_type(headers) or file_content_type
+    return {
+        "metadata": metadata,
+        "size": file_size if file_size > 0 else len(body),
+        "fileName": file_name,
+        "contentType": file_content_type,
+    }
+
+
+def extract_multipart_filename(headers: str) -> str:
+    marker = 'filename="'
+    start = headers.find(marker)
+    if start < 0:
+        return ""
+    start += len(marker)
+    end = headers.find('"', start)
+    return headers[start:end] if end > start else ""
+
+
+def extract_multipart_content_type(headers: str) -> str:
+    for line in headers.splitlines():
+        if line.lower().startswith("content-type:"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
+def create_rag_document_record(metadata: dict[str, Any], body_size: int, file_info: dict[str, Any] | None = None) -> dict[str, Any]:
+    file_info = file_info or {}
+    document_id = str(metadata.get("documentId") or metadata.get("submissionId") or new_id("doc"))
+    submitted_at = now_iso()
+    document = {
+        "documentId": document_id,
+        "submissionId": str(metadata.get("submissionId") or document_id),
+        "reviewId": str(metadata.get("reviewId") or f"review-{document_id}"),
+        "title": str(metadata.get("title") or file_info.get("fileName") or "LOCAL DEMO uploaded document"),
+        "fileName": str(file_info.get("fileName") or metadata.get("fileName") or "knowledge-upload.bin"),
+        "contentType": str(file_info.get("contentType") or metadata.get("contentType") or "application/octet-stream"),
+        "category": normalize_document_category(metadata.get("category")),
+        "scopeApps": normalize_scope_apps(metadata.get("scopeApps") or metadata.get("scopeApp")),
+        "tags": normalize_tags(metadata.get("tags")),
+        "status": "PENDING_REVIEW",
+        "indexStatus": "PENDING",
+        "version": str(metadata.get("version") or KNOWLEDGE_VERSION),
+        "sourceVersion": str(metadata.get("sourceVersion") or metadata.get("publishedVersion") or "UNVERSIONED"),
+        "sourceOrganization": str(metadata.get("sourceOrganization") or "LOCAL DEMO upload"),
+        "author": str(metadata.get("author") or ""),
+        "publishedAt": str(metadata.get("publishedAt") or ""),
+        "description": str(metadata.get("description") or ""),
+        "size": body_size,
+        "sha256": str(metadata.get("sha256") or "LOCAL_DEMO_NOT_HASHED"),
+        "chunkCount": 0,
+        "failureReason": "",
+        "reviewNote": "",
+        "submittedBy": str(metadata.get("submittedBy") or "LOCAL_DEMO_ADMIN"),
+        "submittedAt": submitted_at,
+        "reviewedBy": "",
+        "reviewedAt": "",
+        "updatedAt": submitted_at,
+        "lineId": str(metadata.get("lineId") or ""),
+        "stageCode": str(metadata.get("stageCode") or ""),
+        "deviceCode": str(metadata.get("deviceCode") or ""),
+        "bottleTypeCode": str(metadata.get("bottleTypeCode") or ""),
+        "source": SOURCE_MARK,
+        "note": "LOCAL DEMO: uploaded document waits for admin review before vector indexing.",
+    }
+    apply_document_classification(document, metadata)
+    return document
+
+
+def apply_document_classification(document: dict[str, Any], metadata: dict[str, Any]) -> None:
+    if "category" in metadata:
+        document["category"] = normalize_document_category(metadata.get("category"))
+    if "scopeApps" in metadata or "scopeApp" in metadata:
+        document["scopeApps"] = normalize_scope_apps(metadata.get("scopeApps") or metadata.get("scopeApp"))
+    if "tags" in metadata:
+        document["tags"] = normalize_tags(metadata.get("tags"))
+
+
+def normalize_document_category(value: Any) -> str:
+    category = str(value or "").strip().upper()
+    return category if category else "UNCLASSIFIED"
+
+
+def normalize_scope_apps(value: Any) -> list[str]:
+    if value is None or value == "":
+        return ["ALL"]
+    raw_items = value if isinstance(value, list) else str(value).replace(";", ",").split(",")
+    allowed = {"DISPLAY", "WORKSTATION", "ADMIN", "AI_CENTER", "ALL"}
+    result: list[str] = []
+    for item in raw_items:
+        text = str(item).strip().upper()
+        if text in allowed and text not in result:
+            result.append(text)
+    return result if result else ["ALL"]
+
+
+def normalize_tags(value: Any) -> list[str]:
+    if value is None:
+        return []
+    raw_items = value if isinstance(value, list) else str(value).replace(";", ",").split(",")
+    result: list[str] = []
+    for item in raw_items:
+        text = str(item).strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def document_visible_to_app(document: dict[str, Any], source_app: str) -> bool:
+    scope_apps = normalize_scope_apps(document.get("scopeApps"))
+    app = source_app.upper()
+    return "ALL" in scope_apps or app in scope_apps or document.get("category") == "UNCLASSIFIED"
+
+
+def find_document_by_any_id(state: AiCenterState, identifier: str) -> dict[str, Any] | None:
+    if identifier in state.rag_documents:
+        return state.rag_documents[identifier]
+    for document in state.rag_documents.values():
+        if identifier in (document.get("submissionId"), document.get("reviewId")):
+            return document
+    return None
+
+
+def document_to_submission(document: dict[str, Any]) -> dict[str, Any]:
+    scope_apps = normalize_scope_apps(document.get("scopeApps"))
+    return {
+        "submissionId": document.get("submissionId", document.get("documentId", "")),
+        "knowledgeId": document.get("documentId", ""),
+        "documentId": document.get("documentId", ""),
+        "reviewId": document.get("reviewId", ""),
+        "status": document.get("status", "PENDING_REVIEW"),
+        "statusReason": document.get("failureReason") or document.get("reviewNote", ""),
+        "fileName": document.get("fileName", ""),
+        "contentType": document.get("contentType", ""),
+        "size": int(document.get("size", 0) or 0),
+        "sha256": document.get("sha256", "LOCAL_DEMO_NOT_HASHED"),
+        "title": document.get("title", ""),
+        "category": document.get("category", "UNCLASSIFIED"),
+        "scopeApps": scope_apps,
+        "scopeLabel": "全部端可读" if "ALL" in scope_apps else ",".join(scope_apps),
+        "tags": normalize_tags(document.get("tags")),
+        "sourceOrganization": document.get("sourceOrganization", ""),
+        "author": document.get("author", ""),
+        "publishedAt": document.get("publishedAt", ""),
+        "sourceVersion": document.get("sourceVersion", ""),
+        "description": document.get("description", ""),
+        "scope": {
+            "lineIds": [document["lineId"]] if document.get("lineId") else [],
+            "stageCodes": [document["stageCode"]] if document.get("stageCode") else [],
+            "deviceCodes": [document["deviceCode"]] if document.get("deviceCode") else [],
+            "bottleTypeCodes": [document["bottleTypeCode"]] if document.get("bottleTypeCode") else [],
+            "parameterCodes": [],
+        },
+        "submittedBy": document.get("submittedBy", ""),
+        "submittedAt": document.get("submittedAt", ""),
+        "reviewedBy": document.get("reviewedBy", ""),
+        "reviewedAt": document.get("reviewedAt", ""),
+        "reviewComment": document.get("reviewNote", ""),
+        "knowledgeSourceId": document.get("documentId", ""),
+        "publishedVersion": document.get("version", KNOWLEDGE_VERSION) if document.get("status") in ("APPROVED", "INDEXED") else "",
+        "indexedAt": document.get("updatedAt", "") if document.get("indexStatus") == "READY" else "",
+        "indexStatus": document.get("indexStatus", "PENDING"),
+        "chunkCount": int(document.get("chunkCount", 0) or 0),
+    }
+
+
+def document_to_review(document: dict[str, Any]) -> dict[str, Any]:
+    submission = document_to_submission(document)
+    return {
+        "reviewId": submission["reviewId"],
+        "submission": submission,
+        "preview": [
+            {
+                "blockId": f"{submission['submissionId']}-preview-1",
+                "heading": "LOCAL DEMO parsed summary",
+                "content": (
+                    f"{submission['title']} belongs to category {submission['category']} and scope {submission['scopeLabel']}. "
+                    "It is a local demo parsed block; production parsing/OCR/vectorization should replace this content."
+                ),
+                "pageNumber": 1,
+            }
+        ],
+        "conflicts": [],
+        "copyrightConfirmed": document.get("status") in ("APPROVED", "INDEXED"),
+        "sourceVerified": bool(document.get("sourceOrganization")),
+        "unitsVerified": True,
+        "scopeVerified": bool(submission["scopeApps"]),
+    }
 
 
 async def run_ai_connection_test(config: dict[str, Any]) -> dict[str, Any]:
@@ -925,7 +1178,7 @@ async def create_assistant_message(
         "dataGeneratedAt": now_iso(),
         "stateVersion": context_state_version(context),
         "knowledgeVersion": KNOWLEDGE_VERSION,
-        "citations": make_citations(context),
+        "citations": make_citations(state, context),
         "createdAt": now_iso(),
         "retryOf": retry_of,
         "source": SOURCE_MARK,
@@ -1134,17 +1387,28 @@ def looks_like_control_request(question: str) -> bool:
     return any(keyword in question or keyword in lowered for keyword in keywords)
 
 
-def make_citations(context: dict[str, Any]) -> list[dict[str, Any]]:
+def make_citations(state: AiCenterState, context: dict[str, Any]) -> list[dict[str, Any]]:
     stage = context.get("stageCode", "GENERAL")
+    source_app = str(context.get("sourceApp", "ALL"))
+    documents = [
+        item for item in state.rag_documents.values()
+        if item.get("indexStatus") == "READY" and document_visible_to_app(item, source_app)
+    ]
+    if not documents:
+        documents = list(state.rag_documents.values())[:1]
     return [
         {
-            "citationId": "sim-cite-process-001",
-            "title": "LOCAL DEMO 工艺知识片段",
-            "source": "SIMULATION knowledge base",
-            "version": KNOWLEDGE_VERSION,
-            "excerpt": "模拟知识：PLA 瓶生产后需冷却、清洗、风洗并通过气体安全检测后进入灌装。",
-            "entity": {"entityType": "STAGE", "entityId": stage, "stageCode": stage},
+            "citationId": "sim-cite-" + str(document.get("documentId", "unknown")),
+            "title": str(document.get("title", "LOCAL DEMO knowledge document")),
+            "source": str(document.get("source", SOURCE_MARK)),
+            "version": str(document.get("version", KNOWLEDGE_VERSION)),
+            "excerpt": (
+                "LOCAL DEMO scoped RAG document. "
+                f"category={document.get('category', 'UNCLASSIFIED')}, scopeApps={','.join(normalize_scope_apps(document.get('scopeApps')))}."
+            ),
+            "entity": {"entityType": "KNOWLEDGE_DOCUMENT", "entityId": document.get("documentId", ""), "stageCode": stage},
         }
+        for document in documents[:3]
     ]
 
 

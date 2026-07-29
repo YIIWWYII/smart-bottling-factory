@@ -181,6 +181,46 @@ def main() -> None:
             raise AssertionError(f"rag documents empty: {documents}")
         print("rag status/documents OK")
 
+        uploaded = assert_envelope(
+            http_json(
+                "POST",
+                "/knowledge/submissions",
+                {
+                    "title": "Smoke uploaded uncategorized SOP",
+                    "sourceOrganization": "LOCAL DEMO",
+                    "sourceVersion": "smoke-v1",
+                    "category": "",
+                    "scopeApps": [],
+                    "tags": ["smoke", "rag"],
+                    "description": "LOCAL DEMO smoke upload",
+                },
+            ),
+            "knowledge upload",
+        )
+        if uploaded["category"] != "UNCLASSIFIED" or "ALL" not in uploaded["scopeApps"]:
+            raise AssertionError(f"uncategorized upload did not default to global scope: {uploaded}")
+        review_id = uploaded["reviewId"]
+        review = assert_envelope(http_json("GET", f"/admin/knowledge/reviews/{review_id}"), "knowledge review")
+        if review["submission"]["reviewId"] != review_id:
+            raise AssertionError(f"review lookup failed: {review}")
+        classified = assert_envelope(
+            http_json(
+                "POST",
+                f"/admin/ai/rag/documents/{uploaded['documentId']}/classification",
+                {"category": "WORK_INSTRUCTION", "scopeApps": ["WORKSTATION", "ADMIN"], "tags": ["operator"]},
+            ),
+            "rag classification",
+        )
+        if classified["category"] != "WORK_INSTRUCTION" or "WORKSTATION" not in classified["scopeApps"]:
+            raise AssertionError(f"classification update failed: {classified}")
+        approved = assert_envelope(
+            http_json("POST", f"/admin/knowledge/reviews/{review_id}/approve", {"comment": "smoke approve"}),
+            "knowledge approve",
+        )
+        if approved["status"] != "APPROVED" or approved["indexStatus"] != "READY":
+            raise AssertionError(f"approval/indexing failed: {approved}")
+        print("rag upload/classification/review OK")
+
         context = {
             "contextVersion": 1,
             "sourceApp": "DISPLAY",
