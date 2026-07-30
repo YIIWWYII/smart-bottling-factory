@@ -126,7 +126,15 @@ export class AssistantController {
       }
       const result: AssistantMessageResult = await this.client.sendMessage(this.conversationId, payload)
       this.messages = this.messages.concat([this.toAssistantMessage(result)])
-      this.status = AssistantUiStatus.COMPLETED
+      if (result.status === AssistantUiStatus.FAILED) {
+        this.errorMessage = result.content
+        this.status = AssistantUiStatus.FAILED
+      } else if (result.status === AssistantUiStatus.STOPPED) {
+        this.errorMessage = '本次回答已停止'
+        this.status = AssistantUiStatus.STOPPED
+      } else {
+        this.status = AssistantUiStatus.COMPLETED
+      }
     } catch (error) {
       if (!this.requestCancelled) {
         const apiError: AssistantApiError = error as AssistantApiError
@@ -141,6 +149,9 @@ export class AssistantController {
       this.requestCancelled = true
       this.status = AssistantUiStatus.STOPPED
       this.client.cancelActiveRequest()
+      if (this.conversationId.length > 0) {
+        void this.client.stopConversation(this.conversationId)
+      }
       this.errorMessage = '本次回答已停止'
     }
   }
@@ -207,7 +218,7 @@ export class AssistantController {
       messageId: result.messageId,
       role: 'ASSISTANT',
       content: result.content,
-      status: AssistantUiStatus.COMPLETED,
+      status: result.status === undefined ? AssistantUiStatus.COMPLETED : result.status,
       answerMode: result.answerMode,
       dataGeneratedAt: result.dataGeneratedAt,
       stateVersion: result.stateVersion,

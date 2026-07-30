@@ -53,6 +53,22 @@ export class AssistantApiClient {
     )
   }
 
+  async stopConversation(conversationId: string): Promise<void> {
+    await this.request<object>(
+      '/assistant/conversations/' + encodeURIComponent(conversationId) + '/stop',
+      http.RequestMethod.POST,
+      '{}'
+    )
+  }
+
+  async stopMessage(conversationId: string, messageId: string): Promise<void> {
+    await this.request<object>(
+      '/assistant/conversations/' + encodeURIComponent(conversationId) + '/messages/' + encodeURIComponent(messageId) + '/stop',
+      http.RequestMethod.POST,
+      '{}'
+    )
+  }
+
   cancelActiveRequest(): void {
     if (this.activeRequest !== undefined) {
       this.activeRequest.destroy()
@@ -86,7 +102,7 @@ export class AssistantApiClient {
         extraData: body,
         expectDataType: http.HttpDataType.STRING,
         connectTimeout: 8000,
-        readTimeout: 30000
+        readTimeout: 45000
       })
       if (response.responseCode < 200 || response.responseCode >= 300) {
         throw new AssistantApiError('AI 服务 HTTP ' + response.responseCode.toString(), response.responseCode)
@@ -99,9 +115,7 @@ export class AssistantApiClient {
       return envelope.data
     } catch (error) {
       const caughtError: AssistantCaughtError = error as AssistantCaughtError
-      const message: string = caughtError.message === undefined || caughtError.message.length === 0
-        ? 'AI 服务请求失败'
-        : caughtError.message
+      const message: string = this.toFriendlyErrorMessage(caughtError)
       const code: number = caughtError.code === undefined ? -1 : caughtError.code
       throw new AssistantApiError(message, code)
     } finally {
@@ -118,5 +132,21 @@ export class AssistantApiClient {
       endpoint = endpoint.substring(0, endpoint.length - 1)
     }
     return endpoint
+  }
+
+  private toFriendlyErrorMessage(error: AssistantCaughtError): string {
+    const raw: string = error.message === undefined ? '' : error.message
+    const lowered: string = raw.toLowerCase()
+    if (lowered.includes('timeout') || lowered.includes('timed out') || lowered.includes('read timed') ||
+      lowered.includes('connect timed')) {
+      return 'AI 服务响应超时，请在后台管理检查模型地址、API Key、模型名称和请求超时时间。'
+    }
+    if (lowered.includes('failed to connect') || lowered.includes('connection') || lowered.includes('network')) {
+      return 'AI 服务连接失败，请确认 AI 中枢已启动并且后台模型服务地址可访问。'
+    }
+    if (raw.length === 0) {
+      return 'AI 服务请求失败，请在后台管理执行“测试连接”查看原因。'
+    }
+    return raw
   }
 }

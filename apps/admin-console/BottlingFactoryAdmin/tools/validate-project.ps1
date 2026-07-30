@@ -73,7 +73,7 @@ $requiredContracts | ForEach-Object {
 
 $adminConsoleFile = Join-Path $root 'entry\src\main\ets\pages\AdminConsole.ets'
 $adminConsoleText = Get-Content -Raw -Encoding UTF8 $adminConsoleFile
-$requiredMenus = @('DASHBOARD', 'PRODUCTION', 'INCIDENTS', 'DEVICES', 'MATERIALS', 'LOGISTICS', 'AI_AUDIT', 'USERS', 'SETTINGS', 'AUDIT')
+$requiredMenus = @('DASHBOARD', 'PRODUCTION', 'INCIDENTS', 'DEVICES', 'MATERIALS', 'LOGISTICS', 'AI_AUDIT', 'AI_CONFIG', 'KNOWLEDGE', 'USERS', 'SETTINGS', 'AUDIT')
 $requiredMenus | ForEach-Object {
     if (-not $adminConsoleText.Contains($_)) { $errors.Add("Missing admin navigation: $_") }
 }
@@ -107,6 +107,30 @@ $apiClientText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\mai
 if (-not ($apiClientText -match 'responseCode\s*===\s*401[\s\S]*SessionStore\.clear\(\)')) { $errors.Add('HTTP 401 must clear the session') }
 if ($apiClientText -match 'responseCode\s*===\s*403[\s\S]{0,100}SessionStore\.clear\(\)') { $errors.Add('HTTP 403 must not clear a valid session') }
 
+$adminSourceText = ($etsFiles | ForEach-Object { Get-Content -Raw -Encoding UTF8 $_.FullName }) -join "`n"
+@('/assistant/conversations', '/assistant/conversations/', 'ai.conversation', 'AssistantApiClient', 'conversationId') | ForEach-Object {
+    if ($adminSourceText.Contains($_)) { $errors.Add("Admin console must not implement shared assistant conversation client: $_") }
+}
+
+$knowledgeGovernanceFile = Join-Path $root 'entry\src\main\ets\components\KnowledgeGovernance.ets'
+if (-not (Test-Path -LiteralPath $knowledgeGovernanceFile)) {
+    $errors.Add('Missing KnowledgeGovernance.ets')
+} else {
+    $knowledgeGovernanceText = Get-Content -Raw -Encoding UTF8 $knowledgeGovernanceFile
+    @('PERMISSION_KNOWLEDGE_REVIEW', 'submittedBy !== this.currentUsername()', 'submittedBy === this.currentUsername()', 'approveKnowledge', 'rejectKnowledge', 'revokeKnowledge', 'INDEXED') | ForEach-Object {
+        if (-not $knowledgeGovernanceText.Contains($_)) { $errors.Add("Missing knowledge governance negative evidence: $_") }
+    }
+}
+
+$aiCenterClientFile = Join-Path $root 'entry\src\main\ets\service\AiCenterClient.ets'
+if (Test-Path -LiteralPath $aiCenterClientFile) {
+    $aiCenterClientText = Get-Content -Raw -Encoding UTF8 $aiCenterClientFile
+    @('/admin/ai/config', '/admin/ai/config/test-question', '/admin/knowledge/reviews') | ForEach-Object {
+        if (-not $aiCenterClientText.Contains($_)) { $errors.Add("Missing admin AI business endpoint: $_") }
+    }
+    if ($aiCenterClientText.Contains('/assistant/')) { $errors.Add('AiCenterClient must not call shared assistant conversation endpoints') }
+}
+
 if ($errors.Count -gt 0) {
     $errors | ForEach-Object { Write-Host "[FAIL] $_" -ForegroundColor Red }
     throw "Static validation failed: $($errors.Count) item(s)."
@@ -125,3 +149,4 @@ Write-Host '[PASS] core backend API contracts are covered' -ForegroundColor Gree
 Write-Host "[PASS] $($requiredMenus.Count) real admin navigation entries are present" -ForegroundColor Green
 Write-Host '[PASS] VIEWER/OPERATOR/ENGINEER/ADMIN RBAC and session expiry guards are present' -ForegroundColor Green
 Write-Host '[PASS] list states and write confirmation/failure/audit evidence are present' -ForegroundColor Green
+Write-Host '[PASS] assistant boundary and knowledge-review negative guards are present' -ForegroundColor Green
