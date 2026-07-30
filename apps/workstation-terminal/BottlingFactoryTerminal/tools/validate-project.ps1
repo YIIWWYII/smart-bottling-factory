@@ -2,7 +2,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $errors = [System.Collections.Generic.List[string]]::new()
 
-Get-ChildItem -Path $root -Recurse -File -Include *.json,*.json5 | ForEach-Object {
+Get-ChildItem -Path $root -Recurse -File -Include *.json,*.json5 |
+    Where-Object { $_.FullName -notmatch '[\\/](oh_modules|build)[\\/]' } |
+    ForEach-Object {
     try { Get-Content -Raw -Encoding UTF8 $_.FullName | ConvertFrom-Json | Out-Null }
     catch { $errors.Add("JSON syntax: $($_.FullName) - $($_.Exception.Message)") }
 }

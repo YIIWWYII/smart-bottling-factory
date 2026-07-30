@@ -17,6 +17,7 @@ export interface AuthUser {
 
 export interface LoginResult {
   token: string
+  expiresAt?: string
   user: AuthUser
 }
 
@@ -113,6 +114,26 @@ export interface OperationsOverview {
   alarms: Array<AlarmRecord>
   commands: Array<DeviceCommand>
   aiAudits: Array<AiAudit>
+}
+
+export interface AdminAuditRecord {
+  auditId: string
+  actor: string
+  action: string
+  target: string
+  result: string
+  message: string
+  occurredAt: string
+}
+
+export interface SystemPolicy {
+  policyCode: string
+  name: string
+  value: string
+  unit: string
+  version: string
+  status: string
+  updatedAt: string
 }
 
 export interface RuntimeDevice {

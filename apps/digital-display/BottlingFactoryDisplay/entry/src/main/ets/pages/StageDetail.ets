@@ -89,12 +89,31 @@ struct StageDetail {
   }
 
   get stageIndex(): number {
+    return this.currentStageIndex()
+  }
+
+  private currentStageIndex(): number {
     const index = FACTORY_STAGES.findIndex(item => item.code === this.stageCode)
     return index < 0 ? 0 : index
   }
 
+  private wipCountValue(): number {
+    return this.dashboardRuns().filter(item => item.currentStage === this.stageCode && (item.status === 'RUNNING' || item.status === 'HOLD')).length
+  }
+
   get runtimeStage(): RuntimeStage {
-    return this.findRuntimeStage(this.stageCode)
+    const stage = this.findRuntimeStage(this.stageCode)
+    if (stage === undefined) {
+      return {
+        stageCode: this.stageCode,
+        state: 'STANDBY',
+        bufferLevel: 0,
+        bufferCapacity: 6,
+        upstreamImpact: '等待数据',
+        downstreamImpact: '等待数据'
+      }
+    }
+    return stage
   }
 
   get stageAlarms(): number {
@@ -158,11 +177,37 @@ struct StageDetail {
   }
 
   private findRuntimeStage(code: string): RuntimeStage {
-    let value: RuntimeStage = { stageCode: code, state: 'RUNNING', bufferLevel: 0, bufferCapacity: 6 }
-    this.runtimeData().stages.forEach(item => {
-      if (item.stageCode === code) value = item
+    let value: RuntimeStage = {
+      stageCode: code,
+      state: 'STANDBY',
+      bufferLevel: 0,
+      bufferCapacity: 6,
+      upstreamImpact: '等待数据',
+      downstreamImpact: '等待数据'
+    }
+    const runtime = this.runtimeData()
+    if (runtime === undefined || runtime.stages === undefined) return value
+    runtime.stages.forEach(item => {
+      if (item !== undefined && item.stageCode === code) value = item
     })
     return value
+  }
+
+  private runtimeStageValue(): RuntimeStage {
+    const value = this.findRuntimeStage(this.stageCode)
+    return value === undefined ? {
+      stageCode: this.stageCode,
+      state: 'STANDBY',
+      bufferLevel: 0,
+      bufferCapacity: 6,
+      upstreamImpact: '等待数据',
+      downstreamImpact: '等待数据'
+    } : value
+  }
+
+  private runtimeStateValue(): string {
+    const stage = this.runtimeStageValue()
+    return stage === undefined || stage.state === undefined ? 'STANDBY' : stage.state
   }
 
   private stageData(): StageDefinition {
@@ -188,11 +233,11 @@ struct StageDetail {
   }
 
   private statusText(): string {
-    return this.stageAlarms > 0 ? '异常待处理' : this.runtimeStage.state === 'RUNNING' ? '持续运行' : '待机'
+    return this.stageAlarms > 0 ? '异常待处理' : this.runtimeStateValue() === 'RUNNING' ? '持续运行' : '待机'
   }
 
   private statusValue(): string {
-    return this.stageAlarms > 0 ? 'ALARM' : this.runtimeStage.state === 'RUNNING' ? 'RUNNING' : 'STANDBY'
+    return this.stageAlarms > 0 ? 'ALARM' : this.runtimeStateValue() === 'RUNNING' ? 'RUNNING' : 'STANDBY'
   }
 
   private deviceRuntime(code: string): string {
@@ -246,8 +291,8 @@ struct StageDetail {
     const interlock: QualityGateView = {
       label: '设备联锁',
       standard: 'RUNNING 且无开放报警',
-      actual: this.runtimeStage.state,
-      status: this.stageAlarms > 0 ? 'FAIL' : this.runtimeStage.state === 'RUNNING' ? 'PASS' : 'WAIT',
+      actual: this.runtimeStateValue(),
+      status: this.stageAlarms > 0 ? 'FAIL' : this.runtimeStateValue() === 'RUNNING' ? 'PASS' : 'WAIT',
       source: '工位运行态与报警'
     }
     if (this.stageCode === 'GAS_INSPECTION') {
@@ -307,7 +352,7 @@ struct StageDetail {
   }
 
   private navigateStage(offset: number): void {
-    const next = this.stageIndex + offset
+    const next = this.currentStageIndex() + offset
     if (next >= 0 && next < FACTORY_STAGES.length) router.replaceUrl({ url: 'pages/StageDetail', params: { stageCode: FACTORY_STAGES[next].code } })
   }
 
@@ -397,7 +442,7 @@ struct StageDetail {
         Row() {
           Button('← 总览').type(ButtonType.Normal).fontColor('#FFFFFF').backgroundColor(Color.Transparent).onClick(() => router.back())
           Blank()
-          Text(this.stageData().code + ' · 工位 ' + (this.stageIndex + 1) + ' / ' + FACTORY_STAGES.length).fontSize(10).fontColor('#C8DCE9')
+          Text(this.stageData().code + ' · 工位 ' + (this.currentStageIndex() + 1) + ' / ' + FACTORY_STAGES.length).fontSize(10).fontColor('#C8DCE9')
         }.width('100%').padding({ left: 10, right: 10, top: 7, bottom: 7 }).backgroundColor(Theme.navy)
 
         Row() {
@@ -415,9 +460,9 @@ struct StageDetail {
         }.width('100%').alignItems(VerticalAlign.Bottom).padding(18).border({ width: { bottom: 3 }, color: Theme.blue })
 
         Row() {
-          Button('← 上一工位').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.stageIndex > 0).onClick(() => this.navigateStage(-1))
+          Button('← 上一工位').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.currentStageIndex() > 0).onClick(() => this.navigateStage(-1))
           Blank()
-          Button('下一工位 →').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.stageIndex < FACTORY_STAGES.length - 1).onClick(() => this.navigateStage(1))
+          Button('下一工位 →').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.currentStageIndex() < FACTORY_STAGES.length - 1).onClick(() => this.navigateStage(1))
         }.width('100%').padding({ left: 10, right: 10 })
 
         Column() {
@@ -500,8 +545,8 @@ struct StageDetail {
         Scroll() {
           Row({ space: 8 }) {
             this.metric('当前速度', this.stageCode === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s', '数据驱动画面')
-            this.metric('缓冲占用', this.runtimeStage.bufferLevel + '/' + this.runtimeStage.bufferCapacity, '工位间解耦缓冲')
-            this.metric('本站在制品', String(this.wipCount), '运行或待处理')
+            this.metric('缓冲占用', this.runtimeStageValue().bufferLevel + '/' + this.runtimeStageValue().bufferCapacity, '工位间解耦缓冲')
+            this.metric('本站在制品', String(this.wipCountValue()), '运行或待处理')
             this.metric('设备在线', this.runtimeData().devices.filter(item => item.stageCode === this.stageCode && item.state !== 'OFFLINE').length + '/' + this.stageData().devices.length, this.bundle.source)
           }
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 12 })
@@ -653,7 +698,7 @@ struct StageDetail {
   }
 
   private selectTextFragment(fieldCode: string, displayText: string): void {
-    const ownerId: string = this.stageCode.length > 0 ? this.stageCode : 'LINE-1'
+    const ownerId: string = this.stageCode.length > 0 ? this.stageCode : 'LINE-01'
     displayAssistantHost.publishSelection(
       AssistantEntityType.TEXT_FRAGMENT,
       this.pageRoute() + ':' + ownerId + ':' + fieldCode,
@@ -749,11 +794,11 @@ struct StageDetail {
       Row() {
         Column() {
           Text('上游影响').fontSize(9).fontColor(Theme.muted)
-          Text(this.runtimeStage.upstreamImpact || '等待数据').fontSize(11).fontColor(Theme.text).margin({ top: 4 })
+          Text(this.runtimeStageValue().upstreamImpact || '等待数据').fontSize(11).fontColor(Theme.text).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Column() {
           Text('下游影响').fontSize(9).fontColor(Theme.muted)
-          Text(this.runtimeStage.downstreamImpact || '等待数据').fontSize(11).fontColor(Theme.text).margin({ top: 4 })
+          Text(this.runtimeStageValue().downstreamImpact || '等待数据').fontSize(11).fontColor(Theme.text).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       }.width('100%').padding(12).backgroundColor(Theme.panelSoft).margin({ top: 10 })
 

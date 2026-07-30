@@ -27,6 +27,8 @@ public class Result<T> {
     @ApiModelProperty("接口响应内容")
     private T data;
 
+    private boolean success;
+
     public Result() {
     }
 
@@ -39,6 +41,7 @@ public class Result<T> {
         Result result = new Result();
         result.setCode(ResultEnum.SUCCESS.getCode());
         result.setMessage(ResultEnum.SUCCESS.getMessage());
+        result.setSuccess(true);
         return result;
     }
 
@@ -47,6 +50,7 @@ public class Result<T> {
         result.setCode(ResultEnum.SUCCESS.getCode());
         result.setMessage(ResultEnum.SUCCESS.getMessage());
         result.setData(data);
+        result.setSuccess(true);
         return result;
     }
 
@@ -54,6 +58,7 @@ public class Result<T> {
         Result result = new Result();
         result.setCode(ResultEnum.MSG_ERROR.getCode());
         result.setMessage(msg);
+        result.setSuccess(false);
         return result;
     }
 
@@ -65,6 +70,7 @@ public class Result<T> {
         } else {
             result.setMessage(message);
         }
+        result.setSuccess(false);
         return result;
     }
 
@@ -72,6 +78,7 @@ public class Result<T> {
         Result<T> result = new Result<T>();
         result.setCode(code);
         result.setMessage(message);
+        result.setSuccess(false);
 
         return new Result(code, message);
     }

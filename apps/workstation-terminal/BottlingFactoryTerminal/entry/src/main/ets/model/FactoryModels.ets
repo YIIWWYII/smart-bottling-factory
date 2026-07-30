@@ -18,6 +18,7 @@ export interface AuthUser {
 export interface LoginResult {
   token: string
   user: AuthUser
+  expiresAt?: string
 }
 
 export interface FactoryEvent {
@@ -45,6 +46,13 @@ export interface FactoryRun {
   warehouseLocation?: string
   startedAt?: string
   updatedAt?: string
+  stageCode?: string
+  laneCode?: string
+  stageProgressPct?: number
+  speed?: number
+  speedUnit?: string
+  animationState?: string
+  estimated?: boolean
   events: Array<FactoryEvent>
 }
 
@@ -88,12 +96,37 @@ export interface DeviceCommand {
   commandId: string
   deviceCode: string
   commandType: string
+  payload?: string
   source: string
   traceCode?: string
   status: string
   message?: string
   createdAt?: string
   acknowledgedAt?: string
+  auditNo?: string
+  clientRequestId?: string
+}
+
+export class DeviceCommandParameters {
+  parameterCode: string = ''
+  value: number = 0
+  unit: string = ''
+}
+
+export class DeviceCommandRequestPayload {
+  clientRequestId: string = ''
+  lineId: string = 'LINE-01'
+  stageCode: string = ''
+  deviceCode: string = ''
+  commandType: string = ''
+  parameters: DeviceCommandParameters = new DeviceCommandParameters()
+  expectedStateVersion: number = 0
+  recipeVersion: string = ''
+  reason: string = ''
+  // 兼容现有后端，目标接口迁移完成后删除以下三项。
+  payload: DeviceCommandParameters = new DeviceCommandParameters()
+  source: string = 'WORKSTATION_TERMINAL'
+  traceCode: string = ''
 }
 
 export interface AiAudit {
@@ -124,6 +157,21 @@ export interface RuntimeDevice {
   speedMps?: number
   progress?: number
   occurredAt?: string
+  name?: string
+  role?: string
+  actionCode?: string
+  cycleProgressPct?: number
+  speed?: number
+  speedUnit?: string
+  parameters?: Array<DeviceParameterValue>
+  lastSeenAt?: string
+}
+
+export interface DeviceParameterValue {
+  parameterCode: string
+  value: number
+  unit: string
+  source?: string
 }
 
 export interface RuntimeStage {
@@ -208,6 +256,71 @@ export interface FactoryBundle {
   errorMessage: string
 }
 
+export interface StageBufferSnapshot {
+  inputLevel: number
+  outputLevel: number
+  capacity: number
+  blockedReason?: string
+}
+
+export interface StageLink {
+  stageCode: string
+  stageName?: string
+  state: string
+  materialFlow?: string
+}
+
+export interface StageWorkOrder {
+  orderCode: string
+  batchCode?: string
+  productName?: string
+  plannedQuantity?: number
+}
+
+export interface StageSnapshot {
+  lineId: string
+  stageCode: string
+  stageName: string
+  state: string
+  stateReason: string
+  stateVersion: number
+  generatedAt: string
+  dataMode: string
+  workOrder?: StageWorkOrder
+  devices: Array<RuntimeDevice>
+  products: Array<FactoryRun>
+  sensors: Array<SensorReading>
+  qualityGates: Array<QualityGateView>
+  buffer: StageBufferSnapshot
+  incidents: Array<FactoryIncident>
+  alarms: Array<AlarmRecord>
+  upstream: Array<StageLink>
+  downstream: Array<StageLink>
+  capabilityVersion: string
+  recipeVersion?: string
+}
+
+export interface DeviceCapability {
+  deviceCode: string
+  capabilityVersion: string
+  controlId: string
+  commandType: string
+  displayName: string
+  valueType: string
+  unit: string
+  min?: number
+  max?: number
+  step?: number
+  currentValue?: number
+  requiredRole: string
+  riskLevel: string
+  confirmationRequired: boolean
+  reasonRequired: boolean
+  interlocks: Array<string>
+  writable: boolean
+  disabledReason?: string
+}
+
 export interface StageDefinition {
   code: string
   name: string
@@ -228,4 +341,6 @@ export interface QualityGateView {
   actual: string
   status: string
   source: string
+  result?: string
+  ruleVersion?: string
 }

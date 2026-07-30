@@ -1,48 +1,43 @@
-# 数字展板构建与验证
+﻿# 鏁板瓧灞曟澘鏋勫缓涓庨獙璇?
+## 鐜
 
-## 环境
-
-所有工具、SDK、模拟器、缓存、构建产物和日志均放在 `D:\HarmonyOS-Dev`。工程源码位于：
+鎵€鏈夊伐鍏枫€丼DK銆佹ā鎷熷櫒銆佺紦瀛樸€佹瀯寤轰骇鐗╁拰鏃ュ織鍧囨斁鍦?`D:\HarmonyOS-Dev`銆傚伐绋嬫簮鐮佷綅浜庯細
 
 ```text
 D:\HarmonyOS-Dev\Workspaces\bottling-display\apps\digital-display\BottlingFactoryDisplay
 ```
 
-应用通过 `entry/oh-package.json5` 依赖本地 `libs/harmonyassistant-1.0.1.har`，OHPM 包名必须为 `@bottling/harmony-assistant`，版本必须为 `1.0.1`。
-
-## 构建
+搴旂敤閫氳繃 `entry/oh-package.json5` 渚濊禆鏈湴 `../../../../packages/harmony-assistant/harmonyassistant`锛孫HPM 鍖呭悕蹇呴』涓?`@bottling/harmony-assistant`锛岀増鏈繀椤讳负 `1.0.1`銆?
+## 鏋勫缓
 
 ```powershell
 & 'D:\HarmonyOS-Dev\npm-global\devecocli.cmd' --version
 & 'D:\HarmonyOS-Dev\npm-global\devecocli.cmd' build --modules entry --build-mode debug
 ```
 
-构建前运行工程静态检查：
+鏋勫缓鍓嶈繍琛屽伐绋嬮潤鎬佹鏌ワ細
 
 ```powershell
 & '.\tools\validate-project.ps1'
 ```
 
-成功标准是 CLI 输出 `BUILD SUCCESSFUL`，且 `entry\build\default\outputs\default\` 下生成 `.hap`，不能只凭 ArkTS 类型检查判断完成。
+鎴愬姛鏍囧噯鏄?CLI 杈撳嚭 `BUILD SUCCESSFUL`锛屼笖 `entry\build\default\outputs\default\` 涓嬬敓鎴?`.hap`锛屼笉鑳藉彧鍑?ArkTS 绫诲瀷妫€鏌ュ垽鏂畬鎴愩€?
+## 鏈嶅姟鍦板潃
 
-## 服务地址
-
-`entry/src/main/ets/service/ApiConfig.ets` 配置 Spring Boot 与 AI 中枢地址。模拟器或真机不能使用 `localhost`；电脑防火墙必须允许对应端口入站。后端不可用时页面应显示明确错误和 `LOCAL DEMO`，AI 中枢不可用时共享助手应显示服务不可用，但不能阻塞展板页面。
-
-## 最低验收
-
-| 检查项 | 预期结果 |
+`entry/src/main/ets/service/ApiConfig.ets` 閰嶇疆 Spring Boot 涓?AI 涓灑鍦板潃銆傛ā鎷熷櫒鎴栫湡鏈轰笉鑳戒娇鐢?`localhost`锛涚數鑴戦槻鐏蹇呴』鍏佽瀵瑰簲绔彛鍏ョ珯銆傚悗绔笉鍙敤鏃堕〉闈㈠簲鏄剧ず鏄庣‘閿欒鍜?`LOCAL DEMO`锛孉I 涓灑涓嶅彲鐢ㄦ椂鍏变韩鍔╂墜搴旀樉绀烘湇鍔′笉鍙敤锛屼絾涓嶈兘闃诲灞曟澘椤甸潰銆?
+## 鏈€浣庨獙鏀?
+| 妫€鏌ラ」 | 棰勬湡缁撴灉 |
 | --- | --- |
-| 启动 | 无需登录，直接进入全局总览 |
-| 工序导航 | 九工序均可从总览进入详情，页面可上下滚动 |
-| 2D | 加载 `factory2d/index.html`，显示平面设备符号、工艺路径和移动物料，不是 3D 俯视角 |
-| 3D | 加载 `factory3d/index.html`，九工序设备组合和动作不同 |
-| 同快照联动 | 两视图的 `stateVersion`、设备/产品、速度、进度、来源一致 |
-| 暂停/恢复 | 暂停冻结当前帧；恢复后应用最新快照并继续运动 |
-| 性能开关 | 2D/3D 可独立关闭；关闭后取消动画帧并释放 WebGL |
-| 状态颜色 | 可关闭颜色映射，设备状态文字仍显示 |
-| 布局编辑 | 设备可拖拽；按工序和视图保存，重开后恢复 |
-| 选择联动 | 工位、设备、产品使用稳定业务 ID 发布共享助手选择；空白点击发送 `CLEAR` |
-| 服务异常 | 后端/AI 不可用提示清楚，页面不崩溃、不显示假成功 |
+| 鍚姩 | 鏃犻渶鐧诲綍锛岀洿鎺ヨ繘鍏ュ叏灞€鎬昏 |
+| 宸ュ簭瀵艰埅 | 涔濆伐搴忓潎鍙粠鎬昏杩涘叆璇︽儏锛岄〉闈㈠彲涓婁笅婊氬姩 |
+| 2D | 鍔犺浇 `factory2d/index.html`锛屾樉绀哄钩闈㈣澶囩鍙枫€佸伐鑹鸿矾寰勫拰绉诲姩鐗╂枡锛屼笉鏄?3D 淇瑙?|
+| 3D | 鍔犺浇 `factory3d/index.html`锛屼節宸ュ簭璁惧缁勫悎鍜屽姩浣滀笉鍚?|
+| 鍚屽揩鐓ц仈鍔?| 涓よ鍥剧殑 `stateVersion`銆佽澶?浜у搧銆侀€熷害銆佽繘搴︺€佹潵婧愪竴鑷?|
+| 鏆傚仠/鎭㈠ | 鏆傚仠鍐荤粨褰撳墠甯э紱鎭㈠鍚庡簲鐢ㄦ渶鏂板揩鐓у苟缁х画杩愬姩 |
+| 鎬ц兘寮€鍏?| 2D/3D 鍙嫭绔嬪叧闂紱鍏抽棴鍚庡彇娑堝姩鐢诲抚骞堕噴鏀?WebGL |
+| 鐘舵€侀鑹?| 鍙叧闂鑹叉槧灏勶紝璁惧鐘舵€佹枃瀛椾粛鏄剧ず |
+| 甯冨眬缂栬緫 | 璁惧鍙嫋鎷斤紱鎸夊伐搴忓拰瑙嗗浘淇濆瓨锛岄噸寮€鍚庢仮澶?|
+| 閫夋嫨鑱斿姩 | 宸ヤ綅銆佽澶囥€佷骇鍝佷娇鐢ㄧǔ瀹氫笟鍔?ID 鍙戝竷鍏变韩鍔╂墜閫夋嫨锛涚┖鐧界偣鍑诲彂閫?`CLEAR` |
+| 鏈嶅姟寮傚父 | 鍚庣/AI 涓嶅彲鐢ㄦ彁绀烘竻妤氾紝椤甸潰涓嶅穿婧冦€佷笉鏄剧ず鍋囨垚鍔?|
 
-Three.js 可先在浏览器对 rawfile 页面做 canvas、点击、拖拽和探针回归，但最终必须在 HarmonyOS 模拟器中确认 ArkWeb、本地资源、桥接和页面切换。
+Three.js 鍙厛鍦ㄦ祻瑙堝櫒瀵?rawfile 椤甸潰鍋?canvas銆佺偣鍑汇€佹嫋鎷藉拰鎺㈤拡鍥炲綊锛屼絾鏈€缁堝繀椤诲湪 HarmonyOS 妯℃嫙鍣ㄤ腑纭 ArkWeb銆佹湰鍦拌祫婧愩€佹ˉ鎺ュ拰椤甸潰鍒囨崲銆?

@@ -24,15 +24,24 @@ export function createMockBundle(): FactoryBundle {
         { readingId: 'READ-DEMO-HUM', deviceCode: 'BEV-HUM-01', sensorType: 'HUMIDITY', value: 45, unit: '%RH', quality: 'GOOD', mode: 'SIMULATION', stage: 'BEVERAGE_READY', occurredAt: now },
         { readingId: 'READ-DEMO-AGV', deviceCode: 'AGV-01', sensorType: 'AGV_DISTANCE', value: 100, unit: 'cm', quality: 'GOOD', mode: 'SIMULATION', stage: 'AGV_TRANSPORT', occurredAt: now }
       ],
-      alarms: [],
-      commands: [],
-      aiAudits: []
+      alarms: [
+        { alarmId: 'ALARM-DEMO-001', alarmType: 'QUALITY_GATE', deviceCode: 'VIS-REJECT-01', stage: 'APPEARANCE_INSPECTION', traceCode: 'BOT-HARMONY-002', status: 'OPEN', message: '瓶身凹陷，已进入剔除缓冲', occurredAt: now }
+      ],
+      commands: [
+        { commandId: 'CMD-DEMO-001', deviceCode: 'VIS-REJECT-01', commandType: 'REJECT_ROUTE', source: 'ADMIN', traceCode: 'BOT-HARMONY-002', status: 'ACKNOWLEDGED', message: '剔除通道已确认', createdAt: now, acknowledgedAt: now }
+      ],
+      aiAudits: [
+        { auditId: 'AI-DEMO-001', traceCode: 'BOT-HARMONY-001', bottleType: 'PLA-500', stage: 'FILLING', knowledgeVersion: 'RAG-KB-2026.07', validationStatus: 'PASSED', decision: '灌装参数保持当前模板', reason: '瓶型、温湿度和液位阈值校验通过', createdAt: now },
+        { auditId: 'AI-DEMO-002', traceCode: 'BOT-HARMONY-002', bottleType: 'PLA-500', stage: 'APPEARANCE_INSPECTION', knowledgeVersion: 'RAG-KB-2026.07', validationStatus: 'PASSED', decision: '触发剔除并记录质量事件', reason: '视觉缺陷分类为 BODY_DENT，满足剔除策略', createdAt: now }
+      ]
     },
     runtime: {
       generatedAt: now,
       stages: stages,
       devices: devices,
-      incidents: []
+      incidents: [
+        { incidentId: 'INC-DEMO-001', stageCode: 'APPEARANCE_INSPECTION', deviceCode: 'VIS-SIDE-01', strategy: 'REJECT', status: 'OPEN', message: '瓶身凹陷缺陷，需要确认剔除结果', targetStage: 'APPEARANCE_INSPECTION', upstreamImpact: '上游继续进入缓冲', downstreamImpact: '下游灌装不接收该追踪号', createdAt: now }
+      ]
     },
     logistics: {
       tasks: [{ taskId: 'AGV-DEMO-001', agvCode: 'AGV-01', boxCode: 'BOX-DEMO-003', source: 'PACKING', destination: 'A-01-01', totalDistanceM: 10, completedDistanceM: 5, speedMps: 1, loadKg: 5, obstacleDistanceCm: 100, status: 'RUNNING', mode: 'SIMULATION', updatedAt: now }],

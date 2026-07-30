@@ -2,6 +2,7 @@ import { promptAction, router } from '@kit.ArkUI'
 import { Theme } from '../common/Theme'
 import { apiClient } from '../service/ApiClient'
 import { SessionStore } from '../service/SessionStore'
+import { ROLE_ADMIN, ROLE_ENGINEER, ROLE_OPERATOR, ROLE_VIEWER, roleLabel } from '../service/AdminAccessPolicy'
 
 @Entry
 @Component
@@ -10,6 +11,7 @@ struct Login {
   @State password: string = ''
   @State loading: boolean = false
   @State message: string = ''
+  @State demoRole: string = ROLE_VIEWER
 
   async signIn(): Promise<void> {
     if (this.username.trim().length === 0 || this.password.length === 0) {
@@ -20,7 +22,7 @@ struct Login {
     this.message = ''
     try {
       const result = await apiClient.login(this.username.trim(), this.password)
-      SessionStore.setSession(result.token, result.user)
+      SessionStore.setSession(result.token, result.user, result.expiresAt || '')
       promptAction.showToast({ message: '登录成功' })
       router.replaceUrl({ url: 'pages/AdminConsole' })
     } catch (error) {
@@ -31,7 +33,7 @@ struct Login {
   }
 
   enterDemo(): void {
-    SessionStore.setSession('LOCAL-DEMO', { id: 0, username: 'demo', displayName: '演示账号', role: 'VIEWER', status: 'ACTIVE' })
+    SessionStore.setSession('LOCAL-DEMO', { id: 0, username: 'demo-' + this.demoRole.toLowerCase(), displayName: '只读验收账号', role: this.demoRole, status: 'ACTIVE' })
     router.replaceUrl({ url: 'pages/AdminConsole' })
   }
 
@@ -68,9 +70,29 @@ struct Login {
             Blank()
             Button('进入本地演示').type(ButtonType.Normal).fontColor(Theme.warning).backgroundColor(Color.Transparent).onClick(() => this.enterDemo())
           }.width('100%').margin({ top: 8 })
-          Text('本地演示不会向设备发送控制命令。').fontSize(9).fontColor(Theme.muted).width('100%').padding(10).border({ width: { left: 3 }, color: Theme.warning }).backgroundColor('#FFF8EA').margin({ top: 14 })
+          Text('本地只读验收角色').fontSize(10).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 14 })
+          Row({ space: 6 }) {
+            this.demoRoleButton(ROLE_VIEWER)
+            this.demoRoleButton(ROLE_OPERATOR)
+            this.demoRoleButton(ROLE_ENGINEER)
+            this.demoRoleButton(ROLE_ADMIN)
+          }.width('100%').margin({ top: 7 })
+          Text('当前：' + roleLabel(this.demoRole) + '。本地演示只验证菜单和权限边界，不会发送任何写操作。').fontSize(9).fontColor(Theme.muted).width('100%').padding(10).border({ width: { left: 3 }, color: Theme.warning }).backgroundColor('#FFF8EA').margin({ top: 10 })
         }.alignItems(HorizontalAlign.Start).width('100%').padding(32)
       }.width('42%').height('100%').backgroundColor(Theme.page)
     }.width('100%').height('100%')
+  }
+
+  @Builder
+  demoRoleButton(role: string) {
+    Button(role)
+      .type(ButtonType.Normal)
+      .layoutWeight(1)
+      .height(32)
+      .fontSize(8)
+      .fontColor(this.demoRole === role ? '#FFFFFF' : Theme.blue)
+      .backgroundColor(this.demoRole === role ? Theme.blue : Theme.panel)
+      .border({ width: 1, color: Theme.blue })
+      .onClick(() => this.demoRole = role)
   }
 }

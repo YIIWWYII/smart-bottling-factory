@@ -6,6 +6,6 @@
   "main": "Index.ets",
   "license": "Apache-2.0",
   "dependencies": {
-    "@bottling/harmony-assistant": "file:../libs/harmonyassistant-1.0.1.har"
+    "@bottling/harmony-assistant": "file:../../../../packages/harmony-assistant/harmonyassistant"
   }
 }

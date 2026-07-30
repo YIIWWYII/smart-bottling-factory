@@ -7,6 +7,7 @@ import com.archermind.hdc.factory.runtime.dto.IncidentResolutionRequest;
 import com.archermind.hdc.factory.runtime.model.DeviceRuntimeState;
 import com.archermind.hdc.factory.runtime.model.FactoryIncident;
 import com.archermind.hdc.factory.runtime.model.StageRuntimeState;
+import com.archermind.hdc.factory.coordination.FactoryRealtimeEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -72,6 +73,8 @@ public class FactoryRuntimeService {
     private final Map<String, StageRuntimeState> stages = new ConcurrentHashMap<>();
     private final Map<String, FactoryIncident> incidents = new ConcurrentHashMap<>();
     private final FactoryRuntimePersistence persistence;
+    @Autowired(required = false)
+    private FactoryRealtimeEventPublisher realtimePublisher;
 
     public FactoryRuntimeService() {
         this(null);
@@ -140,6 +143,7 @@ public class FactoryRuntimeService {
         value.setMetrics(request.getMetrics() == null ? new LinkedHashMap<>() : new LinkedHashMap<>(request.getMetrics()));
         telemetry.put(deviceCode, value);
         if (persistence != null) persistence.saveDevice(value);
+        publish("factory.runtime.changed", stageCode, value);
         return copyDevice(value);
     }
 
@@ -189,6 +193,7 @@ public class FactoryRuntimeService {
         incidents.put(value.getIncidentId(), value);
         applyIncidentToStage(value);
         persistIncidentAndStages(value);
+        publish("factory.runtime.changed", stageCode, value);
         return value;
     }
 
@@ -224,6 +229,7 @@ public class FactoryRuntimeService {
         }
         if ("BUFFER_AND_STOP".equals(value.getStrategy())) drainUpstreamBuffer(value.getStageCode());
         persistIncidentAndStages(value);
+        publish("factory.runtime.changed", value.getStageCode(), value);
         return value;
     }
 
@@ -435,4 +441,7 @@ public class FactoryRuntimeService {
     private String trim(String value) { return StringUtils.hasText(value) ? value.trim() : null; }
     private String defaultText(String value, String fallback) { return StringUtils.hasText(value) ? value.trim() : fallback; }
     private void require(boolean condition, String message) { if (!condition) throw new IllegalArgumentException(message); }
+    private void publish(String type, String stageCode, Object payload) {
+        if (realtimePublisher != null) realtimePublisher.publish(type, stageCode, payload);
+    }
 }
