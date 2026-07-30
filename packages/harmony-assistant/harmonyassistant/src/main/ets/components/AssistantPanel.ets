@@ -120,7 +120,7 @@ export struct AssistantPanel {
             AssistantMessageCard({ message: message })
           }
         }, (message: AssistantMessageView) => message.messageId)
-        if (this.controller.status === AssistantUiStatus.SENDING) {
+        if (this.controller.status === AssistantUiStatus.SENDING || this.controller.status === AssistantUiStatus.STREAMING) {
           ListItem() {
             Row({ space: 8 }) {
               LoadingProgress().width(18).height(18).color(PANEL_BLUE)
@@ -153,7 +153,7 @@ export struct AssistantPanel {
         .margin({ left: 10, right: 10, bottom: 8 })
 
       Row({ space: 8 }) {
-        if (this.controller.status === AssistantUiStatus.SENDING) {
+        if (this.controller.status === AssistantUiStatus.SENDING || this.controller.status === AssistantUiStatus.STREAMING) {
           Button('停止')
             .layoutWeight(1)
             .height(38)

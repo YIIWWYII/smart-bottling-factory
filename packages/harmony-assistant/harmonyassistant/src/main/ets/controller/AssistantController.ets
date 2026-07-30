@@ -6,11 +6,13 @@ import {
 } from '../host/AssistantHostAdapter'
 import {
   AssistantContext,
+  AssistantConversationMessagesResult,
   AssistantMessageResult,
   AssistantMessageView,
   AssistantQuestionType,
   AssistantSelection,
   AssistantSendMessagePayload,
+  AssistantStreamEvent,
   AssistantSubscription,
   AssistantUiStatus,
   AssistantVisibility
@@ -31,8 +33,10 @@ export class AssistantController {
   private client: AssistantApiClient
   private conversationId: string = ''
   private lastQuestion: string = ''
+  private activeAssistantMessageId: string = ''
   private disposed: boolean = false
   private requestCancelled: boolean = false
+  private streamCompensating: boolean = false
   private selectionSubscription: AssistantSubscription
   private visibilitySubscription: AssistantSubscription
   private selectionListener: AssistantSelectionListener
@@ -117,6 +121,11 @@ export class AssistantController {
         const conversation = await this.client.createConversation({ context: context })
         this.conversationId = conversation.conversationId
       }
+      this.client.startEventStream(
+        this.conversationId,
+        (event: AssistantStreamEvent): void => this.onStreamEvent(event),
+        (): void => { void this.compensateFromHttp() }
+      )
       const payload: AssistantSendMessagePayload = {
         question: question,
         questionType: this.activeSelection === undefined
@@ -124,8 +133,9 @@ export class AssistantController {
           : AssistantQuestionType.SELECTION,
         context: context
       }
+      this.status = AssistantUiStatus.STREAMING
       const result: AssistantMessageResult = await this.client.sendMessage(this.conversationId, payload)
-      this.messages = this.messages.concat([this.toAssistantMessage(result)])
+      this.applyMessageResult(result)
       if (result.status === AssistantUiStatus.FAILED) {
         this.errorMessage = result.content
         this.status = AssistantUiStatus.FAILED
@@ -172,6 +182,7 @@ export class AssistantController {
     this.disposed = true
     this.requestCancelled = true
     this.client.cancelActiveRequest()
+    this.client.closeEventStream()
     this.selectionSubscription.unsubscribe()
     this.visibilitySubscription.unsubscribe()
   }
@@ -211,6 +222,142 @@ export class AssistantController {
       createdAt: new Date().toISOString()
     }
     this.messages = this.messages.concat([message])
+  }
+
+  private onStreamEvent(event: AssistantStreamEvent): void {
+    if (this.disposed || event.conversationId !== this.conversationId) return
+    if (event.type === 'ai.connection.ready' || event.type === 'ai.conversation.created') return
+    if (event.messageId !== undefined && event.messageId.length > 0) {
+      this.activeAssistantMessageId = event.messageId
+    }
+    if (event.type === 'ai.conversation.started') {
+      this.upsertStreamingMessage(event, '')
+      this.status = AssistantUiStatus.STREAMING
+      return
+    }
+    if (event.type === 'ai.conversation.delta') {
+      this.upsertStreamingMessage(event, event.delta === undefined ? '' : event.delta)
+      this.status = AssistantUiStatus.STREAMING
+      return
+    }
+    if (event.type === 'ai.conversation.completed') {
+      this.replaceStreamContent(event, AssistantUiStatus.COMPLETED)
+      this.errorMessage = ''
+      this.status = AssistantUiStatus.COMPLETED
+      return
+    }
+    if (event.type === 'ai.conversation.failed') {
+      this.replaceStreamContent(event, AssistantUiStatus.FAILED)
+      this.errorMessage = event.content === undefined ? 'AI 鍔╂墜鍥炵瓟澶辫触' : event.content
+      this.status = AssistantUiStatus.FAILED
+      return
+    }
+    if (event.type === 'ai.conversation.stopped') {
+      this.replaceStreamContent(event, AssistantUiStatus.STOPPED)
+      this.errorMessage = '鏈鍥炵瓟宸插仠姝?'
+      this.status = AssistantUiStatus.STOPPED
+    }
+  }
+
+  private async compensateFromHttp(): Promise<void> {
+    if (this.disposed || this.streamCompensating || this.conversationId.length === 0) return
+    this.streamCompensating = true
+    try {
+      const result: AssistantConversationMessagesResult = await this.client.listMessages(this.conversationId)
+      const views: AssistantMessageView[] = []
+      result.messages.forEach((message: AssistantMessageResult) => {
+        views.push(this.toAssistantMessage(message))
+      })
+      if (views.length > 0) {
+        this.messages = views
+        const lastMessage: AssistantMessageView = views[views.length - 1]
+        this.status = lastMessage.status
+        if (lastMessage.status === AssistantUiStatus.FAILED || lastMessage.status === AssistantUiStatus.STOPPED) {
+          this.errorMessage = lastMessage.content
+        }
+      }
+    } catch (_error) {
+      if (this.status === AssistantUiStatus.STREAMING) {
+        this.errorMessage = 'AI 瀹炴椂閫氶亾宸叉柇寮€锛屾鍦ㄩ噸杩炲苟绛夊緟 HTTP 琛ュ伩'
+      }
+    } finally {
+      this.streamCompensating = false
+    }
+  }
+
+  private upsertStreamingMessage(event: AssistantStreamEvent, delta: string): void {
+    const messageId: string = event.messageId === undefined ? this.activeAssistantMessageId : event.messageId
+    if (messageId.length === 0) return
+    const next: AssistantMessageView[] = this.messages.slice()
+    const index: number = this.findMessageIndex(messageId)
+    if (index >= 0) {
+      const current: AssistantMessageView = next[index]
+      current.content = current.content + delta
+      current.status = AssistantUiStatus.STREAMING
+      next[index] = current
+    } else {
+      next.push({
+        messageId: messageId,
+        role: 'ASSISTANT',
+        content: delta,
+        status: AssistantUiStatus.STREAMING,
+        dataGeneratedAt: event.dataGeneratedAt,
+        stateVersion: event.stateVersion,
+        knowledgeVersion: event.knowledgeVersion,
+        citations: event.citations === undefined ? [] : event.citations,
+        createdAt: event.createdAt === undefined ? new Date().toISOString() : event.createdAt
+      })
+    }
+    this.messages = next
+  }
+
+  private replaceStreamContent(event: AssistantStreamEvent, status: AssistantUiStatus): void {
+    const messageId: string = event.messageId === undefined ? this.activeAssistantMessageId : event.messageId
+    if (messageId.length === 0) return
+    const next: AssistantMessageView[] = this.messages.slice()
+    const index: number = this.findMessageIndex(messageId)
+    if (index >= 0) {
+      const current: AssistantMessageView = next[index]
+      current.content = event.content === undefined ? current.content : event.content
+      current.status = status
+      current.dataGeneratedAt = event.dataGeneratedAt
+      current.stateVersion = event.stateVersion
+      current.knowledgeVersion = event.knowledgeVersion
+      current.citations = event.citations === undefined ? current.citations : event.citations
+      next[index] = current
+    } else {
+      next.push({
+        messageId: messageId,
+        role: 'ASSISTANT',
+        content: event.content === undefined ? '' : event.content,
+        status: status,
+        dataGeneratedAt: event.dataGeneratedAt,
+        stateVersion: event.stateVersion,
+        knowledgeVersion: event.knowledgeVersion,
+        citations: event.citations === undefined ? [] : event.citations,
+        createdAt: event.createdAt === undefined ? new Date().toISOString() : event.createdAt
+      })
+    }
+    this.messages = next
+  }
+
+  private applyMessageResult(result: AssistantMessageResult): void {
+    const next: AssistantMessageView[] = this.messages.slice()
+    const index: number = this.findMessageIndex(result.messageId)
+    const view: AssistantMessageView = this.toAssistantMessage(result)
+    if (index >= 0) {
+      next[index] = view
+    } else {
+      next.push(view)
+    }
+    this.messages = next
+  }
+
+  private findMessageIndex(messageId: string): number {
+    for (let index: number = 0; index < this.messages.length; index++) {
+      if (this.messages[index].messageId === messageId) return index
+    }
+    return -1
   }
 
   private toAssistantMessage(result: AssistantMessageResult): AssistantMessageView {

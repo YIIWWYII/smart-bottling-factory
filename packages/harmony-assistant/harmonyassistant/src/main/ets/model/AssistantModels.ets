@@ -154,6 +154,33 @@ export interface AssistantMessageResult {
   createdAt: string
 }
 
+export interface AssistantConversationMessagesResult {
+  conversationId: string
+  messages: AssistantMessageResult[]
+  source: string
+}
+
+export interface AssistantStreamEvent {
+  eventId: string
+  type: string
+  aggregateType?: string
+  aggregateId?: string
+  aggregateVersion?: number
+  conversationId?: string
+  messageId?: string
+  status?: string
+  delta?: string
+  content?: string
+  code?: string
+  dataGeneratedAt?: string
+  stateVersion?: number
+  knowledgeVersion?: string
+  citations?: AssistantCitation[]
+  createdAt?: string
+  occurredAt?: string
+  source?: string
+}
+
 export interface AssistantApiEnvelope<T> {
   code: number
   message: string

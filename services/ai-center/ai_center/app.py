@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import time
 import uuid
 from copy import deepcopy
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from functools import wraps
+from pathlib import Path
 from typing import Any
 from urllib import error, request
 
@@ -20,6 +23,8 @@ API_PREFIX = "/api"
 SOURCE_MARK = "LOCAL DEMO / SIMULATION"
 KNOWLEDGE_VERSION = "SIMULATION-KB-2026.07"
 DEFAULT_BACKEND_BASE_URL = "http://127.0.0.1:8088/hdc/api"
+DEFAULT_DATA_DIR = Path(os.getenv("AI_CENTER_DATA_DIR", r"D:\HarmonyOS-Dev\Data\ai-center"))
+AUTH_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar("ai_center_auth_context", default=None)
 DEFAULT_AI_CONFIG = {
     "provider": "LOCAL_DEMO",
     "modelName": "local-demo-assistant",
@@ -38,6 +43,49 @@ DEFAULT_AI_CONFIG = {
     "chunkOverlap": 120,
     "knowledgeIndexEnabled": True,
 }
+DEFAULT_AUTH_TOKENS = {
+    "LOCAL_DEMO": {
+        "userId": "local-admin",
+        "displayName": "LOCAL DEMO Admin",
+        "role": "ADMIN",
+        "sourceApps": ["DISPLAY", "WORKSTATION", "ADMIN"],
+        "permissions": ["ASSISTANT_READ", "AI_CONFIG_MANAGE", "KNOWLEDGE_SUBMIT", "KNOWLEDGE_REVIEW", "DECISION_READ"],
+        "stageCodes": ["ALL"],
+    },
+    "DISPLAY_DEMO": {
+        "userId": "display-demo",
+        "displayName": "LOCAL DEMO Display",
+        "role": "VIEWER",
+        "sourceApps": ["DISPLAY"],
+        "permissions": ["ASSISTANT_READ", "DECISION_READ"],
+        "stageCodes": ["ALL"],
+    },
+    "WORKSTATION_DEMO": {
+        "userId": "workstation-demo",
+        "displayName": "LOCAL DEMO Workstation",
+        "role": "OPERATOR",
+        "sourceApps": ["WORKSTATION"],
+        "permissions": ["ASSISTANT_READ", "DECISION_READ"],
+        "stageCodes": ["PRETREATMENT", "GAS_INSPECTION", "APPEARANCE_INSPECTION", "FILLING", "SECONDARY_INSPECTION", "PACKING"],
+    },
+    "REVIEW_DEMO": {
+        "userId": "review-admin",
+        "displayName": "LOCAL DEMO Reviewer",
+        "role": "ADMIN",
+        "sourceApps": ["ADMIN"],
+        "permissions": ["ASSISTANT_READ", "AI_CONFIG_MANAGE", "KNOWLEDGE_SUBMIT", "KNOWLEDGE_REVIEW", "DECISION_READ"],
+        "stageCodes": ["ALL"],
+    },
+}
+PUBLIC_HTTP_PATHS = {f"{API_PREFIX}/health"}
+ADMIN_PREFIXES = (
+    f"{API_PREFIX}/admin/",
+)
+ASSISTANT_PREFIX = f"{API_PREFIX}/assistant/"
+KNOWLEDGE_PREFIX = f"{API_PREFIX}/knowledge/"
+DECISION_PREFIX = f"{API_PREFIX}/decisions"
+VISION_PREFIX = f"{API_PREFIX}/vision/"
+AI_INTEGRATION_PREFIX = f"{API_PREFIX}/ai-integration/"
 DEFAULT_RAG_DOCUMENTS = [
     {
         "documentId": "doc-local-pla-safety",
@@ -116,6 +164,7 @@ class EventHub:
         self._clients: set[WebSocket] = set()
         self._lock = asyncio.Lock()
         self._history: list[dict[str, Any]] = []
+        self._aggregate_versions: dict[str, int] = {}
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -129,6 +178,15 @@ class EventHub:
     async def publish(self, event: dict[str, Any]) -> None:
         event.setdefault("eventId", new_id("evt"))
         event.setdefault("createdAt", now_iso())
+        event.setdefault("occurredAt", event["createdAt"])
+        event.setdefault("schemaVersion", 1)
+        if event.get("conversationId") and not event.get("aggregateId"):
+            event["aggregateType"] = "AI_CONVERSATION"
+            event["aggregateId"] = event["conversationId"]
+        if event.get("aggregateType") and event.get("aggregateId") and not event.get("aggregateVersion"):
+            key = f"{event['aggregateType']}:{event['aggregateId']}"
+            self._aggregate_versions[key] = self._aggregate_versions.get(key, 0) + 1
+            event["aggregateVersion"] = self._aggregate_versions[key]
         event.setdefault("source", SOURCE_MARK)
         async with self._lock:
             self._history.append(deepcopy(event))
@@ -146,27 +204,34 @@ class EventHub:
                 for client in stale:
                     self._clients.discard(client)
 
-    async def history(self, conversation_id: str | None = None) -> list[dict[str, Any]]:
+    async def history(self, conversation_id: str | None = None, after_version: int = 0) -> list[dict[str, Any]]:
         async with self._lock:
             events = deepcopy(self._history)
         if conversation_id is None:
-            return events
-        return [event for event in events if event.get("conversationId") == conversation_id]
+            return [event for event in events if int(event.get("aggregateVersion", 0) or 0) > after_version]
+        return [
+            event for event in events
+            if event.get("conversationId") == conversation_id and int(event.get("aggregateVersion", 0) or 0) > after_version
+        ]
 
 
 class AiCenterState:
     def __init__(self) -> None:
-        self.conversations: dict[str, dict[str, Any]] = {}
-        self.messages: dict[str, list[dict[str, Any]]] = {}
+        bundle = load_state_bundle()
+        self.conversations: dict[str, dict[str, Any]] = bundle.get("conversations", {})
+        self.messages: dict[str, list[dict[str, Any]]] = bundle.get("messages", {})
         self.active_messages: dict[str, dict[str, Any]] = {}
-        self.rag_documents: dict[str, dict[str, Any]] = {item["documentId"]: deepcopy(item) for item in DEFAULT_RAG_DOCUMENTS}
+        self.rag_documents: dict[str, dict[str, Any]] = bundle.get(
+            "ragDocuments",
+            {item["documentId"]: index_document_chunks(deepcopy(item), DEFAULT_AI_CONFIG) for item in DEFAULT_RAG_DOCUMENTS},
+        )
         self.knowledge_submissions: dict[str, dict[str, Any]] = {
             item["submissionId"]: document_to_submission(item) for item in self.rag_documents.values()
         }
-        self.decisions: dict[str, dict[str, Any]] = {}
-        self.recognitions: dict[str, dict[str, Any]] = {}
-        self.command_intents: dict[str, dict[str, Any]] = {}
-        self.ai_config: dict[str, Any] = load_ai_config_from_env()
+        self.decisions: dict[str, dict[str, Any]] = bundle.get("decisions", {})
+        self.recognitions: dict[str, dict[str, Any]] = bundle.get("recognitions", {})
+        self.command_intents: dict[str, dict[str, Any]] = bundle.get("commandIntents", {})
+        self.ai_config: dict[str, Any] = bundle.get("aiConfig", load_ai_config_from_env())
         self.events = EventHub()
 
 
@@ -180,6 +245,22 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def auth_middleware(request_obj: Request, call_next):
+        if request_obj.url.path in PUBLIC_HTTP_PATHS:
+            return await call_next(request_obj)
+        auth = authenticate_request_headers(request_obj.headers.get("authorization", ""), request_obj.headers.get("x-client-type", ""))
+        if not auth["ok"]:
+            return error_envelope(auth["message"], auth["status"])
+        path = request_obj.url.path
+        if not is_authorized_for_path(auth, path, request_obj.method):
+            return error_envelope("forbidden by AI center RBAC or sourceApp scope", 403)
+        token = AUTH_CONTEXT.set(auth)
+        try:
+            return await call_next(request_obj)
+        finally:
+            AUTH_CONTEXT.reset(token)
 
     @app.get(f"{API_PREFIX}/health")
     async def health() -> dict[str, Any]:
@@ -208,10 +289,11 @@ def create_app() -> FastAPI:
             updates.pop("apiKey")
         merged.update(updates)
         state.ai_config = merged
+        persist_state(state)
         return envelope(
             {
                 "config": mask_ai_config(state.ai_config),
-                "note": "LOCAL DEMO: config is stored in memory for this service process. Use .env for boot defaults.",
+                "note": f"LOCAL DEMO: config is persisted to {state_file_path()} and .env remains the boot default fallback.",
                 "source": SOURCE_MARK,
             }
         )
@@ -277,6 +359,7 @@ def create_app() -> FastAPI:
         document = create_rag_document_record(request_body, body_size=0)
         state.rag_documents[document["documentId"]] = document
         state.knowledge_submissions[document["submissionId"]] = document_to_submission(document)
+        persist_state(state)
         return envelope(document)
 
     @app.get(f"{API_PREFIX}/admin/ai/rag/documents/{{document_id}}")
@@ -294,6 +377,7 @@ def create_app() -> FastAPI:
         apply_document_classification(document, request_body)
         document["updatedAt"] = now_iso()
         state.knowledge_submissions[document["submissionId"]] = document_to_submission(document)
+        persist_state(state)
         return envelope(document)
 
     @app.post(f"{API_PREFIX}/admin/ai/rag/reindex")
@@ -309,16 +393,19 @@ def create_app() -> FastAPI:
                 code=1,
             )
         for document in state.rag_documents.values():
-            if document.get("status") in ("INDEXED", "APPROVED", "PENDING_REVIEW"):
-                document["indexStatus"] = "READY"
-                document["chunkCount"] = max(int(document.get("chunkCount", 0)), 1)
-                document["failureReason"] = ""
-                document["updatedAt"] = now_iso()
-        return envelope({"status": "READY", "items": list(state.rag_documents.values()), "source": SOURCE_MARK})
+            if document.get("status") in ("APPROVED", "INDEXED"):
+                index_document_chunks(document, state.ai_config)
+        persist_state(state)
+        return envelope({"status": "LOCAL_DEMO_INDEXED", "items": list(state.rag_documents.values()), "source": SOURCE_MARK})
 
     @app.websocket(f"{API_PREFIX}/assistant/events")
     async def assistant_events(websocket: WebSocket) -> None:
         conversation_filter = websocket.query_params.get("conversationId")
+        after_version = clamp_int(websocket.query_params.get("afterVersion"), 0, 1_000_000_000, 0)
+        auth = authenticate_request_headers(websocket.headers.get("authorization", ""), websocket.headers.get("x-client-type", ""))
+        if not auth["ok"] or "ASSISTANT_READ" not in auth.get("permissions", []):
+            await websocket.close(code=1008)
+            return
         await state.events.connect(websocket)
         try:
             await websocket.send_json(
@@ -330,6 +417,8 @@ def create_app() -> FastAPI:
                     "source": SOURCE_MARK,
                 }
             )
+            for event in await state.events.history(conversation_filter, after_version):
+                await websocket.send_json(event)
             while True:
                 await websocket.receive_text()
         except WebSocketDisconnect:
@@ -338,8 +427,8 @@ def create_app() -> FastAPI:
             await state.events.disconnect(websocket)
 
     @app.get(f"{API_PREFIX}/assistant/events/history")
-    async def assistant_event_history(conversationId: str | None = None) -> dict[str, Any]:
-        return envelope({"events": await state.events.history(conversationId), "source": SOURCE_MARK})
+    async def assistant_event_history(conversationId: str | None = None, afterVersion: int = 0) -> dict[str, Any]:
+        return envelope({"events": await state.events.history(conversationId, afterVersion), "source": SOURCE_MARK})
 
     @app.get(f"{API_PREFIX}/assistant/conversations")
     async def list_conversations() -> dict[str, Any]:
@@ -348,7 +437,13 @@ def create_app() -> FastAPI:
 
     @app.post(f"{API_PREFIX}/assistant/conversations")
     async def create_conversation(request_body: dict[str, Any]) -> dict[str, Any]:
-        context = request_body.get("context") if isinstance(request_body.get("context"), dict) else {}
+        try:
+            context = sanitize_context_for_auth(
+                request_body.get("context") if isinstance(request_body.get("context"), dict) else {},
+                current_auth(),
+            )
+        except PermissionError as exc:
+            return error_envelope(str(exc), 403)
         conversation_id = new_id("conv")
         created_at = now_iso()
         title = build_conversation_title(context)
@@ -362,6 +457,7 @@ def create_app() -> FastAPI:
         }
         state.conversations[conversation_id] = conversation
         state.messages[conversation_id] = []
+        persist_state(state)
         await state.events.publish(
             {
                 "type": "ai.conversation.created",
@@ -391,6 +487,11 @@ def create_app() -> FastAPI:
 
     @get_conversation_or_404(app, state, "POST", f"{API_PREFIX}/assistant/conversations/{{conversation_id}}/messages")
     async def send_message(conversation_id: str, request_body: dict[str, Any]) -> dict[str, Any]:
+        if isinstance(request_body.get("context"), dict):
+            try:
+                request_body["context"] = sanitize_context_for_auth(request_body["context"], current_auth())
+            except PermissionError as exc:
+                return error_envelope(str(exc), 403)
         return await create_assistant_message(state, conversation_id, request_body, retry_of=None)
 
     @get_conversation_or_404(app, state, "POST", f"{API_PREFIX}/assistant/conversations/{{conversation_id}}/stop")
@@ -457,6 +558,7 @@ def create_app() -> FastAPI:
             "createdAt": now_iso(),
         }
         state.recognitions[recognition_id] = result
+        persist_state(state)
         return envelope(result)
 
     @app.get(f"{API_PREFIX}/decisions")
@@ -480,6 +582,7 @@ def create_app() -> FastAPI:
     async def evaluate_decision(request_body: dict[str, Any]) -> dict[str, Any]:
         decision = make_demo_decision(request_body)
         state.decisions[decision["decisionId"]] = decision
+        persist_state(state)
         await state.events.publish(
             {
                 "type": "ai.decision.evaluated",
@@ -496,9 +599,11 @@ def create_app() -> FastAPI:
             return envelope({"items": list(state.knowledge_submissions.values()), "source": SOURCE_MARK})
         upload = await parse_knowledge_upload_request(request)
         document = create_rag_document_record(upload["metadata"], body_size=upload["size"], file_info=upload)
+        document["submittedBy"] = current_auth().get("userId", document.get("submittedBy", ""))
         state.rag_documents[document["documentId"]] = document
         submission = document_to_submission(document)
         state.knowledge_submissions[submission["submissionId"]] = submission
+        persist_state(state)
         return envelope(submission)
 
     @app.get(f"{API_PREFIX}/knowledge/submissions/{{knowledge_id}}")
@@ -524,27 +629,34 @@ def create_app() -> FastAPI:
     async def review_action(knowledge_id: str, action: str, request_body: dict[str, Any] | None = None) -> dict[str, Any]:
         document = find_document_by_any_id(state, knowledge_id)
         if document is None:
-            document = create_rag_document_record({"documentId": knowledge_id, "title": "LOCAL DEMO review placeholder"}, body_size=0)
-            state.rag_documents[document["documentId"]] = document
+            return error_envelope("knowledge review not found", 404)
         status_by_action = {
-            "approve": ("INDEXED", "APPROVED"),
+            "approve": ("READY", "INDEXED"),
             "reject": ("REJECTED", "REJECTED"),
             "revoke": ("REVOKED", "REVOKED"),
         }
         if action not in status_by_action:
             return error_envelope("unsupported review action", 400)
+        reviewer_id = str(current_auth().get("userId", ""))
+        if action == "approve" and reviewer_id and reviewer_id == document.get("submittedBy"):
+            return error_envelope("submitter cannot approve own knowledge submission", 403)
         index_status, status = status_by_action[action]
         review_note = (request_body or {}).get("note") or (request_body or {}).get("comment") or "LOCAL DEMO review action"
         document["status"] = status
-        document["indexStatus"] = "READY" if index_status == "INDEXED" else index_status
+        document["indexStatus"] = index_status
         document["failureReason"] = "" if action == "approve" else review_note
         document["reviewNote"] = review_note
-        document["reviewedBy"] = (request_body or {}).get("reviewedBy", "LOCAL_DEMO_ADMIN")
+        document["reviewedBy"] = reviewer_id or (request_body or {}).get("reviewedBy", "LOCAL_DEMO_ADMIN")
         document["reviewedAt"] = now_iso()
-        document["chunkCount"] = max(int(document.get("chunkCount", 0)), 1 if action == "approve" else 0)
+        if action == "approve":
+            index_document_chunks(document, state.ai_config)
+        else:
+            document["chunkCount"] = 0
+            document["chunks"] = []
         document["updatedAt"] = now_iso()
         submission = document_to_submission(document)
         state.knowledge_submissions[submission["submissionId"]] = submission
+        persist_state(state)
         return envelope(submission)
 
     @app.api_route(f"{API_PREFIX}/ai-integration/facts", methods=["GET", "POST"])
@@ -556,20 +668,24 @@ def create_app() -> FastAPI:
         recognition_id = new_id("recog")
         item = {"recognitionId": recognition_id, "status": "ACCEPTED", "payload": request_body, "source": SOURCE_MARK, "createdAt": now_iso()}
         state.recognitions[recognition_id] = item
+        persist_state(state)
         return envelope(item)
 
     @app.post(f"{API_PREFIX}/ai-integration/command-intents")
     async def accept_command_intent(request_body: dict[str, Any]) -> dict[str, Any]:
         intent_id = new_id("intent")
+        backend_result = submit_command_intent_to_backend(request_body, current_auth())
         item = {
             "intentId": intent_id,
-            "status": "PENDING_BACKEND_GATE",
-            "safeGate": "LOCAL DEMO: no device state changed; production backend must validate RBAC/manual locks/version/range/interlocks.",
+            "status": backend_result["status"],
+            "safeGate": backend_result["safeGate"],
+            "backendResponse": backend_result.get("backendResponse"),
             "payload": request_body,
-            "source": SOURCE_MARK,
+            "source": backend_result["source"],
             "createdAt": now_iso(),
         }
         state.command_intents[intent_id] = item
+        persist_state(state)
         return envelope(item)
 
     @app.get(f"{API_PREFIX}/ai-integration/commands/{{command_id}}")
@@ -599,6 +715,142 @@ def get_conversation_or_404(app: FastAPI, state: AiCenterState, method: str, pat
         return wrapper
 
     return decorator
+
+
+def state_file_path() -> Path:
+    return DEFAULT_DATA_DIR / "state.json"
+
+
+def ensure_data_dir() -> None:
+    DEFAULT_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_state_bundle() -> dict[str, Any]:
+    path = state_file_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def persist_state(state: AiCenterState) -> None:
+    ensure_data_dir()
+    bundle = {
+        "schemaVersion": 1,
+        "updatedAt": now_iso(),
+        "source": SOURCE_MARK,
+        "aiConfig": state.ai_config,
+        "ragDocuments": state.rag_documents,
+        "conversations": state.conversations,
+        "messages": state.messages,
+        "decisions": state.decisions,
+        "recognitions": state.recognitions,
+        "commandIntents": state.command_intents,
+    }
+    path = state_file_path()
+    temp_path = path.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path.replace(path)
+
+
+def authenticate_request_headers(authorization: str, client_type: str) -> dict[str, Any]:
+    token = extract_bearer_token(authorization)
+    if not token:
+        return {"ok": False, "status": 401, "message": "missing Authorization bearer token"}
+    principal = load_principal_for_token(token)
+    if principal is None:
+        return {"ok": False, "status": 401, "message": "invalid Authorization token"}
+    source_app = client_type.strip().upper()
+    if not source_app:
+        source_app = principal["sourceApps"][0]
+    if source_app not in principal["sourceApps"]:
+        return {"ok": False, "status": 403, "message": "token is not allowed for requested X-Client-Type"}
+    result = deepcopy(principal)
+    result["ok"] = True
+    result["status"] = 200
+    result["token"] = token
+    result["sourceApp"] = source_app
+    return result
+
+
+def extract_bearer_token(value: str) -> str:
+    text = value.strip()
+    if not text:
+        return ""
+    if text.lower().startswith("bearer "):
+        return text[7:].strip()
+    return text
+
+
+def load_principal_for_token(token: str) -> dict[str, Any] | None:
+    configured = os.getenv("AI_CENTER_AUTH_TOKENS", "")
+    if configured.strip():
+        try:
+            parsed = json.loads(configured)
+            if isinstance(parsed, dict) and token in parsed and isinstance(parsed[token], dict):
+                return normalize_principal(parsed[token])
+        except Exception:
+            pass
+    if token in DEFAULT_AUTH_TOKENS:
+        return normalize_principal(DEFAULT_AUTH_TOKENS[token])
+    return None
+
+
+def normalize_principal(raw: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "userId": str(raw.get("userId") or "unknown"),
+        "displayName": str(raw.get("displayName") or raw.get("userId") or "unknown"),
+        "role": str(raw.get("role") or "VIEWER").upper(),
+        "sourceApps": normalize_scope_apps(raw.get("sourceApps") or raw.get("sourceApp") or []),
+        "permissions": [str(item).upper() for item in raw.get("permissions", []) if str(item).strip()],
+        "stageCodes": [str(item).upper() for item in raw.get("stageCodes", ["ALL"]) if str(item).strip()],
+    }
+
+
+def current_auth() -> dict[str, Any]:
+    auth = AUTH_CONTEXT.get()
+    return auth or normalize_principal(DEFAULT_AUTH_TOKENS["LOCAL_DEMO"])
+
+
+def is_authorized_for_path(auth: dict[str, Any], path: str, method: str) -> bool:
+    permissions = auth.get("permissions", [])
+    source_app = str(auth.get("sourceApp", "")).upper()
+    if path.startswith(ADMIN_PREFIXES):
+        return source_app == "ADMIN" and (
+            "AI_CONFIG_MANAGE" in permissions or "KNOWLEDGE_REVIEW" in permissions or "DECISION_READ" in permissions
+        )
+    if path.startswith(KNOWLEDGE_PREFIX):
+        if method.upper() == "POST":
+            return source_app == "ADMIN" and "KNOWLEDGE_SUBMIT" in permissions
+        return source_app == "ADMIN" and ("KNOWLEDGE_SUBMIT" in permissions or "KNOWLEDGE_REVIEW" in permissions)
+    if path.startswith(ASSISTANT_PREFIX):
+        return "ASSISTANT_READ" in permissions
+    if path.startswith(DECISION_PREFIX):
+        return "DECISION_READ" in permissions or source_app == "ADMIN"
+    if path.startswith(VISION_PREFIX):
+        return source_app == "ADMIN" or "AI_INTERNAL" in permissions
+    if path.startswith(AI_INTEGRATION_PREFIX):
+        return source_app == "ADMIN" or "AI_INTERNAL" in permissions or "ASSISTANT_READ" in permissions
+    return True
+
+
+def sanitize_context_for_auth(context: dict[str, Any], auth: dict[str, Any]) -> dict[str, Any]:
+    sanitized = deepcopy(context)
+    requested_source = str(sanitized.get("sourceApp", "")).upper()
+    source_app = str(auth.get("sourceApp", "")).upper()
+    if requested_source and requested_source != source_app:
+        raise PermissionError("context sourceApp does not match authenticated client")
+    sanitized["sourceApp"] = source_app
+    stage_code = str(sanitized.get("stageCode", "")).upper()
+    allowed_stages = auth.get("stageCodes", [])
+    if source_app == "WORKSTATION" and stage_code and "ALL" not in allowed_stages and stage_code not in allowed_stages:
+        raise PermissionError("workstation token cannot access requested stage")
+    sanitized["userRoleHint"] = auth.get("role", "")
+    sanitized["authenticatedUserId"] = auth.get("userId", "")
+    return sanitized
 
 
 def build_conversation_title(context: dict[str, Any]) -> str:
@@ -743,6 +995,7 @@ async def parse_knowledge_upload_request(request_obj: Request) -> dict[str, Any]
         "size": len(body),
         "fileName": metadata.get("fileName", "knowledge-inline.json"),
         "contentType": content_type or "application/json",
+        "rawText": metadata.get("content") or metadata.get("description") or body[:4000].decode("utf-8", errors="ignore"),
     }
 
 
@@ -757,6 +1010,7 @@ def parse_multipart_upload(body: bytes, content_type: str) -> dict[str, Any]:
     file_name = "knowledge-upload.bin"
     file_content_type = "application/octet-stream"
     file_size = 0
+    raw_text = ""
     for raw_part in body.split(delimiter):
         part = raw_part.strip(b"\r\n")
         if not part or part == b"--" or b"\r\n\r\n" not in part:
@@ -775,11 +1029,13 @@ def parse_multipart_upload(body: bytes, content_type: str) -> dict[str, Any]:
             file_size = len(payload)
             file_name = extract_multipart_filename(headers) or file_name
             file_content_type = extract_multipart_content_type(headers) or file_content_type
+            raw_text = payload[:12000].decode("utf-8", errors="ignore")
     return {
         "metadata": metadata,
         "size": file_size if file_size > 0 else len(body),
         "fileName": file_name,
         "contentType": file_content_type,
+        "rawText": raw_text or str(metadata.get("description", "")),
     }
 
 
@@ -823,8 +1079,10 @@ def create_rag_document_record(metadata: dict[str, Any], body_size: int, file_in
         "publishedAt": str(metadata.get("publishedAt") or ""),
         "description": str(metadata.get("description") or ""),
         "size": body_size,
-        "sha256": str(metadata.get("sha256") or "LOCAL_DEMO_NOT_HASHED"),
+        "sha256": str(metadata.get("sha256") or hash_document_text(str(metadata.get("content") or file_info.get("rawText") or metadata.get("description") or ""))),
         "chunkCount": 0,
+        "chunks": [],
+        "rawText": str(metadata.get("content") or file_info.get("rawText") or metadata.get("description") or ""),
         "failureReason": "",
         "reviewNote": "",
         "submittedBy": str(metadata.get("submittedBy") or "LOCAL_DEMO_ADMIN"),
@@ -880,6 +1138,94 @@ def normalize_tags(value: Any) -> list[str]:
         if text and text not in result:
             result.append(text)
     return result
+
+
+def hash_document_text(text: str) -> str:
+    if not text:
+        return "LOCAL_DEMO_EMPTY_SHA256"
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def index_document_chunks(document: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    if not config.get("knowledgeIndexEnabled", True):
+        document["indexStatus"] = "FAILED"
+        document["failureReason"] = "knowledgeIndexEnabled=false"
+        document["chunks"] = []
+        document["chunkCount"] = 0
+        return document
+    raw_text = str(document.get("rawText") or document.get("description") or document.get("title") or "")
+    if not raw_text.strip():
+        raw_text = (
+            f"{document.get('title', 'Untitled')} {document.get('description', '')} "
+            f"category={document.get('category', 'UNCLASSIFIED')} tags={','.join(normalize_tags(document.get('tags')))}"
+        )
+    chunks = split_document_chunks(raw_text, int(config.get("chunkSize", 800)), int(config.get("chunkOverlap", 120)))
+    indexed_chunks: list[dict[str, Any]] = []
+    for index, chunk in enumerate(chunks):
+        indexed_chunks.append(
+            {
+                "chunkId": f"{document.get('documentId', 'doc')}-chunk-{index + 1}",
+                "ordinal": index + 1,
+                "text": chunk,
+                "lexicalTokens": lexical_tokens(chunk),
+                "source": "LOCAL_DEMO_LEXICAL_VECTOR_ADAPTER",
+            }
+        )
+    document["chunks"] = indexed_chunks
+    document["chunkCount"] = len(indexed_chunks)
+    document["status"] = "INDEXED"
+    document["indexStatus"] = "READY"
+    document["failureReason"] = ""
+    document["indexedAt"] = now_iso()
+    document["updatedAt"] = document["indexedAt"]
+    document["source"] = SOURCE_MARK
+    document["note"] = "LOCAL_DEMO: indexed by local lexical chunk adapter; replace vectorStoreType for production embeddings."
+    return document
+
+
+def split_document_chunks(text: str, chunk_size: int, overlap: int) -> list[str]:
+    normalized = " ".join(text.replace("\r", "\n").split())
+    if not normalized:
+        return []
+    size = max(100, chunk_size)
+    step = max(1, size - max(0, min(overlap, size - 1)))
+    result: list[str] = []
+    index = 0
+    while index < len(normalized):
+        result.append(normalized[index : index + size])
+        index += step
+    return result
+
+
+def lexical_tokens(text: str) -> list[str]:
+    cleaned = "".join(char.lower() if char.isalnum() else " " for char in text)
+    tokens: list[str] = []
+    for token in cleaned.split():
+        if len(token) >= 2 and token not in tokens:
+            tokens.append(token)
+    return tokens[:80]
+
+
+def search_rag_documents(state: AiCenterState, question: str, context: dict[str, Any]) -> list[dict[str, Any]]:
+    source_app = str(context.get("sourceApp", "ALL"))
+    query_tokens = lexical_tokens(question + " " + str(context.get("stageCode", "")) + " " + str(context.get("deviceCode", "")))
+    scored: list[dict[str, Any]] = []
+    for document in state.rag_documents.values():
+        if document.get("status") != "INDEXED" or document.get("indexStatus") != "READY":
+            continue
+        if not document_visible_to_app(document, source_app):
+            continue
+        best_score = 0
+        best_excerpt = ""
+        for chunk in document.get("chunks", []):
+            chunk_tokens = chunk.get("lexicalTokens", []) if isinstance(chunk, dict) else []
+            score = len([token for token in query_tokens if token in chunk_tokens])
+            if score >= best_score:
+                best_score = score
+                best_excerpt = str(chunk.get("text", "")) if isinstance(chunk, dict) else ""
+        scored.append({"document": document, "score": best_score, "excerpt": best_excerpt})
+    scored.sort(key=lambda item: int(item.get("score", 0)), reverse=True)
+    return scored[: int(state.ai_config.get("ragTopK", 5))]
 
 
 def document_visible_to_app(document: dict[str, Any], source_app: str) -> bool:
@@ -1191,6 +1537,10 @@ async def create_assistant_message(
             "conversationId": conversation_id,
             "messageId": assistant_message_id,
             "status": "STREAMING",
+            "dataGeneratedAt": assistant_message["dataGeneratedAt"],
+            "stateVersion": assistant_message["stateVersion"],
+            "knowledgeVersion": assistant_message["knowledgeVersion"],
+            "citations": assistant_message["citations"],
         }
     )
     try:
@@ -1213,8 +1563,13 @@ async def create_assistant_message(
                 "status": "FAILED",
                 "code": "AI_PROVIDER_TIMEOUT",
                 "content": assistant_message["content"],
+                "dataGeneratedAt": assistant_message["dataGeneratedAt"],
+                "stateVersion": assistant_message["stateVersion"],
+                "knowledgeVersion": assistant_message["knowledgeVersion"],
+                "citations": assistant_message["citations"],
             }
         )
+        persist_state(state)
         return envelope(to_message_result(assistant_message), message="AI provider timeout", code=1)
     content_parts: list[str] = []
     delay = 0.08 if "slow" in question.lower() or "慢" in question else 0.02
@@ -1230,9 +1585,14 @@ async def create_assistant_message(
                     "messageId": assistant_message_id,
                     "status": "STOPPED",
                     "content": assistant_message["content"],
+                    "dataGeneratedAt": assistant_message["dataGeneratedAt"],
+                    "stateVersion": assistant_message["stateVersion"],
+                    "knowledgeVersion": assistant_message["knowledgeVersion"],
+                    "citations": assistant_message["citations"],
                 }
             )
             state.active_messages.pop(assistant_message_id, None)
+            persist_state(state)
             return envelope(to_message_result(assistant_message))
         content_parts.append(chunk)
         assistant_message["content"] = "".join(content_parts)
@@ -1259,8 +1619,11 @@ async def create_assistant_message(
             "content": assistant_message["content"],
             "dataGeneratedAt": assistant_message["dataGeneratedAt"],
             "stateVersion": assistant_message["stateVersion"],
+            "knowledgeVersion": assistant_message["knowledgeVersion"],
+            "citations": assistant_message["citations"],
         }
     )
+    persist_state(state)
     return envelope(to_message_result(assistant_message))
 
 
@@ -1282,8 +1645,14 @@ async def stop_active_message(state: AiCenterState, conversation_id: str, messag
                     "conversationId": conversation_id,
                     "messageId": message_id,
                     "status": "STOPPED",
+                    "content": message["content"],
+                    "dataGeneratedAt": message.get("dataGeneratedAt"),
+                    "stateVersion": message.get("stateVersion"),
+                    "knowledgeVersion": message.get("knowledgeVersion"),
+                    "citations": message.get("citations", []),
                 }
             )
+            persist_state(state)
             return True
     return len(targets) > 0
 
@@ -1389,26 +1758,21 @@ def looks_like_control_request(question: str) -> bool:
 
 def make_citations(state: AiCenterState, context: dict[str, Any]) -> list[dict[str, Any]]:
     stage = context.get("stageCode", "GENERAL")
-    source_app = str(context.get("sourceApp", "ALL"))
-    documents = [
-        item for item in state.rag_documents.values()
-        if item.get("indexStatus") == "READY" and document_visible_to_app(item, source_app)
-    ]
-    if not documents:
-        documents = list(state.rag_documents.values())[:1]
+    documents = search_rag_documents(state, str(context.get("selection", "")), context)
     return [
         {
-            "citationId": "sim-cite-" + str(document.get("documentId", "unknown")),
-            "title": str(document.get("title", "LOCAL DEMO knowledge document")),
-            "source": str(document.get("source", SOURCE_MARK)),
-            "version": str(document.get("version", KNOWLEDGE_VERSION)),
+            "citationId": "sim-cite-" + str(item["document"].get("documentId", "unknown")),
+            "title": str(item["document"].get("title", "LOCAL DEMO knowledge document")),
+            "source": str(item["document"].get("source", SOURCE_MARK)),
+            "version": str(item["document"].get("version", KNOWLEDGE_VERSION)),
             "excerpt": (
-                "LOCAL DEMO scoped RAG document. "
-                f"category={document.get('category', 'UNCLASSIFIED')}, scopeApps={','.join(normalize_scope_apps(document.get('scopeApps')))}."
+                (str(item.get("excerpt", ""))[:220] or "LOCAL DEMO indexed RAG chunk. ") +
+                f" category={item['document'].get('category', 'UNCLASSIFIED')}, " +
+                f"scopeApps={','.join(normalize_scope_apps(item['document'].get('scopeApps')))}."
             ),
-            "entity": {"entityType": "KNOWLEDGE_DOCUMENT", "entityId": document.get("documentId", ""), "stageCode": stage},
+            "entity": {"entityType": "KNOWLEDGE_DOCUMENT", "entityId": item["document"].get("documentId", ""), "stageCode": stage},
         }
-        for document in documents[:3]
+        for item in documents[:3]
     ]
 
 
@@ -1420,16 +1784,51 @@ def fetch_backend_facts(context: dict[str, Any]) -> dict[str, Any]:
         "source": "AI_CENTER_READ_ONLY_TOOL",
     }
     try:
-        req = request.Request(
-            f"{backend_base}/ai-integration/facts",
-            data=json.dumps(payload).encode("utf-8"),
-            method="POST",
-            headers={"Content-Type": "application/json;charset=UTF-8"},
-        )
+        req = build_backend_request(f"{backend_base}/ai-integration/facts", payload, context)
         with request.urlopen(req, timeout=0.7) as response:
+            parsed = json.loads(response.read().decode("utf-8"))
+            data = parsed.get("data") if isinstance(parsed, dict) and isinstance(parsed.get("data"), dict) else parsed
+            if isinstance(data, dict):
+                data["source"] = f"PRODUCTION_BACKEND {backend_base}"
+                data.setdefault("status", response.status)
+                data.setdefault("stateVersion", context.get("stateVersion"))
+                return data
             return {"source": f"PRODUCTION_BACKEND {backend_base}", "status": response.status, "stateVersion": context.get("stateVersion")}
     except (error.URLError, TimeoutError, OSError):
-        return make_local_facts(context)
+        fallback = make_local_facts(context)
+        fallback["source"] = "LOCAL_DEMO_FALLBACK: production backend facts unavailable"
+        return fallback
+
+
+def submit_command_intent_to_backend(payload: dict[str, Any], auth: dict[str, Any]) -> dict[str, Any]:
+    backend_base = os.getenv("PRODUCTION_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/")
+    try:
+        req = build_backend_request(f"{backend_base}/ai-integration/command-intents", payload, auth)
+        with request.urlopen(req, timeout=2.5) as response:
+            parsed = json.loads(response.read().decode("utf-8"))
+            return {
+                "status": "PENDING_BACKEND_GATE",
+                "safeGate": "PRODUCTION_BACKEND_ACCEPTED: waiting for backend safety validation and edge ACK.",
+                "backendResponse": parsed,
+                "source": f"PRODUCTION_BACKEND {backend_base}",
+            }
+    except (error.URLError, TimeoutError, OSError) as exc:
+        return {
+            "status": "LOCAL_DEMO_BACKEND_UNAVAILABLE",
+            "safeGate": "LOCAL_DEMO_FALLBACK: production backend was not reachable; no command was created or executed.",
+            "backendResponse": {"error": str(exc)[:240]},
+            "source": SOURCE_MARK,
+        }
+
+
+def build_backend_request(url: str, payload: dict[str, Any], subject: dict[str, Any]) -> request.Request:
+    headers = {
+        "Content-Type": "application/json;charset=UTF-8",
+        "X-AI-Service-Token": os.getenv("PRODUCTION_BACKEND_SERVICE_TOKEN", "LOCAL_DEMO_AI_SERVICE"),
+        "X-Subject-User": str(subject.get("authenticatedUserId") or subject.get("userId") or "unknown"),
+        "X-Client-Type": str(subject.get("sourceApp") or "AI_CENTER"),
+    }
+    return request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST", headers=headers)
 
 
 def make_local_facts(context: dict[str, Any] | None = None) -> dict[str, Any]:
