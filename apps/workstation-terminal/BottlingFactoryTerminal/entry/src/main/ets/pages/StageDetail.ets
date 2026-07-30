@@ -154,7 +154,7 @@ struct StageDetail {
   @State selectedDeviceCode: string = ''
   @State selectedTraceCode: string = ''
   @State planarEnabled: boolean = true
-  @State threeEnabled: boolean = true
+  @State threeEnabled: boolean = false
   @State statusColorsEnabled: boolean = true
   @State layoutEditEnabled: boolean = false
   @State paused: boolean = false
@@ -1110,10 +1110,10 @@ struct StageDetail {
       SectionTitle({ code: '01 REALTIME SCENE', title: '实时作业画面', description: '2D 平面工艺图与 3D 立体场景均由 HAP 本地 ArkWeb Three.js 加载，并共享同一份实时快照。' })
       Scroll() {
         Row({ space: 8 }) {
-          this.visualToggle('2D 平面图', this.planarEnabled, 'PLANAR')
-          this.visualToggle('3D 立体图', this.threeEnabled, 'THREE')
-          this.visualToggle('状态着色', this.statusColorsEnabled, 'COLORS')
-          this.visualToggle('布局拖拽', this.layoutEditEnabled, 'LAYOUT')
+          this.visualToggle('2D 平面图', 'PLANAR')
+          this.visualToggle('3D 立体图', 'THREE')
+          this.visualToggle('状态着色', 'COLORS')
+          this.visualToggle('布局拖拽', 'LAYOUT')
           Button(this.paused ? '恢复实时' : '暂停画面')
             .type(ButtonType.Normal)
             .fontSize(10)
@@ -1640,13 +1640,13 @@ struct StageDetail {
   }
 
   @Builder
-  visualToggle(label: string, enabled: boolean, key: string) {
-    Button((enabled ? 'ON  ' : 'OFF  ') + label)
+  visualToggle(label: string, key: string) {
+    Button((this.visualToggleEnabled(key) ? 'ON  ' : 'OFF  ') + label)
       .type(ButtonType.Normal)
       .fontSize(10)
-      .fontColor(enabled ? '#FFFFFF' : Theme.muted)
-      .backgroundColor(enabled ? Theme.blue : '#E7F0F5')
-      .border({ width: 1, color: enabled ? Theme.blue : Theme.line })
+      .fontColor(this.visualToggleEnabled(key) ? '#FFFFFF' : Theme.muted)
+      .backgroundColor(this.visualToggleEnabled(key) ? Theme.blue : '#E7F0F5')
+      .border({ width: 1, color: this.visualToggleEnabled(key) ? Theme.blue : Theme.line })
       .borderRadius(2)
       .onClick(() => {
         if (key === 'PLANAR') this.planarEnabled = !this.planarEnabled
@@ -1654,6 +1654,14 @@ struct StageDetail {
         if (key === 'COLORS') this.statusColorsEnabled = !this.statusColorsEnabled
         if (key === 'LAYOUT') this.layoutEditEnabled = !this.layoutEditEnabled
       })
+  }
+
+  private visualToggleEnabled(key: string): boolean {
+    if (key === 'PLANAR') return this.planarEnabled
+    if (key === 'THREE') return this.threeEnabled
+    if (key === 'COLORS') return this.statusColorsEnabled
+    if (key === 'LAYOUT') return this.layoutEditEnabled
+    return false
   }
 
   @Builder
