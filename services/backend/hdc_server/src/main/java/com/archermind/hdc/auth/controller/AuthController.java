@@ -4,6 +4,7 @@ import com.archermind.hdc.api.result.Result;
 import com.archermind.hdc.auth.model.AdminUser;
 import com.archermind.hdc.auth.service.AuthService;
 import lombok.Data;
+import org.springframework.dao.DataAccessException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -73,8 +74,15 @@ public class AuthController {
     }
 
     private <T> Result<T> call(Action<T> action) {
-        try { return Result.success(action.run()); }
-        catch (RuntimeException exception) { return Result.message(exception.getMessage()); }
+        try {
+            return Result.success(action.run());
+        } catch (AuthService.AuthFailureException exception) {
+            return Result.error(exception.getCode(), exception.getMessage());
+        } catch (DataAccessException exception) {
+            return Result.error(4104, "数据库不可用，请检查后端数据源配置和数据库连接");
+        } catch (RuntimeException exception) {
+            return Result.message(exception.getMessage());
+        }
     }
 
     private interface Action<T> { T run(); }
