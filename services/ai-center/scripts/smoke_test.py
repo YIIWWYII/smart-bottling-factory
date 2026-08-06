@@ -19,7 +19,7 @@ from urllib.error import HTTPError
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_PYTHON_PACKAGES = Path(r"D:\HarmonyOS-Dev\python-packages")
 HOST = "127.0.0.1"
-PORT = int(os.getenv("AI_CENTER_SMOKE_PORT", "8091"))
+PORT = int(os.getenv("AI_CENTER_SMOKE_PORT", "18091"))
 BASE = f"http://{HOST}:{PORT}/api"
 FAKE_BACKEND_PORT = int(os.getenv("AI_CENTER_FAKE_BACKEND_PORT", "18088"))
 SMOKE_DATA_DIR = Path(r"D:\HarmonyOS-Dev\Temp\ai-center-smoke-data")
@@ -135,9 +135,51 @@ class WebSocketClient:
 class FakeBackendState:
     facts_calls: int = 0
     command_calls: int = 0
+    command_status_calls: int = 0
+    last_facts_subject_auth: str = ""
+    last_command_subject_auth: str = ""
+    last_command_status_subject_auth: str = ""
 
 
 class FakeBackendHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        if self.path.startswith("/api/ai-integration/facts"):
+            FakeBackendState.facts_calls += 1
+            FakeBackendState.last_facts_subject_auth = self.headers.get("X-Subject-Authorization", "")
+            self.write_json(
+                {
+                    "code": 0,
+                    "message": "OK",
+                    "success": True,
+                    "data": {
+                        "source": "FAKE_PRODUCTION_BACKEND",
+                        "stateVersion": 99001,
+                        "dataGeneratedAt": "2026-07-30T00:00:00Z",
+                    },
+                }
+            )
+            return
+        if self.path.startswith("/api/ai-integration/commands/"):
+            FakeBackendState.command_status_calls += 1
+            FakeBackendState.last_command_status_subject_auth = self.headers.get("X-Subject-Authorization", "")
+            command_id = self.path.rsplit("/", 1)[-1]
+            self.write_json(
+                {
+                    "code": 0,
+                    "message": "OK",
+                    "success": True,
+                    "data": {
+                        "commandId": command_id,
+                        "status": "ACKNOWLEDGED",
+                        "edgeAck": {"commandId": command_id, "status": "ACKNOWLEDGED"},
+                        "source": "FAKE_PRODUCTION_BACKEND",
+                    },
+                }
+            )
+            return
+        self.send_response(404)
+        self.end_headers()
+
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
@@ -145,8 +187,38 @@ class FakeBackendHandler(BaseHTTPRequestHandler):
             payload = json.loads(body)
         except Exception:
             payload = {}
+        if self.path == "/api/ai-integration/command-intents":
+            FakeBackendState.command_calls += 1
+            FakeBackendState.last_command_subject_auth = self.headers.get("X-Subject-Authorization", "")
+            if payload.get("forceReject"):
+                self.write_json(
+                    {
+                        "code": 4001,
+                        "message": "REJECTED",
+                        "success": False,
+                        "data": {
+                            "status": "REJECTED",
+                            "reason": "SIMULATION backend business rule rejected intent",
+                        },
+                    }
+                )
+                return
+            self.write_json(
+                {
+                    "code": 0,
+                    "message": "ACCEPTED",
+                    "success": True,
+                    "data": {
+                        "commandId": "cmd-smoke-001",
+                        "status": "PENDING",
+                        "source": "FAKE_PRODUCTION_BACKEND",
+                    },
+                }
+            )
+            return
         if self.path == "/api/ai-integration/facts":
             FakeBackendState.facts_calls += 1
+            FakeBackendState.last_facts_subject_auth = self.headers.get("X-Subject-Authorization", "")
             self.write_json(
                 {
                     "code": 0,
@@ -157,21 +229,6 @@ class FakeBackendHandler(BaseHTTPRequestHandler):
                         "stateVersion": 99001,
                         "dataGeneratedAt": "2026-07-30T00:00:00Z",
                         "payloadEcho": payload,
-                    },
-                }
-            )
-            return
-        if self.path == "/api/ai-integration/command-intents":
-            FakeBackendState.command_calls += 1
-            self.write_json(
-                {
-                    "code": 0,
-                    "message": "ACCEPTED",
-                    "success": True,
-                    "data": {
-                        "commandId": "cmd-smoke-001",
-                        "status": "PENDING",
-                        "source": "FAKE_PRODUCTION_BACKEND",
                     },
                 }
             )
@@ -334,20 +391,6 @@ def main() -> None:
             raise AssertionError(f"approval/indexing failed: {approved}")
         print("rag upload/classification/review OK")
 
-        self_review = http_json(
-            "POST",
-            "/knowledge/submissions",
-            {
-                "title": "Self review block",
-                "content": "self review should be blocked",
-                "submittedBy": "local-admin",
-            },
-        )
-        self_review_id = assert_envelope(self_review, "self review upload")["reviewId"]
-        expect_http_error("POST", f"/admin/knowledge/reviews/{self_review_id}/approve", 403, token="LOCAL_DEMO", client_type="ADMIN")
-        expect_http_error("POST", "/admin/knowledge/reviews/not-exists/approve", 404, token="REVIEW_DEMO", client_type="ADMIN")
-        print("knowledge negative review rules OK")
-
         context = {
             "contextVersion": 1,
             "sourceApp": "DISPLAY",
@@ -367,7 +410,51 @@ def main() -> None:
                 "fields": [{"code": "status", "label": "状态", "displayValue": "RUNNING"}],
             },
         }
-        conversation = assert_envelope(http_json("POST", "/assistant/conversations", {"context": context}, client_type="DISPLAY"), "create")
+        display_conv = assert_envelope(
+            http_json("POST", "/assistant/conversations", {"context": context}, client_type="DISPLAY"),
+            "display create",
+        )
+        workstation_context = dict(context)
+        workstation_context["sourceApp"] = "WORKSTATION"
+        workstation_context["stageCode"] = "FILLING"
+        workstation_conv = assert_envelope(
+            http_json("POST", "/assistant/conversations", {"context": workstation_context}, client_type="WORKSTATION", token="WORKSTATION_DEMO"),
+            "workstation create",
+        )
+        display_items = assert_envelope(http_json("GET", "/assistant/conversations", client_type="DISPLAY"), "display list")
+        if any(item["conversationId"] == workstation_conv["conversationId"] for item in display_items["items"]):
+            raise AssertionError(f"display list leaked workstation conversation: {display_items}")
+        expect_http_error(
+            "GET",
+            f"/assistant/conversations/{workstation_conv['conversationId']}/messages",
+            403,
+            token="DISPLAY_DEMO",
+            client_type="DISPLAY",
+        )
+        expect_http_error(
+            "GET",
+            f"/assistant/conversations/{display_conv['conversationId']}/messages",
+            403,
+            token="WORKSTATION_DEMO",
+            client_type="WORKSTATION",
+        )
+        print("conversation ownership/stage authorization OK")
+
+        self_review = http_json(
+            "POST",
+            "/knowledge/submissions",
+            {
+                "title": "Self review block",
+                "content": "self review should be blocked",
+                "submittedBy": "local-admin",
+            },
+        )
+        self_review_id = assert_envelope(self_review, "self review upload")["reviewId"]
+        expect_http_error("POST", f"/admin/knowledge/reviews/{self_review_id}/approve", 403, token="LOCAL_DEMO", client_type="ADMIN")
+        expect_http_error("POST", "/admin/knowledge/reviews/not-exists/approve", 404, token="REVIEW_DEMO", client_type="ADMIN")
+        print("knowledge negative review rules OK")
+
+        conversation = display_conv
         conversation_id = conversation["conversationId"]
         print(f"conversation OK {conversation_id}")
 
@@ -380,17 +467,20 @@ def main() -> None:
         send_result_holder: dict[str, dict] = {}
 
         def send_slow() -> None:
-            send_result_holder["result"] = http_json(
-                "POST",
-                f"/assistant/conversations/{conversation_id}/messages",
-                {
-                    "question": "slow 当前灌装设备状态怎么样，是否可以把流量改为 120？",
-                    "questionType": "SELECTION",
-                    "context": context,
-                },
-                timeout=20.0,
-                client_type="DISPLAY",
-            )
+            try:
+                send_result_holder["result"] = http_json(
+                    "POST",
+                    f"/assistant/conversations/{conversation_id}/messages",
+                    {
+                        "question": "slow 当前灌装设备状态怎么样，是否可以把流量改为 120？",
+                        "questionType": "SELECTION",
+                        "context": context,
+                    },
+                    timeout=20.0,
+                    client_type="DISPLAY",
+                )
+            except Exception as exc:
+                send_result_holder["error"] = exc
 
         sender = threading.Thread(target=send_slow)
         sender.start()
@@ -413,7 +503,7 @@ def main() -> None:
 
         message_id = started["messageId"]
         stop = assert_envelope(
-            http_json("POST", f"/assistant/conversations/{conversation_id}/messages/{message_id}/stop"),
+            http_json("POST", f"/assistant/conversations/{conversation_id}/messages/{message_id}/stop", client_type="DISPLAY"),
             "stop",
         )
         if not stop["stopped"]:
@@ -425,30 +515,63 @@ def main() -> None:
         print("stop OK")
 
         retry = assert_envelope(
-            http_json("POST", f"/assistant/conversations/{conversation_id}/messages/{message_id}/retry", timeout=20.0),
+            http_json("POST", f"/assistant/conversations/{conversation_id}/messages/{message_id}/retry", timeout=20.0, client_type="DISPLAY"),
             "retry",
         )
         if "LOCAL DEMO" not in retry["content"]:
             raise AssertionError(f"retry missing source mark: {retry}")
         print("retry OK")
 
-        history = assert_envelope(http_json("GET", f"/assistant/conversations/{conversation_id}/messages"), "history")
+        history = assert_envelope(http_json("GET", f"/assistant/conversations/{conversation_id}/messages", client_type="DISPLAY"), "history")
         assistant_messages = [item for item in history["messages"] if item["role"] == "ASSISTANT"]
         if not assistant_messages or not any(item["status"] in ("STOPPED", "COMPLETED") for item in assistant_messages):
             raise AssertionError(f"HTTP compensation history invalid: {history}")
+        if "Bearer LOCAL_DEMO" not in FakeBackendState.last_facts_subject_auth:
+            raise AssertionError(f"assistant facts call did not forward current subject token: {FakeBackendState.last_facts_subject_auth}")
         print("http compensation OK")
 
+        expect_http_error("POST", "/ai-integration/facts", 403, token="DISPLAY_DEMO", client_type="DISPLAY")
         facts = assert_envelope(
-            http_json("POST", "/ai-integration/facts", {"context": context}, client_type="ADMIN"),
+            http_json("POST", "/ai-integration/facts", {"context": context}, client_type="AI_CENTER", token="AI_SERVICE_DEMO"),
             "facts",
         )
         command_intent = assert_envelope(
-            http_json("POST", "/ai-integration/command-intents", {"deviceCode": "FILLER-01", "parameterCode": "flow_rate"}),
+            http_json(
+                "POST",
+                "/ai-integration/command-intents",
+                {"deviceCode": "FILLER-01", "parameterCode": "flow_rate"},
+                client_type="AI_CENTER",
+                token="AI_SERVICE_DEMO",
+            ),
             "command intent",
         )
         if "PRODUCTION_BACKEND" not in command_intent["source"] or FakeBackendState.facts_calls < 1 or FakeBackendState.command_calls < 1:
             raise AssertionError(f"backend tool calls were not closed: facts={facts}, intent={command_intent}")
+        if command_intent["status"] != "PENDING":
+            raise AssertionError(f"accepted command intent should preserve backend pending status: {command_intent}")
+        if "Bearer AI_SERVICE_DEMO" not in FakeBackendState.last_command_subject_auth:
+            raise AssertionError(f"subject authorization header missing for command intent: {FakeBackendState.last_command_subject_auth}")
+        command_status = assert_envelope(
+            http_json("GET", f"/ai-integration/commands/{command_intent['commandIds'][0]}", client_type="AI_CENTER", token="AI_SERVICE_DEMO"),
+            "command status",
+        )
+        if command_status["status"] != "ACKNOWLEDGED" or FakeBackendState.command_status_calls < 1:
+            raise AssertionError(f"command status did not query backend ACK: {command_status}")
+        reject_intent = assert_envelope(
+            http_json(
+                "POST",
+                "/ai-integration/command-intents",
+                {"deviceCode": "FILLER-01", "parameterCode": "flow_rate", "forceReject": True},
+                client_type="AI_CENTER",
+                token="AI_SERVICE_DEMO",
+            ),
+            "command intent reject",
+        )
+        if reject_intent["status"] != "BACKEND_BUSINESS_FAILED":
+            raise AssertionError(f"business failure should not become pending: {reject_intent}")
         print("production backend facts/command-intent calls OK")
+
+        ws.close()
 
         revoked = assert_envelope(
             http_json(
@@ -462,14 +585,11 @@ def main() -> None:
         )
         if revoked["status"] != "REVOKED":
             raise AssertionError(f"revoke failed: {revoked}")
-        post_revoke_context = dict(context)
-        post_revoke_context["sourceApp"] = "DISPLAY"
-        post_revoke_conv = assert_envelope(http_json("POST", "/assistant/conversations", {"context": post_revoke_context}, client_type="DISPLAY"), "post revoke create")
         post_revoke_answer = assert_envelope(
             http_json(
                 "POST",
-                f"/assistant/conversations/{post_revoke_conv['conversationId']}/messages",
-                {"question": "operator filling guide", "questionType": "FREE_TEXT", "context": post_revoke_context},
+                f"/assistant/conversations/{conversation_id}/messages",
+                {"question": "operator filling guide", "questionType": "FREE_TEXT", "context": context},
                 timeout=20.0,
                 client_type="DISPLAY",
             ),
@@ -478,8 +598,6 @@ def main() -> None:
         if any(item["entity"]["entityId"] == uploaded["documentId"] for item in post_revoke_answer["citations"]):
             raise AssertionError(f"revoked document was still cited: {post_revoke_answer}")
         print("revoke excludes RAG citation OK")
-
-        ws.close()
 
         process.terminate()
         process.communicate(timeout=5)

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 from typing import Any
-from urllib import error, request
+from urllib import error, parse, request
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +44,14 @@ DEFAULT_AI_CONFIG = {
     "knowledgeIndexEnabled": True,
 }
 DEFAULT_AUTH_TOKENS = {
+    "AI_SERVICE_DEMO": {
+        "userId": "ai-service-demo",
+        "displayName": "LOCAL DEMO AI Service",
+        "role": "SERVICE",
+        "sourceApps": ["AI_CENTER"],
+        "permissions": ["AI_INTERNAL", "DECISION_READ"],
+        "stageCodes": ["ALL"],
+    },
     "LOCAL_DEMO": {
         "userId": "local-admin",
         "displayName": "LOCAL DEMO Admin",
@@ -160,20 +168,21 @@ def context_state_version(context: dict[str, Any]) -> int | None:
 
 
 class EventHub:
-    def __init__(self) -> None:
-        self._clients: set[WebSocket] = set()
+    def __init__(self, conversations: dict[str, dict[str, Any]]) -> None:
+        self._clients: dict[WebSocket, dict[str, Any]] = {}
+        self._conversations = conversations
         self._lock = asyncio.Lock()
         self._history: list[dict[str, Any]] = []
         self._aggregate_versions: dict[str, int] = {}
 
-    async def connect(self, websocket: WebSocket) -> None:
+    async def connect(self, websocket: WebSocket, auth: dict[str, Any], conversation_id: str | None) -> None:
         await websocket.accept()
         async with self._lock:
-            self._clients.add(websocket)
+            self._clients[websocket] = {"auth": auth, "conversationId": conversation_id}
 
     async def disconnect(self, websocket: WebSocket) -> None:
         async with self._lock:
-            self._clients.discard(websocket)
+            self._clients.pop(websocket, None)
 
     async def publish(self, event: dict[str, Any]) -> None:
         event.setdefault("eventId", new_id("evt"))
@@ -192,9 +201,14 @@ class EventHub:
             self._history.append(deepcopy(event))
             if len(self._history) > 500:
                 self._history = self._history[-500:]
-            clients = list(self._clients)
+            clients = list(self._clients.items())
         stale: list[WebSocket] = []
-        for client in clients:
+        for client, subscription in clients:
+            conversation_filter = subscription.get("conversationId")
+            if conversation_filter and event.get("conversationId") != conversation_filter:
+                continue
+            if not event_visible_to_auth(event, subscription.get("auth", {}), self._conversations):
+                continue
             try:
                 await client.send_json(event)
             except Exception:
@@ -202,13 +216,25 @@ class EventHub:
         if stale:
             async with self._lock:
                 for client in stale:
-                    self._clients.discard(client)
+                    self._clients.pop(client, None)
 
-    async def history(self, conversation_id: str | None = None, after_version: int = 0) -> list[dict[str, Any]]:
+    async def history(
+        self,
+        conversation_id: str | None = None,
+        after_version: int = 0,
+        auth: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         async with self._lock:
             events = deepcopy(self._history)
         if conversation_id is None:
-            return [event for event in events if int(event.get("aggregateVersion", 0) or 0) > after_version]
+            result = [event for event in events if int(event.get("aggregateVersion", 0) or 0) > after_version]
+            if auth is not None:
+                result = [event for event in result if event_visible_to_auth(event, auth, self._conversations)]
+            return result
+        if auth is not None:
+            conversation = self._conversations.get(conversation_id)
+            if conversation is None or not can_access_conversation(conversation, auth):
+                return []
         return [
             event for event in events
             if event.get("conversationId") == conversation_id and int(event.get("aggregateVersion", 0) or 0) > after_version
@@ -232,7 +258,7 @@ class AiCenterState:
         self.recognitions: dict[str, dict[str, Any]] = bundle.get("recognitions", {})
         self.command_intents: dict[str, dict[str, Any]] = bundle.get("commandIntents", {})
         self.ai_config: dict[str, Any] = bundle.get("aiConfig", load_ai_config_from_env())
-        self.events = EventHub()
+        self.events = EventHub(self.conversations)
 
 
 def create_app() -> FastAPI:
@@ -406,7 +432,12 @@ def create_app() -> FastAPI:
         if not auth["ok"] or "ASSISTANT_READ" not in auth.get("permissions", []):
             await websocket.close(code=1008)
             return
-        await state.events.connect(websocket)
+        if conversation_filter is not None:
+            conversation = state.conversations.get(conversation_filter)
+            if conversation is None or not can_access_conversation(conversation, auth):
+                await websocket.close(code=1008)
+                return
+        await state.events.connect(websocket, auth, conversation_filter)
         try:
             await websocket.send_json(
                 {
@@ -417,7 +448,7 @@ def create_app() -> FastAPI:
                     "source": SOURCE_MARK,
                 }
             )
-            for event in await state.events.history(conversation_filter, after_version):
+            for event in await state.events.history(conversation_filter, after_version, auth):
                 await websocket.send_json(event)
             while True:
                 await websocket.receive_text()
@@ -428,11 +459,14 @@ def create_app() -> FastAPI:
 
     @app.get(f"{API_PREFIX}/assistant/events/history")
     async def assistant_event_history(conversationId: str | None = None, afterVersion: int = 0) -> dict[str, Any]:
-        return envelope({"events": await state.events.history(conversationId, afterVersion), "source": SOURCE_MARK})
+        auth = current_auth()
+        return envelope({"events": await state.events.history(conversationId, afterVersion, auth), "source": SOURCE_MARK})
 
     @app.get(f"{API_PREFIX}/assistant/conversations")
     async def list_conversations() -> dict[str, Any]:
-        items = sorted(state.conversations.values(), key=lambda item: item["createdAt"], reverse=True)
+        auth = current_auth()
+        items = [item for item in state.conversations.values() if can_access_conversation(item, auth)]
+        items = sorted(items, key=lambda item: item["createdAt"], reverse=True)
         return envelope({"items": items, "source": SOURCE_MARK})
 
     @app.post(f"{API_PREFIX}/assistant/conversations")
@@ -453,6 +487,9 @@ def create_app() -> FastAPI:
             "createdAt": created_at,
             "updatedAt": created_at,
             "context": context,
+            "ownerUserId": context.get("authenticatedUserId", ""),
+            "ownerSourceApp": context.get("sourceApp", ""),
+            "ownerStageCode": context.get("stageCode", ""),
             "source": SOURCE_MARK,
         }
         state.conversations[conversation_id] = conversation
@@ -487,11 +524,17 @@ def create_app() -> FastAPI:
 
     @get_conversation_or_404(app, state, "POST", f"{API_PREFIX}/assistant/conversations/{{conversation_id}}/messages")
     async def send_message(conversation_id: str, request_body: dict[str, Any]) -> dict[str, Any]:
+        conversation = state.conversations.get(conversation_id)
         if isinstance(request_body.get("context"), dict):
             try:
-                request_body["context"] = sanitize_context_for_auth(request_body["context"], current_auth())
+                auth = current_auth()
+                request_body["context"] = sanitize_context_for_auth(request_body["context"], auth)
+                if conversation is not None and not conversation_context_matches(conversation, request_body["context"], auth):
+                    return error_envelope("conversation context does not match request scope", 403)
             except PermissionError as exc:
                 return error_envelope(str(exc), 403)
+        elif conversation is not None and isinstance(conversation.get("context"), dict):
+            request_body["context"] = deepcopy(conversation["context"])
         return await create_assistant_message(state, conversation_id, request_body, retry_of=None)
 
     @get_conversation_or_404(app, state, "POST", f"{API_PREFIX}/assistant/conversations/{{conversation_id}}/stop")
@@ -525,6 +568,7 @@ def create_app() -> FastAPI:
         source_message = find_message(state, conversation_id, message_id)
         if source_message is None:
             return error_envelope("message not found", 404)
+        conversation = state.conversations.get(conversation_id)
         if source_message.get("role") == "USER":
             question = source_message.get("content", "")
             context = source_message.get("context", {})
@@ -534,6 +578,8 @@ def create_app() -> FastAPI:
                 return error_envelope("no user message to retry", 409)
             question = user_message.get("content", "")
             context = user_message.get("context", {})
+        if not isinstance(context, dict) and conversation is not None and isinstance(conversation.get("context"), dict):
+            context = deepcopy(conversation["context"])
         return await create_assistant_message(
             state,
             conversation_id,
@@ -680,6 +726,7 @@ def create_app() -> FastAPI:
             "status": backend_result["status"],
             "safeGate": backend_result["safeGate"],
             "backendResponse": backend_result.get("backendResponse"),
+            "commandIds": backend_result.get("commandIds", []),
             "payload": request_body,
             "source": backend_result["source"],
             "createdAt": now_iso(),
@@ -690,15 +737,34 @@ def create_app() -> FastAPI:
 
     @app.get(f"{API_PREFIX}/ai-integration/commands/{{command_id}}")
     async def command_status(command_id: str) -> dict[str, Any]:
-        item = state.command_intents.get(command_id)
-        if item is None:
-            item = {
-                "commandId": command_id,
-                "status": "LOCAL_DEMO_UNKNOWN",
-                "ack": "SIMULATION: production backend was not queried in this mock endpoint.",
-                "source": SOURCE_MARK,
-            }
-        return envelope(item)
+        backend_base = os.getenv("PRODUCTION_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/")
+        try:
+            req = build_backend_request(f"{backend_base}/ai-integration/commands/{command_id}", None, current_auth(), "GET")
+            with request.urlopen(req, timeout=1.5) as response:
+                parsed = json.loads(response.read().decode("utf-8"))
+                if backend_envelope_success(parsed):
+                    data = parsed.get("data") if isinstance(parsed.get("data"), dict) else {}
+                    data.setdefault("commandId", command_id)
+                    data.setdefault("source", f"PRODUCTION_BACKEND {backend_base}")
+                    return envelope(data)
+                return envelope(
+                    {
+                        "commandId": command_id,
+                        "status": "BACKEND_BUSINESS_FAILED",
+                        "backendResponse": parsed,
+                        "source": f"PRODUCTION_BACKEND {backend_base}",
+                    }
+                )
+        except (error.URLError, TimeoutError, OSError):
+            item = state.command_intents.get(command_id)
+            if item is None:
+                item = {
+                    "commandId": command_id,
+                    "status": "LOCAL_DEMO_UNKNOWN",
+                    "ack": "SIMULATION: production backend was not queried in this mock endpoint.",
+                    "source": SOURCE_MARK,
+                }
+            return envelope(item)
 
     return app
 
@@ -707,8 +773,11 @@ def get_conversation_or_404(app: FastAPI, state: AiCenterState, method: str, pat
     def decorator(handler):
         @wraps(handler)
         async def wrapper(conversation_id: str, *args: Any, **kwargs: Any):
-            if conversation_id not in state.conversations:
+            conversation = state.conversations.get(conversation_id)
+            if conversation is None:
                 return error_envelope("conversation not found", 404)
+            if not can_access_conversation(conversation, current_auth()):
+                return error_envelope("forbidden by conversation ownership or stage scope", 403)
             return await handler(conversation_id, *args, **kwargs)
 
         app.add_api_route(path, wrapper, methods=[method])
@@ -796,7 +865,63 @@ def load_principal_for_token(token: str) -> dict[str, Any] | None:
             pass
     if token in DEFAULT_AUTH_TOKENS:
         return normalize_principal(DEFAULT_AUTH_TOKENS[token])
-    return None
+    return introspect_subject_token(token)
+
+
+def introspect_subject_token(token: str) -> dict[str, Any] | None:
+    backend_base = os.getenv("PRODUCTION_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/")
+    try:
+        headers = {
+            "Content-Type": "application/json;charset=UTF-8",
+            "Authorization": f"Bearer {os.getenv('PRODUCTION_BACKEND_SERVICE_TOKEN', 'dev-ai-service-token')}",
+            "X-Subject-Authorization": bearer_value(token),
+            "X-Client-Type": "AI_CENTER",
+        }
+        payload = {"token": token, "requestedAt": now_iso(), "source": "AI_CENTER_AUTH_INTROSPECT"}
+        req = request.Request(
+            f"{backend_base}/auth/introspect",
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
+            headers=headers,
+        )
+        with request.urlopen(req, timeout=1.5) as response:
+            parsed = json.loads(response.read().decode("utf-8"))
+            if not backend_envelope_success(parsed):
+                return None
+            data = parsed.get("data") if isinstance(parsed, dict) else None
+            return principal_from_introspection(data if isinstance(data, dict) else {})
+    except (error.URLError, TimeoutError, OSError, ValueError):
+        return None
+
+
+def principal_from_introspection(data: dict[str, Any]) -> dict[str, Any] | None:
+    if data.get("active") is False or str(data.get("status", "ACTIVE")).upper() in ("DISABLED", "LOCKED"):
+        return None
+    role = str(data.get("role") or "VIEWER").upper()
+    source_apps = data.get("sourceApps") or data.get("sourceApp")
+    if not source_apps:
+        if role == "ADMIN":
+            source_apps = ["ADMIN", "WORKSTATION", "DISPLAY"]
+        elif role == "OPERATOR":
+            source_apps = ["WORKSTATION"]
+        else:
+            source_apps = ["DISPLAY"]
+    permissions = data.get("permissions")
+    if not permissions:
+        if role == "ADMIN":
+            permissions = ["ASSISTANT_READ", "AI_CONFIG_MANAGE", "KNOWLEDGE_SUBMIT", "KNOWLEDGE_REVIEW", "DECISION_READ"]
+        else:
+            permissions = ["ASSISTANT_READ", "DECISION_READ"]
+    return normalize_principal(
+        {
+            "userId": data.get("userId") or data.get("username") or data.get("id") or "unknown",
+            "displayName": data.get("displayName") or data.get("username") or data.get("userId") or "unknown",
+            "role": role,
+            "sourceApps": source_apps,
+            "permissions": permissions,
+            "stageCodes": data.get("stageCodes") or ["ALL"],
+        }
+    )
 
 
 def normalize_principal(raw: dict[str, Any]) -> dict[str, Any]:
@@ -818,6 +943,7 @@ def current_auth() -> dict[str, Any]:
 def is_authorized_for_path(auth: dict[str, Any], path: str, method: str) -> bool:
     permissions = auth.get("permissions", [])
     source_app = str(auth.get("sourceApp", "")).upper()
+    method_name = method.upper()
     if path.startswith(ADMIN_PREFIXES):
         return source_app == "ADMIN" and (
             "AI_CONFIG_MANAGE" in permissions or "KNOWLEDGE_REVIEW" in permissions or "DECISION_READ" in permissions
@@ -829,12 +955,65 @@ def is_authorized_for_path(auth: dict[str, Any], path: str, method: str) -> bool
     if path.startswith(ASSISTANT_PREFIX):
         return "ASSISTANT_READ" in permissions
     if path.startswith(DECISION_PREFIX):
+        if method_name != "GET":
+            return source_app == "AI_CENTER" and "AI_INTERNAL" in permissions
         return "DECISION_READ" in permissions or source_app == "ADMIN"
     if path.startswith(VISION_PREFIX):
         return source_app == "ADMIN" or "AI_INTERNAL" in permissions
     if path.startswith(AI_INTEGRATION_PREFIX):
-        return source_app == "ADMIN" or "AI_INTERNAL" in permissions or "ASSISTANT_READ" in permissions
+        return source_app == "AI_CENTER" and "AI_INTERNAL" in permissions
     return True
+
+
+def can_access_conversation(conversation: dict[str, Any], auth: dict[str, Any]) -> bool:
+    context = conversation.get("context") if isinstance(conversation.get("context"), dict) else {}
+    source_app = str(conversation.get("ownerSourceApp") or context.get("sourceApp", "")).upper()
+    auth_source = str(auth.get("sourceApp", "")).upper()
+    if source_app and source_app != auth_source:
+        return False
+    owner = str(conversation.get("ownerUserId") or context.get("authenticatedUserId") or "")
+    user_id = str(auth.get("userId", ""))
+    if auth_source != "DISPLAY" and owner and owner != user_id:
+        return False
+    stage_code = str(conversation.get("ownerStageCode") or context.get("stageCode") or "").upper()
+    return stage_allowed_for_auth(stage_code, auth)
+
+
+def event_visible_to_auth(event: dict[str, Any], auth: dict[str, Any], conversations: dict[str, dict[str, Any]]) -> bool:
+    conversation_id = event.get("conversationId")
+    if not conversation_id:
+        return True
+    conversation = conversations.get(str(conversation_id))
+    return conversation is not None and can_access_conversation(conversation, auth)
+
+
+def conversation_context_matches(conversation: dict[str, Any], context: dict[str, Any], auth: dict[str, Any]) -> bool:
+    conversation_context = conversation.get("context") if isinstance(conversation.get("context"), dict) else {}
+    for key in ["sourceApp", "lineId", "stageCode"]:
+        expected = str(conversation_context.get(key) or conversation.get(f"owner{key[0].upper() + key[1:]}") or "").upper()
+        actual = str(context.get(key) or "").upper()
+        if expected and actual and expected != actual:
+            return False
+    return stage_allowed_for_auth(str(context.get("stageCode") or conversation_context.get("stageCode") or "").upper(), auth)
+
+
+def stage_allowed_for_auth(stage_code: str, auth: dict[str, Any]) -> bool:
+    if not stage_code:
+        return True
+    allowed_stages = auth.get("stageCodes", [])
+    return "ALL" in allowed_stages or stage_code in allowed_stages
+
+
+def bearer_value(token: str) -> str:
+    return f"Bearer {token.strip()}" if token else ""
+
+
+def backend_envelope_success(payload: dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    success = payload.get("success")
+    code = payload.get("code")
+    return success is True and (code in (0, "0", 1, "1"))
 
 
 def sanitize_context_for_auth(context: dict[str, Any], auth: dict[str, Any]) -> dict[str, Any]:
@@ -845,8 +1024,7 @@ def sanitize_context_for_auth(context: dict[str, Any], auth: dict[str, Any]) -> 
         raise PermissionError("context sourceApp does not match authenticated client")
     sanitized["sourceApp"] = source_app
     stage_code = str(sanitized.get("stageCode", "")).upper()
-    allowed_stages = auth.get("stageCodes", [])
-    if source_app == "WORKSTATION" and stage_code and "ALL" not in allowed_stages and stage_code not in allowed_stages:
+    if source_app == "WORKSTATION" and not stage_allowed_for_auth(stage_code, auth):
         raise PermissionError("workstation token cannot access requested stage")
     sanitized["userRoleHint"] = auth.get("role", "")
     sanitized["authenticatedUserId"] = auth.get("userId", "")
@@ -1524,7 +1702,7 @@ async def create_assistant_message(
         "dataGeneratedAt": now_iso(),
         "stateVersion": context_state_version(context),
         "knowledgeVersion": KNOWLEDGE_VERSION,
-        "citations": make_citations(state, context),
+        "citations": make_citations(state, question, context),
         "createdAt": now_iso(),
         "retryOf": retry_of,
         "source": SOURCE_MARK,
@@ -1545,7 +1723,7 @@ async def create_assistant_message(
     )
     try:
         chunks = await asyncio.wait_for(
-            build_answer_chunks(state, question, context),
+            build_answer_chunks(state, question, context, current_auth()),
             timeout=get_request_timeout_seconds(state.ai_config) + 1,
         )
     except asyncio.TimeoutError:
@@ -1704,8 +1882,8 @@ def decide_answer_mode(question: str, context: dict[str, Any]) -> str:
     return "HYBRID"
 
 
-async def build_answer_chunks(state: AiCenterState, question: str, context: dict[str, Any]) -> list[str]:
-    facts = fetch_backend_facts(context)
+async def build_answer_chunks(state: AiCenterState, question: str, context: dict[str, Any], auth: dict[str, Any]) -> list[str]:
+    facts = fetch_backend_facts(context, auth)
     selection = context.get("selection") if isinstance(context.get("selection"), dict) else None
     scope = describe_scope(context, selection)
     if looks_like_control_request(question):
@@ -1756,9 +1934,9 @@ def looks_like_control_request(question: str) -> bool:
     return any(keyword in question or keyword in lowered for keyword in keywords)
 
 
-def make_citations(state: AiCenterState, context: dict[str, Any]) -> list[dict[str, Any]]:
+def make_citations(state: AiCenterState, question: str, context: dict[str, Any]) -> list[dict[str, Any]]:
     stage = context.get("stageCode", "GENERAL")
-    documents = search_rag_documents(state, str(context.get("selection", "")), context)
+    documents = search_rag_documents(state, question, context)
     return [
         {
             "citationId": "sim-cite-" + str(item["document"].get("documentId", "unknown")),
@@ -1776,18 +1954,31 @@ def make_citations(state: AiCenterState, context: dict[str, Any]) -> list[dict[s
     ]
 
 
-def fetch_backend_facts(context: dict[str, Any]) -> dict[str, Any]:
+def fetch_backend_facts(context: dict[str, Any], auth: dict[str, Any]) -> dict[str, Any]:
     backend_base = os.getenv("PRODUCTION_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/")
-    payload = {
-        "context": context,
-        "requestedAt": now_iso(),
-        "source": "AI_CENTER_READ_ONLY_TOOL",
+    query = {
+        "sourceApp": str(context.get("sourceApp") or "AI_CENTER"),
+        "lineId": str(context.get("lineId") or ""),
+        "stageCode": str(context.get("stageCode") or ""),
+        "deviceCode": str(context.get("deviceCode") or ""),
+        "traceCode": str(context.get("traceCode") or ""),
     }
+    query_text = parse.urlencode({key: value for key, value in query.items() if value})
     try:
-        req = build_backend_request(f"{backend_base}/ai-integration/facts", payload, context)
+        url = f"{backend_base}/ai-integration/facts"
+        if query_text:
+            url = f"{url}?{query_text}"
+        req = build_backend_request(url, None, auth, "GET")
         with request.urlopen(req, timeout=0.7) as response:
             parsed = json.loads(response.read().decode("utf-8"))
-            data = parsed.get("data") if isinstance(parsed, dict) and isinstance(parsed.get("data"), dict) else parsed
+            if not backend_envelope_success(parsed):
+                return {
+                    "source": SOURCE_MARK,
+                    "status": "BACKEND_BUSINESS_FAILED",
+                    "message": parsed.get("message", "backend facts request failed") if isinstance(parsed, dict) else "backend facts request failed",
+                    "stateVersion": context.get("stateVersion"),
+                }
+            data = parsed.get("data")
             if isinstance(data, dict):
                 data["source"] = f"PRODUCTION_BACKEND {backend_base}"
                 data.setdefault("status", response.status)
@@ -1803,13 +1994,23 @@ def fetch_backend_facts(context: dict[str, Any]) -> dict[str, Any]:
 def submit_command_intent_to_backend(payload: dict[str, Any], auth: dict[str, Any]) -> dict[str, Any]:
     backend_base = os.getenv("PRODUCTION_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/")
     try:
-        req = build_backend_request(f"{backend_base}/ai-integration/command-intents", payload, auth)
+        req = build_backend_request(f"{backend_base}/ai-integration/command-intents", payload, auth, "POST")
         with request.urlopen(req, timeout=2.5) as response:
             parsed = json.loads(response.read().decode("utf-8"))
+            if not backend_envelope_success(parsed):
+                return {
+                    "status": "BACKEND_BUSINESS_FAILED",
+                    "safeGate": "PRODUCTION_BACKEND_REJECTED: business failure returned by backend safety validation.",
+                    "backendResponse": parsed,
+                    "source": f"PRODUCTION_BACKEND {backend_base}",
+                }
+            data = parsed.get("data") if isinstance(parsed.get("data"), dict) else {}
+            command_ids = collect_command_ids(data)
             return {
-                "status": "PENDING_BACKEND_GATE",
+                "status": str(data.get("status") or "PENDING_BACKEND_GATE"),
                 "safeGate": "PRODUCTION_BACKEND_ACCEPTED: waiting for backend safety validation and edge ACK.",
                 "backendResponse": parsed,
+                "commandIds": command_ids,
                 "source": f"PRODUCTION_BACKEND {backend_base}",
             }
     except (error.URLError, TimeoutError, OSError) as exc:
@@ -1821,14 +2022,42 @@ def submit_command_intent_to_backend(payload: dict[str, Any], auth: dict[str, An
         }
 
 
-def build_backend_request(url: str, payload: dict[str, Any], subject: dict[str, Any]) -> request.Request:
+def build_backend_request(
+    url: str,
+    payload: dict[str, Any] | None,
+    subject: dict[str, Any],
+    method: str,
+) -> request.Request:
     headers = {
         "Content-Type": "application/json;charset=UTF-8",
-        "X-AI-Service-Token": os.getenv("PRODUCTION_BACKEND_SERVICE_TOKEN", "LOCAL_DEMO_AI_SERVICE"),
+        # Spring Boot validates this service credential from Authorization.
+        "Authorization": f"Bearer {os.getenv('PRODUCTION_BACKEND_SERVICE_TOKEN', 'dev-ai-service-token')}",
+        "X-Subject-Authorization": bearer_value(str(subject.get("token") or "")),
         "X-Subject-User": str(subject.get("authenticatedUserId") or subject.get("userId") or "unknown"),
         "X-Client-Type": str(subject.get("sourceApp") or "AI_CENTER"),
     }
-    return request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST", headers=headers)
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    return request.Request(url, data=data, method=method, headers=headers)
+
+
+def collect_command_ids(data: dict[str, Any]) -> list[str]:
+    command_ids = []
+    value = data.get("commandIds")
+    if isinstance(value, list):
+        command_ids.extend(str(item) for item in value if str(item).strip())
+    single = data.get("commandId")
+    if isinstance(single, str) and single.strip():
+        command_ids.append(single)
+    ack = data.get("ack") or data.get("edgeAck")
+    if isinstance(ack, dict):
+        candidate = ack.get("commandId")
+        if isinstance(candidate, str) and candidate.strip():
+            command_ids.append(candidate)
+    result: list[str] = []
+    for item in command_ids:
+        if item not in result:
+            result.append(item)
+    return result
 
 
 def make_local_facts(context: dict[str, Any] | None = None) -> dict[str, Any]:

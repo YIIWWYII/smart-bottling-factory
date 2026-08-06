@@ -19,6 +19,8 @@ struct AssistantMessageCard {
     citations: [],
     createdAt: ''
   }
+  // Keep streamed text as a primitive prop so List item reuse cannot retain an older object field.
+  @Prop content: string = ''
 
   build() {
     Column({ space: 7 }) {
@@ -32,11 +34,12 @@ struct AssistantMessageCard {
           Text('v' + this.message.stateVersion.toString()).fontSize(9).fontColor(PANEL_MUTED)
         }
       }.width('100%')
-      Text(this.message.content)
+      Text(this.content)
         .width('100%')
         .fontSize(13)
         .fontColor(PANEL_TEXT)
         .lineHeight(20)
+        .maxLines(100)
       if (this.message.dataGeneratedAt !== undefined || this.message.knowledgeVersion !== undefined) {
         Row({ space: 8 }) {
           if (this.message.dataGeneratedAt !== undefined) {
@@ -47,7 +50,7 @@ struct AssistantMessageCard {
           }
         }.width('100%')
       }
-      if (this.message.citations.length > 0) {
+      if (this.message.citations !== undefined && this.message.citations.length > 0) {
         Column({ space: 5 }) {
           ForEach(this.message.citations, (citation: AssistantCitation) => {
             Text(citation.title + ' · ' + citation.version)
@@ -117,9 +120,9 @@ export struct AssistantPanel {
       List({ space: 8 }) {
         ForEach(this.controller.messages, (message: AssistantMessageView) => {
           ListItem() {
-            AssistantMessageCard({ message: message })
+            AssistantMessageCard({ message: message, content: message.content })
           }
-        }, (message: AssistantMessageView) => message.messageId)
+        }, (message: AssistantMessageView) => message.messageId + ':' + message.content.length.toString())
         if (this.controller.status === AssistantUiStatus.SENDING || this.controller.status === AssistantUiStatus.STREAMING) {
           ListItem() {
             Row({ space: 8 }) {

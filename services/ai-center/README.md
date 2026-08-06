@@ -25,8 +25,13 @@ http://127.0.0.1:8088/hdc/api/ai-integration/facts
 可通过环境变量覆盖：
 
 ```powershell
-$env:PRODUCTION_BACKEND_BASE_URL='http://192.168.0.104:8088/hdc/api'
+$env:PRODUCTION_BACKEND_BASE_URL='http://192.168.106.20:8088/hdc/api'
+$env:PRODUCTION_BACKEND_SERVICE_TOKEN='dev-ai-service-token'
 ```
+
+`PRODUCTION_BACKEND_SERVICE_TOKEN` 必须与 Spring Boot 的
+`factory.ai.service-token` 一致。`factory-demo` 本地联调默认使用
+`dev-ai-service-token`；部署环境必须改为独立的服务间凭据，不能继续使用演示值。
 
 ## Smoke Test
 

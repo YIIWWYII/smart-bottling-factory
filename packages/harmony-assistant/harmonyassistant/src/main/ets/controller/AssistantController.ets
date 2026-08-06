@@ -37,6 +37,9 @@ export class AssistantController {
   private disposed: boolean = false
   private requestCancelled: boolean = false
   private streamCompensating: boolean = false
+  private requestGeneration: number = 0
+  private httpSettledGeneration: number = 0
+  private settledMessageIds: string[] = []
   private selectionSubscription: AssistantSubscription
   private visibilitySubscription: AssistantSubscription
   private selectionListener: AssistantSelectionListener
@@ -110,6 +113,8 @@ export class AssistantController {
       return
     }
     this.lastQuestion = question
+    const requestGeneration: number = this.requestGeneration + 1
+    this.requestGeneration = requestGeneration
     this.requestCancelled = false
     this.draft = ''
     this.errorMessage = ''
@@ -124,7 +129,7 @@ export class AssistantController {
       this.client.startEventStream(
         this.conversationId,
         (event: AssistantStreamEvent): void => this.onStreamEvent(event),
-        (): void => { void this.compensateFromHttp() }
+        (): void => { void this.compensateFromHttp(requestGeneration) }
       )
       const payload: AssistantSendMessagePayload = {
         question: question,
@@ -135,7 +140,7 @@ export class AssistantController {
       }
       this.status = AssistantUiStatus.STREAMING
       const result: AssistantMessageResult = await this.client.sendMessage(this.conversationId, payload)
-      this.applyMessageResult(result)
+      this.applyMessageResult(result, requestGeneration)
       if (result.status === AssistantUiStatus.FAILED) {
         this.errorMessage = result.content
         this.status = AssistantUiStatus.FAILED
@@ -229,6 +234,7 @@ export class AssistantController {
     if (event.type === 'ai.connection.ready' || event.type === 'ai.conversation.created') return
     if (event.messageId !== undefined && event.messageId.length > 0) {
       this.activeAssistantMessageId = event.messageId
+      if (this.isMessageSettled(event.messageId)) return
     }
     if (event.type === 'ai.conversation.started') {
       this.upsertStreamingMessage(event, '')
@@ -248,25 +254,32 @@ export class AssistantController {
     }
     if (event.type === 'ai.conversation.failed') {
       this.replaceStreamContent(event, AssistantUiStatus.FAILED)
-      this.errorMessage = event.content === undefined ? 'AI 鍔╂墜鍥炵瓟澶辫触' : event.content
+      this.errorMessage = event.content === undefined ? 'AI 助手回答失败' : event.content
       this.status = AssistantUiStatus.FAILED
       return
     }
     if (event.type === 'ai.conversation.stopped') {
       this.replaceStreamContent(event, AssistantUiStatus.STOPPED)
-      this.errorMessage = '鏈鍥炵瓟宸插仠姝?'
+      this.errorMessage = '本次回答已停止'
       this.status = AssistantUiStatus.STOPPED
     }
   }
 
-  private async compensateFromHttp(): Promise<void> {
-    if (this.disposed || this.streamCompensating || this.conversationId.length === 0) return
+  private async compensateFromHttp(requestGeneration: number): Promise<void> {
+    if (this.disposed || this.streamCompensating || this.conversationId.length === 0 ||
+      requestGeneration !== this.requestGeneration || requestGeneration <= this.httpSettledGeneration) return
     this.streamCompensating = true
     try {
       const result: AssistantConversationMessagesResult = await this.client.listMessages(this.conversationId)
+      if (requestGeneration !== this.requestGeneration || requestGeneration <= this.httpSettledGeneration) return
       const views: AssistantMessageView[] = []
       result.messages.forEach((message: AssistantMessageResult) => {
-        views.push(this.toAssistantMessage(message))
+        const view: AssistantMessageView = this.toAssistantMessage(message)
+        const currentIndex: number = this.findMessageIndex(view.messageId)
+        if (view.content.length === 0 && currentIndex >= 0 && this.messages[currentIndex].content.length > 0) {
+          view.content = this.messages[currentIndex].content
+        }
+        views.push(view)
       })
       if (views.length > 0) {
         this.messages = views
@@ -278,7 +291,7 @@ export class AssistantController {
       }
     } catch (_error) {
       if (this.status === AssistantUiStatus.STREAMING) {
-        this.errorMessage = 'AI 瀹炴椂閫氶亾宸叉柇寮€锛屾鍦ㄩ噸杩炲苟绛夊緟 HTTP 琛ュ伩'
+        this.errorMessage = 'AI 实时通道已断开，正在重连并等待 HTTP 补偿'
       }
     } finally {
       this.streamCompensating = false
@@ -341,7 +354,7 @@ export class AssistantController {
     this.messages = next
   }
 
-  private applyMessageResult(result: AssistantMessageResult): void {
+  private applyMessageResult(result: AssistantMessageResult, requestGeneration: number): void {
     const next: AssistantMessageView[] = this.messages.slice()
     const index: number = this.findMessageIndex(result.messageId)
     const view: AssistantMessageView = this.toAssistantMessage(result)
@@ -351,6 +364,20 @@ export class AssistantController {
       next.push(view)
     }
     this.messages = next
+    this.httpSettledGeneration = Math.max(this.httpSettledGeneration, requestGeneration)
+    this.markMessageSettled(result.messageId)
+  }
+
+  private isMessageSettled(messageId: string): boolean {
+    return this.settledMessageIds.indexOf(messageId) >= 0
+  }
+
+  private markMessageSettled(messageId: string): void {
+    if (messageId.length === 0 || this.isMessageSettled(messageId)) return
+    this.settledMessageIds.push(messageId)
+    if (this.settledMessageIds.length > 100) {
+      this.settledMessageIds = this.settledMessageIds.slice(this.settledMessageIds.length - 100)
+    }
   }
 
   private findMessageIndex(messageId: string): number {
@@ -364,14 +391,14 @@ export class AssistantController {
     return {
       messageId: result.messageId,
       role: 'ASSISTANT',
-      content: result.content,
+      content: result.content === undefined ? '' : result.content,
       status: result.status === undefined ? AssistantUiStatus.COMPLETED : result.status,
       answerMode: result.answerMode,
       dataGeneratedAt: result.dataGeneratedAt,
       stateVersion: result.stateVersion,
       knowledgeVersion: result.knowledgeVersion,
-      citations: result.citations,
-      createdAt: result.createdAt
+      citations: result.citations === undefined ? [] : result.citations,
+      createdAt: result.createdAt === undefined ? new Date().toISOString() : result.createdAt
     }
   }
 }
