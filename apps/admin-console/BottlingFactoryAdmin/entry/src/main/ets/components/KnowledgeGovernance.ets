@@ -7,7 +7,9 @@ import {
   KnowledgePreviewBlock,
   KnowledgeReview,
   KnowledgeSubmission,
-  KnowledgeUploadMetadata
+  KnowledgeUploadMetadata,
+  RagDocument,
+  RagStatus
 } from '../model/AiCenterModels'
 import { aiCenterClient } from '../service/AiCenterClient'
 import { AiCenterConfig } from '../service/AiCenterConfig'
@@ -31,6 +33,8 @@ export struct KnowledgeGovernance {
   @Prop stateVersion: number = 0
   @State submissions: Array<KnowledgeSubmission> = []
   @State reviews: Array<KnowledgeReview> = []
+  @State ragDocuments: Array<RagDocument> = []
+  @State ragStatus: RagStatus | undefined = undefined
   @State selectedReview: KnowledgeReview | undefined = undefined
   @State loading: boolean = false
   @State serviceAvailable: boolean = false
@@ -45,6 +49,9 @@ export struct KnowledgeGovernance {
   @State publishedAt: string = ''
   @State sourceVersion: string = ''
   @State description: string = ''
+  @State category: string = 'UNCLASSIFIED'
+  @State scopeAppsText: string = 'ALL'
+  @State tagsText: string = ''
   @State lineId: string = 'LINE-01'
   @State stageCode: string = ''
   @State deviceCode: string = ''
@@ -82,12 +89,18 @@ export struct KnowledgeGovernance {
     try {
       const submissionResult: Array<KnowledgeSubmission> = await aiCenterClient.listKnowledgeSubmissions()
       const reviewResult: Array<KnowledgeReview> = await aiCenterClient.listKnowledgeReviews()
+      const ragStatusResult: RagStatus = await aiCenterClient.getRagStatus()
+      const ragDocumentResult: Array<RagDocument> = await aiCenterClient.listRagDocuments()
       this.submissions = submissionResult
       this.reviews = reviewResult
+      this.ragStatus = ragStatusResult
+      this.ragDocuments = ragDocumentResult
       this.serviceAvailable = true
     } catch (error) {
       this.submissions = []
       this.reviews = []
+      this.ragDocuments = []
+      this.ragStatus = undefined
       this.serviceAvailable = false
       this.errorMessage = error instanceof Error ? error.message : 'AI 中枢知识治理接口不可用'
     } finally {
@@ -130,6 +143,9 @@ export struct KnowledgeGovernance {
       publishedAt: this.publishedAt.trim(),
       sourceVersion: this.sourceVersion.trim(),
       description: this.description.trim(),
+      category: this.category.trim().length === 0 ? 'UNCLASSIFIED' : this.category.trim(),
+      scopeApps: this.parseScopeApps(),
+      tags: this.parseTags(),
       lineId: this.lineId.trim(),
       stageCode: this.stageCode.trim(),
       deviceCode: this.deviceCode.trim(),
@@ -202,6 +218,19 @@ export struct KnowledgeGovernance {
     }
   }
 
+  private async reindexAll(): Promise<void> {
+    this.loading = true
+    try {
+      this.ragDocuments = await aiCenterClient.reindexRagDocuments()
+      this.actionMessage = 'AI 中枢已重新触发索引，当前文档数：' + this.ragDocuments.length.toString()
+      await this.refresh()
+    } catch (error) {
+      this.actionMessage = '重建索引失败：' + (error instanceof Error ? error.message : 'AI 中枢请求失败')
+    } finally {
+      this.loading = false
+    }
+  }
+
   private publishKnowledgeSelection(review: KnowledgeReview): void {
     const selection = createAdminSelection(
       'KNOWLEDGE_SUBMISSION',
@@ -212,6 +241,8 @@ export struct KnowledgeGovernance {
       [
         assistantField('title', review.submission.title),
         assistantField('status', review.submission.status),
+        assistantField('category', review.submission.category || 'UNCLASSIFIED'),
+        assistantField('scopeApps', this.scopeLabel(review.submission.scopeApps)),
         assistantField('version', review.submission.publishedVersion || review.submission.sourceVersion),
         assistantField('source', review.submission.sourceOrganization),
         assistantField('occurredAt', review.submission.submittedAt)
@@ -239,6 +270,9 @@ export struct KnowledgeGovernance {
     this.publishedAt = ''
     this.sourceVersion = ''
     this.description = ''
+    this.category = 'UNCLASSIFIED'
+    this.scopeAppsText = 'ALL'
+    this.tagsText = ''
     this.stageCode = ''
     this.deviceCode = ''
     this.bottleTypeCode = ''
@@ -259,6 +293,48 @@ export struct KnowledgeGovernance {
     return 'application/octet-stream'
   }
 
+  private ragReadableLabel(submission: KnowledgeSubmission): string {
+    if (submission.status === 'INDEXED') return '已进入 RAG'
+    if (submission.status === 'REVOKED') return '已撤销停用'
+    if (submission.status === 'REJECTED') return '已拒绝'
+    if (submission.status === 'FAILED') return '索引失败'
+    return '未进入 RAG'
+  }
+
+  private ragReadableStatus(submission: KnowledgeSubmission): string {
+    if (submission.status === 'INDEXED') return 'PASS'
+    if (submission.status === 'REJECTED' || submission.status === 'FAILED' || submission.status === 'REVOKED') return 'FAILED'
+    return 'WAIT'
+  }
+
+  private parseScopeApps(): Array<string> {
+    const normalized: string = this.scopeAppsText.trim().length === 0 ? 'ALL' : this.scopeAppsText
+    const result: Array<string> = []
+    normalized.replace(/;/g, ',').split(',').forEach((item: string) => {
+      const value: string = item.trim().toUpperCase()
+      if ((value === 'ALL' || value === 'DISPLAY' || value === 'WORKSTATION' || value === 'ADMIN' || value === 'AI_CENTER') &&
+        result.indexOf(value) < 0) {
+        result.push(value)
+      }
+    })
+    return result.length > 0 ? result : ['ALL']
+  }
+
+  private parseTags(): Array<string> {
+    const result: Array<string> = []
+    this.tagsText.replace(/;/g, ',').split(',').forEach((item: string) => {
+      const value: string = item.trim()
+      if (value.length > 0 && result.indexOf(value) < 0) result.push(value)
+    })
+    return result
+  }
+
+  private scopeLabel(scopeApps?: Array<string>): string {
+    const values: Array<string> = scopeApps === undefined || scopeApps.length === 0 ? ['ALL'] : scopeApps
+    if (values.indexOf('ALL') >= 0) return '全部端可读'
+    return values.join(',')
+  }
+
   build() {
     Column({ space: 14 }) {
       SectionTitle({ code: 'KNOWLEDGE GOVERNANCE', title: '知识资料与审核', description: '资料只写入独立 AI 中枢；批准并完成索引后才允许参与 RAG。' })
@@ -277,6 +353,11 @@ export struct KnowledgeGovernance {
     Row({ space: 10 }) {
       StateBadge({ status: this.serviceAvailable ? 'PASS' : 'FAILED', label: this.serviceAvailable ? 'AI 中枢在线' : 'AI 中枢不可用' })
       Text(AiCenterConfig.API_BASE).fontSize(9).fontColor(Theme.muted).layoutWeight(1)
+      if (this.ragStatus !== undefined) {
+        StateBadge({ status: (this.ragStatus as RagStatus).status, label: 'RAG ' + (this.ragStatus as RagStatus).status })
+        Text('文档 ' + (this.ragStatus as RagStatus).documentCount.toString() + ' / 已索引 ' + (this.ragStatus as RagStatus).indexedCount.toString()).fontSize(9).fontColor(Theme.muted)
+      }
+      Button('重建索引').enabled(this.canSubmit() && !this.loading).height(34).backgroundColor(this.canSubmit() ? Theme.warning : Theme.neutral).fontColor('#FFFFFF').onClick(() => void this.reindexAll())
       Button('刷新').height(34).backgroundColor(Theme.blue).fontColor('#FFFFFF').onClick(() => void this.refresh())
     }.width('100%')
     if (this.loading) {
@@ -313,6 +394,12 @@ export struct KnowledgeGovernance {
         TextInput({ text: this.deviceCode, placeholder: '适用设备代码' }).layoutWeight(1).onChange((value: string) => this.deviceCode = value)
         TextInput({ text: this.bottleTypeCode, placeholder: '适用瓶型代码' }).layoutWeight(1).onChange((value: string) => this.bottleTypeCode = value)
       }.width('100%')
+      Row({ space: 8 }) {
+        TextInput({ text: this.category, placeholder: '分类：UNCLASSIFIED / PROCESS_SAFETY / QUALITY_INSPECTION' }).layoutWeight(1).onChange((value: string) => this.category = value)
+        TextInput({ text: this.scopeAppsText, placeholder: '适用端：ALL 或 DISPLAY,WORKSTATION,ADMIN,AI_CENTER' }).layoutWeight(1).onChange((value: string) => this.scopeAppsText = value)
+        TextInput({ text: this.tagsText, placeholder: '标签：PLA,VOC,灌装' }).layoutWeight(1).onChange((value: string) => this.tagsText = value)
+      }.width('100%')
+      Text('不分类时 category=UNCLASSIFIED，scopeApps 默认 ALL，表示展板端、工位端、后台管理端和 AI 决策中枢都可以检索。').fontSize(9).fontColor(Theme.warning)
       TextArea({ text: this.description, placeholder: '资料说明、适用范围和版权声明' }).height(70).width('100%').onChange((value: string) => this.description = value)
       Row({ space: 10 }) {
         Button('提交到隔离区').enabled(this.canSubmit() && !this.loading).backgroundColor(this.canSubmit() ? Theme.blue : Theme.neutral).fontColor('#FFFFFF').onClick(() => AlertDialog.show({
@@ -338,8 +425,11 @@ export struct KnowledgeGovernance {
             Column() {
               Text(review.submission.title).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold)
               Text(review.reviewId + ' · 提交人 ' + review.submission.submittedBy + ' · ' + review.submission.submittedAt).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
+              Text('分类：' + (review.submission.category || 'UNCLASSIFIED') + ' · 适用端：' + this.scopeLabel(review.submission.scopeApps) + ' · 标签：' + ((review.submission.tags || []).join(',') || '--')).fontSize(9).fontColor(Theme.blue).margin({ top: 4 })
+              Text('知识版本：' + (review.submission.publishedVersion || '--') + ' · 索引时间：' + (review.submission.indexedAt || '--') + ' · 原因：' + (review.submission.statusReason || '--')).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             StateBadge({ status: review.submission.status, label: review.submission.status })
+            StateBadge({ status: this.ragReadableStatus(review.submission), label: this.ragReadableLabel(review.submission) })
             Text(review.conflicts.length.toString() + ' 个冲突').fontSize(10).fontColor(review.conflicts.length > 0 ? Theme.danger : Theme.muted).width(80)
             Button('解析预览').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => void this.openReview(review))
           }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
@@ -357,6 +447,15 @@ export struct KnowledgeGovernance {
       } else {
         Text(this.selectedReview?.submission.title || '--').fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold)
         Text('来源：' + (this.selectedReview?.submission.sourceOrganization || '--') + ' · 版本：' + (this.selectedReview?.submission.sourceVersion || '--')).fontSize(10).fontColor(Theme.muted)
+        Text('分类：' + ((this.selectedReview as KnowledgeReview).submission.category || 'UNCLASSIFIED') +
+          ' · 适用端：' + this.scopeLabel((this.selectedReview as KnowledgeReview).submission.scopeApps) +
+          ' · 标签：' + (((this.selectedReview as KnowledgeReview).submission.tags || []).join(',') || '--')).fontSize(10).fontColor(Theme.blue)
+        Row({ space: 8 }) {
+          StateBadge({ status: this.ragReadableStatus((this.selectedReview as KnowledgeReview).submission), label: this.ragReadableLabel((this.selectedReview as KnowledgeReview).submission) })
+          Text('发布版本：' + ((this.selectedReview as KnowledgeReview).submission.publishedVersion || '--')).fontSize(10).fontColor(Theme.muted)
+          Text('索引时间：' + ((this.selectedReview as KnowledgeReview).submission.indexedAt || '--')).fontSize(10).fontColor(Theme.muted)
+          Text('失败/拒绝原因：' + ((this.selectedReview as KnowledgeReview).submission.statusReason || '--')).fontSize(10).fontColor(Theme.muted).layoutWeight(1)
+        }.width('100%')
         Row({ space: 8 }) {
           this.checkBadge('来源', this.selectedReview?.sourceVerified || false)
           this.checkBadge('单位', this.selectedReview?.unitsVerified || false)

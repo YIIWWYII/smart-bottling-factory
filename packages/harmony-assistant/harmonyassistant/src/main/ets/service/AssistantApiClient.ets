@@ -1,5 +1,6 @@
 import { http, webSocket } from '@kit.NetworkKit'
 import { BusinessError } from '@kit.BasicServicesKit'
+import { util } from '@kit.ArkTS'
 import { AssistantHostAdapter } from '../host/AssistantHostAdapter'
 import {
   AssistantApiEnvelope,
@@ -45,6 +46,8 @@ export class AssistantApiClient {
   private activeRequest: http.HttpRequest | undefined = undefined
   private socket: webSocket.WebSocket | undefined = undefined
   private streamStopped: boolean = true
+  private streamConnecting: boolean = false
+  private streamSessionId: number = 0
   private streamConversationId: string = ''
   private reconnectTimer: number = -1
   private reconnectAttempt: number = 0
@@ -131,6 +134,8 @@ export class AssistantApiClient {
 
   closeEventStream(): void {
     this.streamStopped = true
+    this.streamSessionId += 1
+    this.streamConnecting = false
     if (this.reconnectTimer >= 0) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = -1
@@ -138,7 +143,11 @@ export class AssistantApiClient {
     const currentSocket: webSocket.WebSocket | undefined = this.socket
     this.socket = undefined
     if (currentSocket !== undefined) {
-      currentSocket.close()
+      try {
+        currentSocket.close()
+      } catch (_error) {
+        // A stale socket can already be closed by the runtime; local state is already released.
+      }
     }
   }
 
@@ -193,45 +202,91 @@ export class AssistantApiClient {
   }
 
   private async openEventSocket(): Promise<void> {
-    if (this.streamStopped || this.streamConversationId.length === 0) return
+    if (this.streamStopped || this.streamConversationId.length === 0 || this.socket !== undefined || this.streamConnecting) return
+    this.streamConnecting = true
+    const currentSessionId: number = this.streamSessionId + 1
+    this.streamSessionId = currentSessionId
+    const currentConversationId: string = this.streamConversationId
     const serviceEndpoint: AssistantServiceEndpoint = this.adapter.getServiceEndpoint()
     const endpoint: string = this.normalizeEndpoint(
       serviceEndpoint.wsBaseUrl.length > 0 ? serviceEndpoint.wsBaseUrl : this.toWsEndpoint(serviceEndpoint.httpBaseUrl)
     )
-    if (endpoint.length === 0) return
+    if (endpoint.length === 0) {
+      this.handleStreamClosed(undefined, currentSessionId, currentConversationId)
+      return
+    }
     const token: string | undefined = await this.adapter.getAccessToken()
+    if (!this.isCurrentStreamAttempt(currentSessionId, currentConversationId)) return
     const headers: AssistantWsHeaders = token !== undefined && token.length > 0
       ? { 'X-Client-Type': this.adapter.sourceApp, 'Authorization': token }
       : { 'X-Client-Type': this.adapter.sourceApp }
     const socket: webSocket.WebSocket = webSocket.createWebSocket()
     this.socket = socket
     socket.on('open', () => {
+      if (!this.isCurrentStreamSocket(socket, currentSessionId, currentConversationId)) return
+      this.streamConnecting = false
       this.reconnectAttempt = 0
     })
     socket.on('message', (error: BusinessError, value: string | ArrayBuffer) => {
-      if (!error && typeof value === 'string') {
-        this.handleStreamMessage(value)
+      if (!this.isCurrentStreamSocket(socket, currentSessionId, currentConversationId)) return
+      if (!error) {
+        const payload: string = typeof value === 'string'
+          ? value
+          : util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(value))
+        this.handleStreamMessage(payload)
       }
     })
     socket.on('error', () => {
-      this.notifyStreamClosed()
+      this.handleStreamClosed(socket, currentSessionId, currentConversationId)
     })
     socket.on('close', () => {
-      this.notifyStreamClosed()
-      this.scheduleReconnect()
+      this.handleStreamClosed(socket, currentSessionId, currentConversationId)
     })
-    const url: string = endpoint + '/assistant/events?conversationId=' +
-      encodeURIComponent(this.streamConversationId) + '&afterVersion=' + this.lastAggregateVersion().toString()
+    const eventEndpoint: string = endpoint.endsWith('/assistant/events')
+      ? endpoint
+      : endpoint + '/assistant/events'
+    const url: string = eventEndpoint + '?conversationId=' +
+      encodeURIComponent(currentConversationId) + '&afterVersion=' + this.lastAggregateVersion().toString()
     const options: webSocket.WebSocketRequestOptions = {
       header: headers,
       pingInterval: 20
     }
-    socket.connect(url, options, (error: BusinessError) => {
-      if (error) {
-        this.notifyStreamClosed()
-        this.scheduleReconnect()
+    void socket.connect(url, options).then((connected: boolean) => {
+      if (!this.isCurrentStreamSocket(socket, currentSessionId, currentConversationId)) return
+      if (connected) {
+        this.streamConnecting = false
+        this.reconnectAttempt = 0
+      } else {
+        this.handleStreamClosed(socket, currentSessionId, currentConversationId)
       }
+    }).catch((_error: BusinessError) => {
+      this.handleStreamClosed(socket, currentSessionId, currentConversationId)
     })
+  }
+
+  private isCurrentStreamAttempt(sessionId: number, conversationId: string): boolean {
+    return !this.streamStopped && this.streamConnecting && this.streamSessionId === sessionId &&
+      this.streamConversationId === conversationId
+  }
+
+  private isCurrentStreamSocket(socket: webSocket.WebSocket, sessionId: number, conversationId: string): boolean {
+    return !this.streamStopped && this.socket === socket && this.streamSessionId === sessionId &&
+      this.streamConversationId === conversationId
+  }
+
+  private handleStreamClosed(
+    socket: webSocket.WebSocket | undefined,
+    sessionId: number,
+    conversationId: string
+  ): void {
+    const isCurrent: boolean = socket === undefined
+      ? this.isCurrentStreamAttempt(sessionId, conversationId)
+      : this.isCurrentStreamSocket(socket, sessionId, conversationId)
+    if (!isCurrent) return
+    this.socket = undefined
+    this.streamConnecting = false
+    this.notifyStreamClosed()
+    this.scheduleReconnect()
   }
 
   private handleStreamMessage(raw: string): void {
@@ -267,7 +322,7 @@ export class AssistantApiClient {
   }
 
   private scheduleReconnect(): void {
-    if (this.streamStopped || this.reconnectTimer >= 0) return
+    if (this.streamStopped || this.reconnectTimer >= 0 || this.socket !== undefined || this.streamConnecting) return
     const delay: number = Math.min(8000, 800 + this.reconnectAttempt * 1200)
     this.reconnectAttempt += 1
     this.reconnectTimer = setTimeout(() => {

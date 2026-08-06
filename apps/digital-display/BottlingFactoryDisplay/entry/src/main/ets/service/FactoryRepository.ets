@@ -123,6 +123,7 @@ class FactoryRepositoryImpl {
 
   closeRealtime(): void {
     this.realtime.close()
+    this.realtimeOnline = false
   }
 
   async acknowledgeAlarm(alarmId: string): Promise<void> {

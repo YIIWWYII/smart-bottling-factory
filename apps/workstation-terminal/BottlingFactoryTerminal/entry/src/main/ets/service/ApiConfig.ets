@@ -7,9 +7,9 @@ export interface ApiConfigValues {
   refreshIntervalMs: number
 }
 
-const BACKEND_HOST: string = '192.168.0.104'
+const BACKEND_HOST: string = '192.168.106.20'
 const BACKEND_PORT: string = '8088'
-const AI_CENTER_HOST: string = '192.168.0.104'
+const AI_CENTER_HOST: string = '192.168.106.20'
 const AI_CENTER_PORT: string = '8091'
 const BACKEND_API_ROOT: string = BACKEND_HOST + ':' + BACKEND_PORT + '/hdc/api'
 const AI_CENTER_API_ROOT: string = AI_CENTER_HOST + ':' + AI_CENTER_PORT + '/api'

@@ -7,7 +7,7 @@
 D:\HarmonyOS-Dev\Workspaces\bottling-display\apps\digital-display\BottlingFactoryDisplay
 ```
 
-搴旂敤閫氳繃 `entry/oh-package.json5` 渚濊禆鏈湴 `../../../../packages/harmony-assistant/harmonyassistant`锛孫HPM 鍖呭悕蹇呴』涓?`@bottling/harmony-assistant`锛岀増鏈繀椤讳负 `1.0.1`銆?
+搴旂敤閫氳繃 `entry/oh-package.json5` 渚濊禆鏈湴 `../../../../packages/harmony-assistant/harmonyassistant`锛孫HPM 鍖呭悕蹇呴』涓?`@bottling/harmony-assistant`锛岀増鏈繀椤讳负 `1.0.2`銆?
 ## 鏋勫缓
 
 ```powershell

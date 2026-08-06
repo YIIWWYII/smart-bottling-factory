@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 from typing import Any
-from urllib import error, request
+from urllib import error, parse, request
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -1778,13 +1778,19 @@ def make_citations(state: AiCenterState, context: dict[str, Any]) -> list[dict[s
 
 def fetch_backend_facts(context: dict[str, Any]) -> dict[str, Any]:
     backend_base = os.getenv("PRODUCTION_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/")
-    payload = {
-        "context": context,
-        "requestedAt": now_iso(),
-        "source": "AI_CENTER_READ_ONLY_TOOL",
+    query = {
+        "sourceApp": str(context.get("sourceApp") or "AI_CENTER"),
+        "lineId": str(context.get("lineId") or ""),
+        "stageCode": str(context.get("stageCode") or ""),
+        "deviceCode": str(context.get("deviceCode") or ""),
+        "traceCode": str(context.get("traceCode") or ""),
     }
+    query_text = parse.urlencode({key: value for key, value in query.items() if value})
     try:
-        req = build_backend_request(f"{backend_base}/ai-integration/facts", payload, context)
+        url = f"{backend_base}/ai-integration/facts"
+        if query_text:
+            url = f"{url}?{query_text}"
+        req = build_backend_request(url, None, context, "GET")
         with request.urlopen(req, timeout=0.7) as response:
             parsed = json.loads(response.read().decode("utf-8"))
             data = parsed.get("data") if isinstance(parsed, dict) and isinstance(parsed.get("data"), dict) else parsed
@@ -1803,7 +1809,7 @@ def fetch_backend_facts(context: dict[str, Any]) -> dict[str, Any]:
 def submit_command_intent_to_backend(payload: dict[str, Any], auth: dict[str, Any]) -> dict[str, Any]:
     backend_base = os.getenv("PRODUCTION_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/")
     try:
-        req = build_backend_request(f"{backend_base}/ai-integration/command-intents", payload, auth)
+        req = build_backend_request(f"{backend_base}/ai-integration/command-intents", payload, auth, "POST")
         with request.urlopen(req, timeout=2.5) as response:
             parsed = json.loads(response.read().decode("utf-8"))
             return {
@@ -1821,14 +1827,21 @@ def submit_command_intent_to_backend(payload: dict[str, Any], auth: dict[str, An
         }
 
 
-def build_backend_request(url: str, payload: dict[str, Any], subject: dict[str, Any]) -> request.Request:
+def build_backend_request(
+    url: str,
+    payload: dict[str, Any] | None,
+    subject: dict[str, Any],
+    method: str,
+) -> request.Request:
     headers = {
         "Content-Type": "application/json;charset=UTF-8",
-        "X-AI-Service-Token": os.getenv("PRODUCTION_BACKEND_SERVICE_TOKEN", "LOCAL_DEMO_AI_SERVICE"),
+        # Spring Boot validates this service credential from Authorization.
+        "Authorization": f"Bearer {os.getenv('PRODUCTION_BACKEND_SERVICE_TOKEN', 'dev-ai-service-token')}",
         "X-Subject-User": str(subject.get("authenticatedUserId") or subject.get("userId") or "unknown"),
         "X-Client-Type": str(subject.get("sourceApp") or "AI_CENTER"),
     }
-    return request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST", headers=headers)
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    return request.Request(url, data=data, method=method, headers=headers)
 
 
 def make_local_facts(context: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -40,6 +40,7 @@ function valueFromSelection(selection: AssistantSelection | undefined, fieldCode
 
 export class AdminAssistantHostAdapter implements AssistantHostAdapter {
   readonly sourceApp: AssistantSourceApp = 'ADMIN'
+  private readonly aiAccessToken: string = 'LOCAL_DEMO'
   private visibilityPublisher: AssistantVisibilityPublisher = new AssistantVisibilityPublisher()
   private contextState: AssistantHostContextState = {
     pageRoute: 'AdminConsole/DASHBOARD',
@@ -88,8 +89,8 @@ export class AdminAssistantHostAdapter implements AssistantHostAdapter {
   }
 
   async getAccessToken(): Promise<string | undefined> {
-    if (!SessionStore.isAuthenticated || SessionStore.isDemo) return undefined
-    return SessionStore.token
+    if (!SessionStore.isAuthenticated) return undefined
+    return this.aiAccessToken
   }
 
   getServiceEndpoint(): AssistantServiceEndpoint {

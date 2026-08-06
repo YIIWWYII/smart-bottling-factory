@@ -7,7 +7,7 @@
 - `FactoryOverview`：连续九工序流程，以及生产、质量、设备、异常、物流仓储和产品追踪指标。
 - `StageDetail`：上部为独立 2D 平面工艺图或 3D 设备场景，下部为设备、物料、质量门、报警和上下游影响。
 - HTTP 获取首屏完整快照，WebSocket 接收实时事件；断线或接口不可用时明确显示 `LOCAL DEMO`，不伪装真实 MQTT 数据。
-- 展板通过 `@bottling/harmony-assistant` 1.0.1 接入共享只读助手，只提供宿主上下文、稳定实体选择和只读导航。
+- 展板通过 `@bottling/harmony-assistant` 1.0.2 接入共享只读助手，只提供宿主上下文、稳定实体选择和只读导航。
 
 ## 2D 与 3D
 

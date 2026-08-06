@@ -19,7 +19,7 @@ from urllib.error import HTTPError
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_PYTHON_PACKAGES = Path(r"D:\HarmonyOS-Dev\python-packages")
 HOST = "127.0.0.1"
-PORT = int(os.getenv("AI_CENTER_SMOKE_PORT", "8091"))
+PORT = int(os.getenv("AI_CENTER_SMOKE_PORT", "18091"))
 BASE = f"http://{HOST}:{PORT}/api"
 FAKE_BACKEND_PORT = int(os.getenv("AI_CENTER_FAKE_BACKEND_PORT", "18088"))
 SMOKE_DATA_DIR = Path(r"D:\HarmonyOS-Dev\Temp\ai-center-smoke-data")
@@ -138,14 +138,8 @@ class FakeBackendState:
 
 
 class FakeBackendHandler(BaseHTTPRequestHandler):
-    def do_POST(self) -> None:
-        length = int(self.headers.get("Content-Length", "0"))
-        body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
-        try:
-            payload = json.loads(body)
-        except Exception:
-            payload = {}
-        if self.path == "/api/ai-integration/facts":
+    def do_GET(self) -> None:
+        if self.path.startswith("/api/ai-integration/facts"):
             FakeBackendState.facts_calls += 1
             self.write_json(
                 {
@@ -156,11 +150,20 @@ class FakeBackendHandler(BaseHTTPRequestHandler):
                         "source": "FAKE_PRODUCTION_BACKEND",
                         "stateVersion": 99001,
                         "dataGeneratedAt": "2026-07-30T00:00:00Z",
-                        "payloadEcho": payload,
                     },
                 }
             )
             return
+        self.send_response(404)
+        self.end_headers()
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
+        try:
+            payload = json.loads(body)
+        except Exception:
+            payload = {}
         if self.path == "/api/ai-integration/command-intents":
             FakeBackendState.command_calls += 1
             self.write_json(

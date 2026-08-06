@@ -5,16 +5,56 @@ import { SessionStore } from './SessionStore'
 import { AiCenterConfig } from './AiCenterConfig'
 import {
   AiApiEnvelope,
+  AiConfigResponse,
+  AiConnectionTestRequest,
+  AiConnectionTestResult,
   AiDecisionRecord,
+  AiItemsResponse,
+  AiModelConfig,
+  AiModelConfigUpdate,
+  AiRuntimeConfig,
   KnowledgeReview,
   KnowledgeReviewAction,
   KnowledgeSubmission,
-  KnowledgeUploadMetadata
+  KnowledgeUploadMetadata,
+  RagClassificationUpdate,
+  RagDocument,
+  RagStatus
 } from '../model/AiCenterModels'
 
 interface AiRequestHeaders {
   'Content-Type': string
+  'X-Client-Type': string
   Authorization?: string
+}
+
+interface AiConnectionTestRaw {
+  ok?: boolean
+  status?: string
+  errorCode?: string
+  message?: string
+  elapsedMs?: number
+  provider?: string
+  modelName?: string
+}
+
+interface AiTestQuestionPayload {
+  question: string
+}
+
+interface AiRuntimeConfigUpdatePayload {
+  provider: string
+  modelName: string
+  baseUrl: string
+  requestTimeoutSeconds: number
+  retryCount: number
+  streamingEnabled: boolean
+  maxTokens: number
+  temperature: number
+  knowledgeIndexEnabled: boolean
+  vectorStoreType: string
+  embeddingModel: string
+  apiKey?: string
 }
 
 export class AiCenterError extends Error {
@@ -46,7 +86,7 @@ export class AiCenterClient {
   }
 
   async listKnowledgeSubmissions(): Promise<Array<KnowledgeSubmission>> {
-    return await this.request<Array<KnowledgeSubmission>>('/knowledge/submissions')
+    return await this.requestItems<KnowledgeSubmission>('/knowledge/submissions')
   }
 
   async getKnowledgeSubmission(submissionId: string): Promise<KnowledgeSubmission> {
@@ -54,7 +94,7 @@ export class AiCenterClient {
   }
 
   async listKnowledgeReviews(): Promise<Array<KnowledgeReview>> {
-    return await this.request<Array<KnowledgeReview>>('/admin/knowledge/reviews')
+    return await this.requestItems<KnowledgeReview>('/admin/knowledge/reviews')
   }
 
   async getKnowledgeReview(reviewId: string): Promise<KnowledgeReview> {
@@ -74,7 +114,53 @@ export class AiCenterClient {
   }
 
   async listDecisions(): Promise<Array<AiDecisionRecord>> {
-    return await this.request<Array<AiDecisionRecord>>('/decisions')
+    return await this.requestItems<AiDecisionRecord>('/decisions')
+  }
+
+  async getModelConfig(): Promise<AiModelConfig> {
+    const result: AiConfigResponse = await this.request<AiConfigResponse>('/admin/ai/config')
+    return this.mapRuntimeConfig(result.config)
+  }
+
+  async updateModelConfig(payload: AiModelConfigUpdate): Promise<AiModelConfig> {
+    const result: AiConfigResponse = await this.request<AiConfigResponse>(
+      '/admin/ai/config',
+      http.RequestMethod.POST,
+      JSON.stringify(this.toRuntimeConfigPayload(payload))
+    )
+    return this.mapRuntimeConfig(result.config)
+  }
+
+  async testConnection(payload: AiConnectionTestRequest): Promise<AiConnectionTestResult> {
+    const requestBody: AiTestQuestionPayload = {
+      question: payload.question
+    }
+    const result: AiConnectionTestRaw = await this.request<AiConnectionTestRaw>(
+      '/admin/ai/config/test-question',
+      http.RequestMethod.POST,
+      JSON.stringify(requestBody)
+    )
+    return this.mapConnectionTestResult(result)
+  }
+
+  async getRagStatus(): Promise<RagStatus> {
+    return await this.request<RagStatus>('/admin/ai/rag/status')
+  }
+
+  async listRagDocuments(): Promise<Array<RagDocument>> {
+    return await this.requestItems<RagDocument>('/admin/ai/rag/documents')
+  }
+
+  async updateRagClassification(documentId: string, payload: RagClassificationUpdate): Promise<RagDocument> {
+    return await this.request<RagDocument>(
+      '/admin/ai/rag/documents/' + encodeURIComponent(documentId) + '/classification',
+      http.RequestMethod.POST,
+      JSON.stringify(payload)
+    )
+  }
+
+  async reindexRagDocuments(): Promise<Array<RagDocument>> {
+    return await this.requestItems<RagDocument>('/admin/ai/rag/reindex', http.RequestMethod.POST, '{}')
   }
 
   async uploadKnowledge(fileUri: string, fileName: string, contentType: string, metadata: KnowledgeUploadMetadata): Promise<KnowledgeSubmission> {
@@ -109,10 +195,16 @@ export class AiCenterClient {
     )
   }
 
+  private async requestItems<T>(path: string, method: http.RequestMethod = http.RequestMethod.GET, body?: string): Promise<Array<T>> {
+    const result = await this.request<Array<T> | AiItemsResponse<T>>(path, method, body)
+    if (Array.isArray(result)) return result
+    return (result as AiItemsResponse<T>).items
+  }
+
   private headers(contentType: string): AiRequestHeaders {
-    return SessionStore.token.length > 0
-      ? { 'Content-Type': contentType, 'Authorization': SessionStore.token }
-      : { 'Content-Type': contentType }
+    return SessionStore.isAuthenticated
+      ? { 'Content-Type': contentType, 'X-Client-Type': 'ADMIN', 'Authorization': 'LOCAL_DEMO' }
+      : { 'Content-Type': contentType, 'X-Client-Type': 'ADMIN' }
   }
 
   private unwrap<T>(responseCode: number, raw: string): T {
@@ -120,6 +212,10 @@ export class AiCenterClient {
       if (responseCode === 401) SessionStore.clear()
       if (responseCode === 401) throw new AiCenterError('AI 中枢鉴权已过期，请重新登录', responseCode)
       if (responseCode === 403) throw new AiCenterError('AI 中枢拒绝当前操作，请检查知识治理权限', responseCode)
+      if (responseCode === 404) throw new AiCenterError('AI 中枢配置接口未就绪，请先完成 /admin/config/model 契约实现', responseCode)
+      if (responseCode === 408) throw new AiCenterError('AI 中枢请求超时，请检查模型超时时间和网络链路', responseCode)
+      if (responseCode === 429) throw new AiCenterError('模型供应商触发速率限制，请稍后重试或更换 Key/模型', responseCode)
+      if (responseCode === 503) throw new AiCenterError('模型或 RAG 服务不可用，请检查模型地址、向量库和索引状态', responseCode)
       throw new AiCenterError('AI 中枢 HTTP ' + responseCode.toString(), responseCode)
     }
     const envelope: AiApiEnvelope<T> = JSON.parse(raw) as AiApiEnvelope<T>
@@ -127,6 +223,64 @@ export class AiCenterClient {
       throw new AiCenterError(envelope.message || 'AI 中枢返回业务错误', envelope.code)
     }
     return envelope.data
+  }
+
+  private mapRuntimeConfig(config: AiRuntimeConfig): AiModelConfig {
+    return {
+      configId: 'AI_CENTER_RUNTIME',
+      provider: config.provider,
+      modelName: config.modelName,
+      baseUrl: config.baseUrl,
+      maskedApiKey: config.apiKey,
+      requestTimeoutMs: config.requestTimeoutSeconds * 1000,
+      retryCount: config.retryCount,
+      streamEnabled: config.streamingEnabled,
+      maxTokens: config.maxTokens,
+      temperature: config.temperature,
+      ragEnabled: config.knowledgeIndexEnabled,
+      vectorStore: config.vectorStoreType + (config.vectorStoreUrl.length > 0 ? ' @ ' + config.vectorStoreUrl : ''),
+      embeddingModel: config.embeddingModel,
+      knowledgeVersion: 'AI_CENTER_RAG',
+      status: config.knowledgeIndexEnabled ? 'READY' : 'RAG_DISABLED',
+      updatedBy: 'AI_CENTER',
+      updatedAt: new Date().toISOString()
+    }
+  }
+
+  private toRuntimeConfigPayload(payload: AiModelConfigUpdate): AiRuntimeConfigUpdatePayload {
+    const result: AiRuntimeConfigUpdatePayload = {
+      provider: payload.provider,
+      modelName: payload.modelName,
+      baseUrl: payload.baseUrl,
+      requestTimeoutSeconds: Math.max(3, Math.floor(payload.requestTimeoutMs / 1000)),
+      retryCount: payload.retryCount,
+      streamingEnabled: payload.streamEnabled,
+      maxTokens: payload.maxTokens,
+      temperature: payload.temperature,
+      knowledgeIndexEnabled: payload.ragEnabled,
+      vectorStoreType: payload.vectorStore,
+      embeddingModel: payload.embeddingModel
+    }
+    if (payload.apiKey !== undefined && payload.apiKey.length > 0) {
+      result.apiKey = payload.apiKey
+    }
+    return result
+  }
+
+  private mapConnectionTestResult(result: AiConnectionTestRaw): AiConnectionTestResult {
+    const ok: boolean = result.ok === true
+    return {
+      success: ok,
+      status: String(result.status || (ok ? 'READY' : 'FAILED')),
+      errorType: String(result.errorCode || ''),
+      message: String(result.message || ''),
+      latencyMs: Number(result.elapsedMs || 0),
+      provider: String(result.provider || ''),
+      modelName: String(result.modelName || ''),
+      ragReady: ok,
+      knowledgeVersion: 'AI_CENTER_RAG',
+      occurredAt: new Date().toISOString()
+    }
   }
 
   private buildMultipartBody(
@@ -164,4 +318,3 @@ export class AiCenterClient {
 }
 
 export const aiCenterClient = new AiCenterClient()
-

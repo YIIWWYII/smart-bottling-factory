@@ -20,6 +20,7 @@ import { SessionStore } from './SessionStore'
 
 export class WorkstationAssistantHostAdapter implements AssistantHostAdapter {
   readonly sourceApp: AssistantSourceApp = 'WORKSTATION'
+  private readonly aiAccessToken: string = 'WORKSTATION_DEMO'
   private selectionPublisher: AssistantSelectionPublisher
   private visibilityPublisher: AssistantVisibilityPublisher
   private getStageCode: () => string
@@ -74,7 +75,8 @@ export class WorkstationAssistantHostAdapter implements AssistantHostAdapter {
   }
 
   async getAccessToken(): Promise<string | undefined> {
-    return SessionStore.isAuthenticated ? SessionStore.token : undefined
+    // 工位端的只读助手使用终端客户端令牌；操作员会话只决定控制区权限。
+    return this.aiAccessToken
   }
 
   getServiceEndpoint(): AssistantServiceEndpoint {
