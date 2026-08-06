@@ -166,7 +166,7 @@ struct FactoryOverview {
   }
 
   private selectKpi(kpiCode: string, label: string, value: string): void {
-    displayAssistantHost.publishSelection(AssistantEntityType.KPI, 'LINE-1:' + kpiCode, label, 'ARKUI', [
+    displayAssistantHost.publishSelection(AssistantEntityType.KPI, 'LINE-01:' + kpiCode, label, 'ARKUI', [
       { code: 'value', label: '当前值', displayValue: value },
       { code: 'source', label: '来源', displayValue: this.bundle.source }
     ])

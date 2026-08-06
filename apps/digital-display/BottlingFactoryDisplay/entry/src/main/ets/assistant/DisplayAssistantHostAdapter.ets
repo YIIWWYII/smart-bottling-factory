@@ -29,7 +29,7 @@ interface DisplayAssistantPageState {
   dataGeneratedAt: string
 }
 
-const DEFAULT_LINE_ID: string = 'LINE-1'
+const DEFAULT_LINE_ID: string = 'LINE-01'
 
 export class DisplayAssistantHostAdapter implements AssistantHostAdapter {
   readonly sourceApp: AssistantSourceApp = 'DISPLAY'

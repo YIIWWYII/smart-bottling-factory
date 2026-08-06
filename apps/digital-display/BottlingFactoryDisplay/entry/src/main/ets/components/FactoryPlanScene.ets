@@ -3,15 +3,16 @@ import { BusinessError } from '@kit.BasicServicesKit'
 import { Theme } from '../common/Theme'
 
 @Component
-export struct FactoryThreeScene {
+export struct FactoryPlanScene {
   @Prop payload: string = '{}'
-  @Prop viewMode: string = 'THREE'
-  @Prop caption: string = '本地 Three.js 场景'
-  @Prop heightValue: number = 360
-  @Prop selectionSource: string = 'THREE_3D'
+  @Prop caption: string = 'Local Three.js 2D plan'
+  @Prop heightValue: number = 300
+  @Prop selectionSource: string = 'THREE_2D'
   @Link selectedDeviceCode: string
   @Link selectedTraceCode: string
   @State webReady: boolean = false
+  onStageSelected: (stageCode: string, source: string) => void =
+    (stageCode: string, source: string): void => {}
   onDeviceSelected: (deviceCode: string, source: string) => void =
     (deviceCode: string, source: string): void => {}
   onProductSelected: (traceCode: string, source: string) => void =
@@ -29,16 +30,16 @@ export struct FactoryThreeScene {
     if (this.syncTimer >= 0) clearInterval(this.syncTimer)
     this.syncTimer = -1
     if (this.webReady) {
-      this.controller.runJavaScript('window.FactoryScene && window.FactoryScene.dispose && window.FactoryScene.dispose()')
-        .catch((error: BusinessError) => console.error(`Factory scene dispose failed: ${error.code} ${error.message}`))
+      this.controller.runJavaScript('window.FactoryPlan && window.FactoryPlan.dispose && window.FactoryPlan.dispose()')
+        .catch((error: BusinessError) => console.error(`Factory 2D dispose failed: ${error.code} ${error.message}`))
     }
   }
 
   private pushPayload(): void {
     if (!this.webReady) return
-    const script = `window.FactoryScene && window.FactoryScene.update(Object.assign({}, ${this.payload}, { viewMode: '${this.viewMode}' }))`
+    const script: string = `window.FactoryPlan && window.FactoryPlan.update(${this.payload})`
     this.controller.runJavaScript(script)
-      .catch((error: BusinessError) => console.error(`Factory 3D sync failed: ${error.code} ${error.message}`))
+      .catch((error: BusinessError) => console.error(`Factory 2D sync failed: ${error.code} ${error.message}`))
   }
 
   private decodeRouteValue(url: string, prefix: string): string {
@@ -47,7 +48,7 @@ export struct FactoryThreeScene {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      Web({ src: $rawfile('factory3d/index.html'), controller: this.controller })
+      Web({ src: $rawfile('factory2d/index.html'), controller: this.controller })
         .javaScriptAccess(true)
         .domStorageAccess(true)
         .fileAccess(true)
@@ -58,6 +59,7 @@ export struct FactoryThreeScene {
         .onLoadIntercept((event) => {
           if (event === undefined) return false
           const url: string = event.data.getRequestUrl()
+          const stagePrefix: string = 'factory://stage/'
           const devicePrefix: string = 'factory://device/'
           const productPrefix: string = 'factory://product/'
           const clearUrl: string = 'factory://clear'
@@ -65,6 +67,10 @@ export struct FactoryThreeScene {
             this.selectedDeviceCode = ''
             this.selectedTraceCode = ''
             this.onSelectionCleared(this.selectionSource)
+            return true
+          }
+          if (url.indexOf(stagePrefix) === 0) {
+            this.onStageSelected(this.decodeRouteValue(url, stagePrefix), this.selectionSource)
             return true
           }
           if (url.indexOf(devicePrefix) === 0) {
@@ -86,7 +92,7 @@ export struct FactoryThreeScene {
       if (!this.webReady) {
         Column({ space: 8 }) {
           LoadingProgress().width(28).height(28).color(Theme.accent)
-          Text('正在初始化' + this.caption).fontSize(10).fontColor(Theme.muted)
+          Text('Loading ' + this.caption).fontSize(10).fontColor(Theme.muted)
         }
         .width('100%')
         .height(this.heightValue)
