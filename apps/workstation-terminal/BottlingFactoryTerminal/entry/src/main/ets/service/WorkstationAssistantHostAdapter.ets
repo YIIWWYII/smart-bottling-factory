@@ -1,4 +1,3 @@
-import { router } from '@kit.ArkUI'
 import {
   AssistantContext,
   AssistantEntityRef,
@@ -14,7 +13,7 @@ import {
   AssistantVisibilityPublisher
 } from '@bottling/harmony-assistant'
 import { controlsForStage, ParameterControlDefinition } from '../config/WorkstationControls'
-import { AlarmRecord, FactoryIncident, SensorReading } from '../model/FactoryModels'
+import { AlarmRecord, FactoryIncident, FactoryRun, RuntimeDevice, SensorReading } from '../model/FactoryModels'
 import { ApiConfig } from './ApiConfig'
 import { FactoryRepository } from './FactoryRepository'
 import { SessionStore } from './SessionStore'
@@ -53,21 +52,22 @@ export class WorkstationAssistantHostAdapter implements AssistantHostAdapter {
   async getContext(): Promise<AssistantContext> {
     const deviceCode: string = this.getDeviceCode()
     const traceCode: string = this.getTraceCode()
+    const stageCode: string = this.getStageCode()
     const context: AssistantContext = {
       contextVersion: 1,
       sourceApp: this.sourceApp,
-      pageRoute: this.pageRoute(this.getStageCode()),
+      pageRoute: this.pageRoute(stageCode),
       capturedAt: new Date().toISOString(),
       lineId: FactoryRepository.stageSnapshot.lineId || 'LINE-01',
-      stageCode: this.getStageCode(),
+      stageCode: stageCode,
       stateVersion: FactoryRepository.stageSnapshot.stateVersion,
       dataGeneratedAt: FactoryRepository.stageSnapshot.generatedAt,
       userRoleHint: this.currentUserRole()
     }
-    if (deviceCode.length > 0) {
+    if (deviceCode.length > 0 && this.isCurrentStageDevice(deviceCode)) {
       context.deviceCode = deviceCode
     }
-    if (traceCode.length > 0) {
+    if (traceCode.length > 0 && this.isCurrentStageProduct(traceCode)) {
       context.traceCode = traceCode
     }
     return context
@@ -94,15 +94,23 @@ export class WorkstationAssistantHostAdapter implements AssistantHostAdapter {
 
   async navigateToEntity(entity: AssistantEntityRef): Promise<AssistantNavigationResult> {
     if (entity.entityType === AssistantEntityType.STAGE) {
-      this.clearSelection()
-      router.replaceUrl({ url: 'pages/StageDetail', params: { stageCode: entity.entityId } })
-      return { handled: true }
+      if (entity.entityId === this.getStageCode()) {
+        this.clearSelection()
+        return { handled: true }
+      }
+      return { handled: false, reason: '工位端拒绝跨工位引用导航' }
     }
     if (entity.entityType === AssistantEntityType.DEVICE) {
+      if (!this.isCurrentStageDevice(entity.entityId)) {
+        return { handled: false, reason: '当前工位未绑定该设备' }
+      }
       this.selectDevice(entity.entityId)
       return { handled: true }
     }
     if (entity.entityType === AssistantEntityType.PRODUCT) {
+      if (!this.isCurrentStageProduct(entity.entityId)) {
+        return { handled: false, reason: '当前工位未处理该产品' }
+      }
       this.selectProduct(entity.entityId)
       return { handled: true }
     }
@@ -134,6 +142,16 @@ export class WorkstationAssistantHostAdapter implements AssistantHostAdapter {
     return 'pages/StageDetail?stageCode=' + stageCode
   }
 
+  private isCurrentStageDevice(deviceCode: string): boolean {
+    return FactoryRepository.stageSnapshot.devices.some((item: RuntimeDevice) =>
+      item.deviceCode === deviceCode && item.stageCode === this.getStageCode())
+  }
+
+  private isCurrentStageProduct(traceCode: string): boolean {
+    return FactoryRepository.stageSnapshot.products.some((item: FactoryRun) =>
+      item.traceCode === traceCode && (item.currentStage === this.getStageCode() || item.stageCode === this.getStageCode()))
+  }
+
   private navigateToSensor(readingId: string): boolean {
     const reading = FactoryRepository.stageSnapshot.sensors.find((item: SensorReading) => item.readingId === readingId)
     if (reading !== undefined && reading.deviceCode.length > 0) {
@@ -146,7 +164,11 @@ export class WorkstationAssistantHostAdapter implements AssistantHostAdapter {
   private navigateToParameter(parameterId: string): boolean {
     const separator: number = parameterId.indexOf(':')
     if (separator > 0) {
-      this.selectDevice(parameterId.substring(0, separator))
+      const deviceCode: string = parameterId.substring(0, separator)
+      if (!this.isCurrentStageDevice(deviceCode)) {
+        return false
+      }
+      this.selectDevice(deviceCode)
       return true
     }
     const control = controlsForStage(this.getStageCode()).parameters.find((item: ParameterControlDefinition) =>
