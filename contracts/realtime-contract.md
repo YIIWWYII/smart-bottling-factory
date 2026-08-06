@@ -44,7 +44,7 @@
 }
 ```
 
-问答流式事件使用相同聚合信封，其中 `aggregateType` 为 `AI_CONVERSATION`、`aggregateId` 为会话 ID；每个增量必须带单调递增的 `aggregateVersion`，客户端断线后通过 HTTP 获取完整消息，不依赖重放全部增量。
+问答流式事件使用相同聚合信封，其中 `aggregateType` 为 `AI_CONVERSATION`、`aggregateId` 为会话 ID；`payload` 必须带 `messageId/requestId/status/sequence`。同一消息的 `sequence` 单调递增，客户端按 `eventId` 去重并按 `sequence` 组装。断线后共享包通过 HTTP 获取完整消息，不依赖重放全部增量。
 
 | 类型 | 消费端 | 处理 |
 | --- | --- | --- |
@@ -64,7 +64,11 @@
 | `simulation.changed` | 三前端、AI 工具 | 更新中央模拟场景、时钟、运行状态和来源 |
 | `ai.vision.changed` | 三前端按范围 | 更新瓶型、缺陷、置信度和视觉证据摘要 |
 | `ai.decision.changed` | 三前端按范围 | 更新 RAG、实时校验、字段补丁、人工锁和执行状态 |
-| `ai.conversation.delta` | 发起问询的前端 | 流式回答片段、实时数据时间、引用和完成/失败状态 |
+| `ai.conversation.started` | 共享助手包 | 建立 `messageId`、请求关联和初始状态 |
+| `ai.conversation.delta` | 共享助手包 | 按 `sequence` 追加回答片段，不携带命令副作用 |
+| `ai.conversation.completed` | 共享助手包 | 返回最终回答、事实时间/版本、知识版本和引用 |
+| `ai.conversation.failed` | 共享助手包 | 返回稳定错误码、可重试标记和已生成片段处理方式 |
+| `ai.conversation.stopped` | 共享助手包 | 确认取消请求后的最终 `STOPPED` 状态 |
 | `knowledge.submission.changed` | 管理 | 更新处理、待审核、批准或拒绝状态 |
 | `knowledge.index.changed` | 管理 | 更新正式入库、向量化、索引或撤销状态 |
 
@@ -78,3 +82,4 @@
 6. 产线事件至少携带 `lineId` 和 `stateVersion`，工位事件还要携带 `stageCode`；问答/知识事件携带聚合 ID 和聚合版本。客户端只应用比当前版本新的事件。
 7. 同一业务变化可以触发多个主题，但后端必须使用稳定 `eventId`/关联号，客户端不得重复累计 KPI。
 8. 生产事件由 Spring Boot 发布，AI 事件由 AI 中枢发布；二者通过 `correlationId/decisionId/commandId` 关联，不混用数据库或伪造对方状态。
+9. 三个宿主 App 不直接解析 `ai.conversation.*`；统一由共享助手包处理状态机、停止/重试、断线补偿和引用。

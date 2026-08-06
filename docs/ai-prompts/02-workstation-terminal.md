@@ -1,6 +1,6 @@
 # 小屏工位终端补救开发对话提示词
 
-你负责鸿蒙小屏工位终端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-terminal`，分支是 `codex/terminal`，唯一业务写入范围是 `apps/workstation-terminal/BottlingFactoryTerminal`。不要修改数字展板、后台管理、生产后端或 AI 中枢。
+你负责鸿蒙小屏工位终端。工作区是 `D:\HarmonyOS-Dev\Workspaces\bottling-terminal`，分支是 `codex/terminal`，唯一业务写入范围是 `apps/workstation-terminal/BottlingFactoryTerminal`。不要修改数字展板、后台管理、生产后端、AI 中枢或 `packages/harmony-assistant`。
 
 ## 当前阶段
 
@@ -8,7 +8,7 @@
 
 ## 先做
 
-先 `git fetch origin`、`git pull --ff-only origin codex/terminal`，再阅读 GitHub 最新架构分支的 README、`contracts/`、开发标准、测试规范和本工程 README；核对 Git 状态。必须调用 `$deveco-cli`，会话可见时优先使用官方 `deveco-cli` MCP；所有 SDK、缓存、构建和日志留在 D 盘。Three.js 独立测试入口调用 `$playwright`，但仍须模拟器复测；仅在 CLI 无法完成 Test Runner/模拟器 UI 时调用 `$computer-use:computer-use`。遇错执行“本地开发日志、CLI 本地文档、华为官方文档”的顺序。
+先检查 Git 状态并保护已有改动；工作树干净时再 `git fetch origin`、`git pull --ff-only origin codex/terminal`。阅读 GitHub 最新架构分支的 README、全部 `contracts/`，重点阅读 `assistant-host-contract.md`、开发标准、测试规范和本工程 README。必须调用 `$deveco-cli`，会话可见时优先使用官方 `deveco-cli` MCP；所有 SDK、缓存、构建和日志留在 D 盘。Three.js 独立测试入口调用 `$playwright`，但仍须模拟器复测；仅在 CLI 无法完成 Test Runner/模拟器 UI 时调用 `$computer-use:computer-use`。遇错执行“本地开发日志、CLI 本地文档、华为官方文档”的顺序。
 
 ## 目标
 
@@ -22,11 +22,19 @@
 
 ## 上下文 AI 助手
 
-在当前工位页面提供原生 ArkUI 助手，默认携带本站 `stageCode/stateVersion`。支持自由问询，以及选中文字、传感器、参数卡片、报警、在制品和 Three.js 设备/物料后“问 AI”。回答范围默认限制本站，必须区分实时数据与文档知识并显示时间/引用。助手只能解释、排查和给建议；即使用户输入“把流量改为 120”，也不能直接调用控制接口，正式调参仍走页面控制区、二次确认和后端安全门。
+不要开发助手 UI、AI ApiClient、会话存储或流式状态机。依赖 AI 中枢任务提供的同一 `@bottling/harmony-assistant` HAR，只完成以下宿主工作：
+
+- 在当前工位状态区挂载共享 `AssistantPanel`，控制区仍是独立业务页面；页面销毁时释放 `AssistantController`。
+- 实现 `AssistantHostAdapter`：`sourceApp='WORKSTATION'`；`getContext()` 每次返回绑定工位、`lineId/stageCode/stateVersion/dataGeneratedAt`；`getAccessToken()` 返回当前短期操作员/只读客户端令牌；从配置提供服务端点；实现选择、可见性订阅和本站只读引用导航。
+- 传感器、参数、报警、在制品、文字和 ArkUI 卡片使用稳定业务 ID。参数 ID 必须为 `deviceCode:parameterCode`，产品使用 `traceCode`。
+- Three.js 2D/3D 只上报稳定 `deviceCode/traceCode`，不能上报 `uuid/name` 或任意序列化对象。
+- 助手只能解释、排查和给建议。用户输入“把流量改为 120”时，共享助手不得创建命令；正式调参仍走控制区、人工锁、二次确认、后端安全门和 ACK。
+
+共享包统一负责自由/选中问询、会话、流式回答、停止/重试、引用、数据时间、错误和权限反馈。本站范围最终由 AI 中枢按真实令牌再次校验。
 
 ## 补救顺序
 
-1. 先确认当前环节完整展示位于控制区之前，并与展板使用同一 `StageSnapshot/stateVersion`。
+1. 先确认当前环节完整展示位于控制区之前，并与展板使用同一 `StageSnapshot/stateVersion`；按 `assistant-host-contract.md` 接入唯一共享助手包。
 2. 按 `control-security-contract.md` 补客户端身份、未登录只读、操作员登录、token 过期降级和 VIEWER/OPERATOR/ENGINEER/ADMIN 权限。
 3. 逐工位核对设备能力与控制项；删除虚构通用参数。安全阈值只读，小屏只提交批准范围内的运行设定值。
 4. 按 `ai-decision-contract.md` 补字段级人工覆盖：修改后创建锁、按权限释放、显示 AI 跳过原因，版本冲突时要求刷新而不是覆盖。
@@ -39,7 +47,8 @@
 - 不直接连接 MQTT，不绕过后端控制硬件，不把 HTTP 200 当执行成功。
 - 不伪造控制成功，不隐藏失败和联锁原因。
 - 不把 AI 问答转成命令，不允许助手解除 `MANUAL_HOLD` 或安全锁。
+- 不复制共享助手源码，不实现本地聊天 UI，不直接调用 `/assistant/**` 或解析 `ai.conversation.*`。
 
 ## 验收与交付
 
-满足小屏 P0，对九工位分别做参数/控制矩阵测试。按 `TESTING_TOOLCHAIN.md` 补 Local Test、Test Kit/模拟器和 Three.js 证据；使用构建目录 `D:\HarmonyOS-Dev\Build\BottlingFactoryTerminal`，验证 HAP、当前环节优先、2D/3D 非空且同版本、数据断线、身份权限和完整命令状态机。提交并推送 `codex/terminal`，报告提交号、测试命令与计数、截图/日志、风险和契约提案，不推 `main`。
+满足小屏 P0，对九工位分别做参数/控制矩阵测试。按 `TESTING_TOOLCHAIN.md` 补 Local Test、Test Kit/模拟器和 Three.js 证据；使用构建目录 `D:\HarmonyOS-Dev\Build\BottlingFactoryTerminal`，验证 HAP、当前环节优先、2D/3D 非空且同版本、数据断线、身份权限和完整命令状态机。另须证明使用统一助手包版本、适配器七项能力、稳定实体 ID、控制语言无命令副作用。提交并推送 `codex/terminal`，报告提交号、测试命令与计数、截图/日志、风险和契约提案，不推 `main`。

@@ -69,11 +69,11 @@
 
 ## 助手上下文
 
-三个前端调用 AI 助手时发送统一 `AssistantContext`，至少包含：
+三个前端通过共享包调用 AI 助手时发送统一 `AssistantContext`，字段和适配器签名以 `assistant-host-contract.md` 为准，至少包含：
 
 - `sourceApp`：`DISPLAY`、`WORKSTATION`、`ADMIN`。
 - `pageRoute`、`lineId`、可选 `stageCode/deviceCode/traceCode`。
-- `stateVersion`、`selectedEntityType`、`selectedEntityId`、`selectedText`。
-- `userRole` 和短期身份令牌；AI 中枢必须再次校验，不能只信任前端字段。
+- `stateVersion`、`dataGeneratedAt` 和可选 `AssistantSelection`。
+- `userRoleHint` 只作显示提示。短期令牌由 `getAccessToken()` 提供，只能进入 `Authorization` 请求头，绝不能进入上下文或消息正文；AI 中枢必须再次校验身份和实体范围。
 
-选中问询可来自 ArkUI 文字、列表行、参数卡片，也可由 Three.js 通过 JS Bridge 上报设备或物料对象。若 `stateVersion` 已过期，AI 中枢先通过生产后端获取最新快照，再回答并标注数据时间。
+选中问询可来自 ArkUI 文字、列表行、参数卡片，也可由 Three.js 通过 JS Bridge 上报设备或物料稳定 ID。若 `stateVersion` 已过期，AI 中枢先通过生产后端获取最新快照，再回答并标注实际数据时间和版本。

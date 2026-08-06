@@ -1,6 +1,6 @@
 # 测试工具链与证据标准
 
-本项目不把“能够编译”当作“功能通过”。三个鸿蒙 App、ArkWeb/Three.js、Spring Boot 生产后端和独立 AI 中枢必须分层测试，最后做全链路联调。
+本项目不把“能够编译”当作“功能通过”。共享鸿蒙助手 HAR、三个鸿蒙 App、ArkWeb/Three.js、Spring Boot 生产后端和独立 AI 中枢必须分层测试，最后做全链路联调。
 
 ## 已确认的本机工具
 
@@ -69,6 +69,28 @@ $hdc = 'D:\HarmonyOS-Dev\DevEco-Studio\IDE\DevEco Studio\sdk\default\openharmony
 
 优先调用 `$deveco-cli` 的 `run`/`log`。只有测试运行器、模拟器窗口或 Web 调试面板必须操作 UI 时才调用 Computer Use。
 
+## 共享助手包测试
+
+`packages/harmony-assistant/` 由 AI 中枢任务维护，但必须作为独立 ArkTS HAR 测试后再供三端使用。
+
+- 构建产物存在且 OHPM 包名为 `@bottling/harmony-assistant`；交付包版本、HAR 路径和 SHA-256。
+- 导出面至少包含 `AssistantPanel`、`AssistantController`、`AssistantHostAdapter`、`AssistantContext`、`AssistantSelection`、`AssistantEntityRef`、`AssistantServiceEndpoint` 和 `AssistantPanelOptions`。
+- 使用 DISPLAY、WORKSTATION、ADMIN 三个模拟适配器执行 Local Test 与 ArkUI 组件测试，验证挂载、打开/关闭、释放、选择/清除、可见性和引用导航。
+- 状态机覆盖 `IDLE/SENDING/STREAMING/COMPLETED/FAILED/STOPPED`，同一会话只允许一个活动回答；停止请求服务端取消，重试生成新请求 ID 并重新读取上下文和令牌。
+- WebSocket 丢包/断线后通过 HTTP 补取最终消息，不拼接猜测的增量；网络、限流、无权限、token 过期和引用失败均有明确状态。
+- token 只进入 `Authorization`，测试日志、消息、本地存储和完整上下文中均不得出现；共享包不得持久化敏感选择字段。
+- 静态依赖和行为测试证明包不导出、不调用设备命令、命令意图、人工锁释放、知识审核或生产状态写入能力。
+
+## 宿主适配器契约测试
+
+三个 App 使用同一组契约测试夹具，分别验证其 `AssistantHostAdapter`：
+
+- `sourceApp` 编译期固定；每次发送/重试都重新采集当前路由、`stateVersion/dataGeneratedAt` 和短期令牌。
+- 页面切换或实体消失时发送 `CLEAR`；隐藏/恢复通过 `subscribeVisibility()` 通知并正确释放高频 UI 资源。
+- ArkUI 与 Three.js 2D/3D 均映射为稳定业务 `entityType/entityId`。设备用 `deviceCode`、产品用 `traceCode`，禁止列表下标、组件 ID、Three.js `uuid/name` 或临时 UUID。
+- `navigateToEntity()` 只执行只读定位，越权/缺失实体返回 `handled=false`；不得注入控制函数。
+- App 中不存在本地聊天 UI、独立 AI ApiClient、流式状态机、`/assistant/**` 直连或 `ai.conversation.*` 解析。
+
 ## 各前端最低测试集
 
 ### 数字展板
@@ -77,7 +99,7 @@ $hdc = 'D:\HarmonyOS-Dev\DevEco-Studio\IDE\DevEco Studio\sdk\default\openharmony
 - 2D/3D 均非空、模式不同、同快照联动；暂停、恢复、开关、着色、拖拽、设备/物料详情有效。
 - HTTP 首屏、WebSocket 增量、版本跳跃补拉、断线重连和 `LOCAL DEMO` 标识有效。
 - 空数组、缺字段、未知状态、后端 5xx 和超时不崩溃，不显示假成功。
-- 助手自由问询和选中工位/KPI/报警/文字/Three.js 实体问询有效，只读权限正确。
+- 共享助手自由问询和选中工位/KPI/报警/文字/Three.js 实体问询有效，只读权限正确；通过展板宿主适配器契约测试。
 
 ### 小屏终端
 
@@ -86,7 +108,7 @@ $hdc = 'D:\HarmonyOS-Dev\DevEco-Studio\IDE\DevEco Studio\sdk\default\openharmony
 - 九工位能力矩阵不同；单位、范围、步长、联锁和禁用原因来自后端能力。
 - 命令从 `PENDING` 到 `ACKNOWLEDGED/FAILED/TIMEOUT/CANCELLED`，HTTP 受理不显示执行成功。
 - 额外执行数字展板同等的 ArkWeb/Three.js 验证。
-- 助手自由/选中问询默认限定本站；控制语言不会创建命令或解除人工锁。
+- 共享助手自由/选中问询默认限定本站；控制语言不会创建命令或解除人工锁；通过工位宿主适配器契约测试。
 
 ### 后台管理
 
@@ -96,7 +118,7 @@ $hdc = 'D:\HarmonyOS-Dev\DevEco-Studio\IDE\DevEco Studio\sdk\default\openharmony
 - 配方、阈值、生产任务、异常、物流仓储、AI、知识审核与操作审计写操作有确认、失败反馈和审计号。
 - 知识审核覆盖批准、拒绝、撤销、提交人不可自审、冲突提示和索引失败；批准前资料不得用于 RAG。
 - Playwright 仅用于后端 Swagger/辅助 Web 页面，不得替代 ArkUI 模拟器测试。
-- 助手支持表格行、审计、配置、报警、设备、产品和知识资料的选中问询，RBAC 与来源引用正确。
+- 共享助手支持表格行、审计、配置、报警、设备、产品和知识资料的选中问询，RBAC 与来源引用正确；通过后台宿主适配器契约测试。
 
 ## AI 中枢测试
 
@@ -106,6 +128,8 @@ $hdc = 'D:\HarmonyOS-Dev\DevEco-Studio\IDE\DevEco Studio\sdk\default\openharmony
 - 控制类自然语言不会创建命令；隐式决策字段补丁、人工锁、参数竞态、原子组和最终 ACK 通过。
 - 资料覆盖上传、重复、解析、待审核、拒绝、批准、索引失败、`INDEXED`、撤销；审核前与撤销后不可检索。
 - 架构测试确认 AI 中枢不使用生产数据库凭据，不直接连接设备 MQTT 控制主题。
+- 助手服务取消/重试、HTTP 最终状态补取和 `ai.conversation.*` 事件与共享包状态机一致；所有请求基于真实令牌重新鉴权。
+- 安全测试确认自由问询、选择问询、提示注入和伪造实体均不能创建 `DeviceCommand`、`command-intent`、释放人工锁、审批知识或改变生产状态。
 
 ## 后端测试
 
@@ -121,7 +145,7 @@ mvn -DskipTests package
 
 ## 融合证据
 
-每个开发对话交付：提交号、测试命令、成功/失败计数、HAP/JAR/AI 产物路径、截图日志、未通过项和复现步骤。融合必须同时安装三个 HAP，启动后端与 AI 中枢，用同一中央模拟核对生产版本、视觉/决策、人工锁、三端问答和知识状态；任一 P0 失败不得合入 `main`。
+每个开发对话交付：提交号、测试命令、成功/失败计数、HAP/HAR/JAR/AI 产物路径、截图日志、未通过项和复现步骤。融合必须先构建共享 HAR，再同时构建并安装三个 HAP，核对三个 HAP 使用相同包版本和 HAR SHA-256；启动后端与 AI 中枢，用同一中央模拟核对生产版本、视觉/决策、人工锁、三端问答、停止/重试/断线、稳定实体 ID 和知识状态。任一 P0 失败不得合入 `main`。
 
 ## 官方依据
 

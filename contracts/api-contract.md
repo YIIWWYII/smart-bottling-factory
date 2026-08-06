@@ -77,6 +77,8 @@
 | GET/POST | `/assistant/conversations` | 三前端 | 会话列表和新建会话，携带统一 `AssistantContext` |
 | GET | `/assistant/conversations/{id}/messages` | 三前端 | 历史消息、实时数据时间、知识引用和状态 |
 | POST | `/assistant/conversations/{id}/messages` | 三前端 | 自由问询或选中问询；文本不能直接触发命令 |
+| POST | `/assistant/messages/{messageId}/cancel` | 共享助手包 | 停止当前生成；幂等返回 `STOPPED` 或已有最终状态 |
+| POST | `/assistant/messages/{messageId}/retry` | 共享助手包 | 基于新请求 ID 和重新采集的上下文重试，不复用旧权限/版本 |
 | POST | `/knowledge/submissions` | 后台管理 | `multipart/form-data` 上传文件和来源元数据，创建审核任务 |
 | GET | `/knowledge/submissions[/{id}]` | 后台管理 | 处理、审核、入库和索引状态 |
 | GET | `/admin/knowledge/reviews` | 管理 | 待审核队列、冲突和解析状态 |
@@ -96,6 +98,8 @@
 | POST | `/auth/introspect` | AI 中枢 | 校验三端用户令牌和权限；生产环境也可使用共享 JWT 公钥 |
 
 目标快照字段遵循 `shared-snapshot-contract.md`，控制权限与命令遵循 `control-security-contract.md`，AI 与资料流程分别遵循 `ai-decision-contract.md` 和 `knowledge-governance-contract.md`。AI 中枢和生产后端必须使用独立客户端、配置、数据库和部署进程；若旧组合接口暂时承载同等数据，必须记录迁移和废弃计划。
+
+助手端点只由 `@bottling/harmony-assistant` 调用，三个宿主 App 不分别实现客户端。发送、取消和重试都携带幂等请求 ID；令牌只放 `Authorization`，`sourceApp` 和 `userRoleHint` 不能替代服务端鉴权。问答端点没有设备命令副作用。
 
 ## 写操作标准
 
