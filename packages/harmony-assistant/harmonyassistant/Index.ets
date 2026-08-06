@@ -6,12 +6,14 @@ export {
   AssistantEntityRef,
   AssistantEntityType,
   AssistantMessageView,
+  AssistantConversationMessagesResult,
   AssistantNavigationResult,
   AssistantPanelOptions,
   AssistantQuestionType,
   AssistantSelection,
   AssistantSelectionSource,
   AssistantServiceEndpoint,
+  AssistantStreamEvent,
   AssistantSourceApp,
   AssistantSubscription,
   AssistantUiStatus,
@@ -27,6 +29,10 @@ export {
   createEntityRef,
   createSelection
 } from './src/main/ets/host/AssistantHostAdapter'
-export { AssistantApiError } from './src/main/ets/service/AssistantApiClient'
+export {
+  AssistantApiError,
+  AssistantStreamClosedListener,
+  AssistantStreamListener
+} from './src/main/ets/service/AssistantApiClient'
 export { AssistantController } from './src/main/ets/controller/AssistantController'
 export { AssistantDock, AssistantPanel } from './src/main/ets/components/AssistantPanel'
