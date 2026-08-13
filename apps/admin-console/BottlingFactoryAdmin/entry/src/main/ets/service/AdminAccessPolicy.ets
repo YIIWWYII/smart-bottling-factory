@@ -7,6 +7,8 @@ export const PERMISSION_INCIDENT_DISPOSE: string = 'INCIDENT_DISPOSE'
 export const PERMISSION_THRESHOLD_MANAGE: string = 'THRESHOLD_MANAGE'
 export const PERMISSION_SYSTEM_MANAGE: string = 'SYSTEM_MANAGE'
 export const PERMISSION_USER_MANAGE: string = 'USER_MANAGE'
+export const PERMISSION_KNOWLEDGE_SUBMIT: string = 'KNOWLEDGE_SUBMIT'
+export const PERMISSION_KNOWLEDGE_REVIEW: string = 'KNOWLEDGE_REVIEW'
 
 export function isKnownRole(role: string): boolean {
   return role === ROLE_VIEWER || role === ROLE_OPERATOR || role === ROLE_ENGINEER || role === ROLE_ADMIN
@@ -30,6 +32,8 @@ export function hasPermission(role: string, permission: string): boolean {
   if (!isKnownRole(role)) return false
   if (permission === PERMISSION_INCIDENT_DISPOSE) return role === ROLE_OPERATOR || role === ROLE_ADMIN
   if (permission === PERMISSION_THRESHOLD_MANAGE) return role === ROLE_ENGINEER || role === ROLE_ADMIN
+  if (permission === PERMISSION_KNOWLEDGE_SUBMIT) return role === ROLE_ENGINEER || role === ROLE_ADMIN
+  if (permission === PERMISSION_KNOWLEDGE_REVIEW) return role === ROLE_ADMIN
   if (permission === PERMISSION_SYSTEM_MANAGE || permission === PERMISSION_USER_MANAGE) return role === ROLE_ADMIN
   return false
 }
@@ -37,6 +41,8 @@ export function hasPermission(role: string, permission: string): boolean {
 export function permissionLabel(permission: string): string {
   if (permission === PERMISSION_INCIDENT_DISPOSE) return 'OPERATOR 或 ADMIN'
   if (permission === PERMISSION_THRESHOLD_MANAGE) return 'ENGINEER 或 ADMIN'
+  if (permission === PERMISSION_KNOWLEDGE_SUBMIT) return 'ENGINEER 或 ADMIN'
+  if (permission === PERMISSION_KNOWLEDGE_REVIEW) return '具备 KNOWLEDGE_REVIEW 权限的 ADMIN'
   if (permission === PERMISSION_SYSTEM_MANAGE || permission === PERMISSION_USER_MANAGE) return 'ADMIN'
   return '未配置角色'
 }

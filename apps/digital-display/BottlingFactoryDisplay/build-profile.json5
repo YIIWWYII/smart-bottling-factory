@@ -6,10 +6,25 @@
         "name": "default",
         "targetSdkVersion": "6.1.1(24)",
         "compatibleSdkVersion": "6.1.1(24)",
-        "runtimeOS": "HarmonyOS"
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
       }
     ],
     "buildModeSet": [{ "name": "debug" }, { "name": "release" }]
   },
-  "modules": [{ "name": "entry", "srcPath": "./entry" }]
+  "modules": [
+    { "name": "entry", "srcPath": "./entry" },
+    {
+      "name": "harmonyassistant",
+      "srcPath": "../../../packages/harmony-assistant/harmonyassistant",
+      "targets": [
+        { "name": "default", "applyToProducts": ["default"] }
+      ]
+    }
+  ]
 }

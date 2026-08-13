@@ -49,6 +49,7 @@ public class ManagementAuthFilter extends OncePerRequestFilter {
 
     private boolean requiresAuthentication(HttpServletRequest request) {
         String path = request.getServletPath();
+        if (path.equals("/auth/introspect")) return false;
         if (path.startsWith("/auth/")) return !path.equals("/auth/login") && !path.equals("/auth/register");
         return isProtectedMutation(request);
     }
@@ -74,6 +75,7 @@ public class ManagementAuthFilter extends OncePerRequestFilter {
         if (path.equals("/production/orders") || path.matches("/production/orders/[^/]+")) return true;
         if (path.startsWith("/config/recipes") || path.startsWith("/config/thresholds")
                 || path.startsWith("/quality/rules") || path.startsWith("/simulation/")) return true;
+        if (path.matches("/devices/[^/]+/manual-overrides.*")) return true;
         return path.equals("/logistics/agv/tasks") || path.equals("/logistics/warehouse/inbound");
     }
 

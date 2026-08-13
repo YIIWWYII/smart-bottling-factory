@@ -7,6 +7,7 @@ import com.archermind.hdc.factory.snapshot.FactorySnapshotService;
 import com.archermind.hdc.factory.snapshot.LineSnapshot;
 import com.archermind.hdc.factory.snapshot.StageSnapshot;
 import com.archermind.hdc.factory.simulation.FactorySimulationService;
+import com.archermind.hdc.factory.parameter.ParameterStateService;
 import com.archermind.hdc.logistics.dto.LogisticsOverview;
 import com.archermind.hdc.logistics.service.LogisticsService;
 import com.archermind.hdc.operations.service.OperationsService;
@@ -31,6 +32,7 @@ public class FactoryContractService {
     private final FactorySimulationService simulation;
     private final OperationsService operations;
     private final LogisticsService logistics;
+    private final ParameterStateService parameterStates;
 
     public FactoryContractService(DeviceCapabilityCatalog capabilities,
                                   FactorySnapshotService snapshots,
@@ -39,7 +41,8 @@ public class FactoryContractService {
                                   FactoryStateVersionService stateVersions,
                                   FactorySimulationService simulation,
                                   OperationsService operations,
-                                  LogisticsService logistics) {
+                                  LogisticsService logistics,
+                                  ParameterStateService parameterStates) {
         this.capabilities = capabilities;
         this.snapshots = snapshots;
         this.persistence = persistence;
@@ -48,6 +51,7 @@ public class FactoryContractService {
         this.simulation = simulation;
         this.operations = operations;
         this.logistics = logistics;
+        this.parameterStates = parameterStates;
     }
 
     public Map<String, Object> topology() {
@@ -97,6 +101,33 @@ public class FactoryContractService {
         value.put("stateVersion", stateVersions.current());
         value.put("source", "APPROVED_DEFAULT");
         value.put("recipeVersion", "recipe-v1");
+        value.put("parameters", parameterStates.parameters(deviceCode));
+        return value;
+    }
+
+    public List<Map<String, Object>> parameterOwnership(String deviceCode) {
+        deviceCapability(deviceCode);
+        return parameterStates.ownership(deviceCode);
+    }
+
+    public Map<String, Object> manualOverride(String deviceCode, Map<String, Object> request, String operator) {
+        require(request != null, "manual override request is required");
+        String parameterCode = text(request.get("parameterCode"), "");
+        require(StringUtils.hasText(parameterCode), "parameterCode is required");
+        String reason = text(request.get("reason"), "manual override");
+        String lockMode = text(request.get("lockMode"), "MANUAL_HOLD");
+        LocalDateTime expiresAt = request.get("expiresAt") == null ? null
+                : LocalDateTime.parse(String.valueOf(request.get("expiresAt")).replace("Z", ""));
+        Map<String, Object> value = parameterStates.lock(deviceCode, parameterCode, operator, reason, lockMode, expiresAt);
+        audit("PARAMETER_OVERRIDE", deviceCode + ":" + parameterCode, "LOCK", operator, request);
+        publisher.publish("parameter.override.changed", String.valueOf(value.get("stageCode")), value);
+        return value;
+    }
+
+    public Map<String, Object> releaseManualOverride(String deviceCode, String parameterCode, String operator) {
+        Map<String, Object> value = parameterStates.release(deviceCode, parameterCode, operator);
+        audit("PARAMETER_OVERRIDE", deviceCode + ":" + parameterCode, "RELEASE", operator, value);
+        publisher.publish("parameter.override.changed", null, value);
         return value;
     }
 

@@ -7,6 +7,8 @@ export struct FactoryThreeScene {
   @Prop payload: string = '{}'
   @Prop sceneHeight: number = 360
   @Prop label: string = 'THREE.JS'
+  onDeviceSelected: (deviceCode: string) => void = (deviceCode: string): void => {}
+  onProductSelected: (traceCode: string) => void = (traceCode: string): void => {}
   @Link selectedDeviceCode: string
   @Link selectedTraceCode: string
   @State webReady: boolean = false
@@ -63,11 +65,17 @@ export struct FactoryThreeScene {
           const devicePrefix: string = 'factory://device/'
           const productPrefix: string = 'factory://product/'
           if (url.indexOf(devicePrefix) === 0) {
-            this.selectedDeviceCode = this.decodeRouteValue(url, devicePrefix)
+            const deviceCode: string = this.decodeRouteValue(url, devicePrefix)
+            this.selectedDeviceCode = deviceCode
+            this.selectedTraceCode = ''
+            this.onDeviceSelected(deviceCode)
             return true
           }
           if (url.indexOf(productPrefix) === 0) {
-            this.selectedTraceCode = this.decodeRouteValue(url, productPrefix)
+            const traceCode: string = this.decodeRouteValue(url, productPrefix)
+            this.selectedTraceCode = traceCode
+            this.selectedDeviceCode = ''
+            this.onProductSelected(traceCode)
             return true
           }
           return false
@@ -75,7 +83,7 @@ export struct FactoryThreeScene {
         .width('100%')
         .height(this.sceneHeight)
         .id(this.label.indexOf('2D') >= 0 ? 'workstation-scene-2d' : 'workstation-scene-3d')
-        .backgroundColor('#DFEAF1')
+        .backgroundColor('#0F2737')
 
       if (!this.webReady) {
         Column({ space: 8 }) {
@@ -85,7 +93,7 @@ export struct FactoryThreeScene {
         .width('100%')
         .height(this.sceneHeight)
         .justifyContent(FlexAlign.Center)
-        .backgroundColor('#DFEAF1')
+        .backgroundColor('#0F2737')
       }
     }
     .width('100%')

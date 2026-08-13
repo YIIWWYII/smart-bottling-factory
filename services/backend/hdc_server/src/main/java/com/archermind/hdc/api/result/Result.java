@@ -80,7 +80,7 @@ public class Result<T> {
         result.setMessage(message);
         result.setSuccess(false);
 
-        return new Result(code, message);
+        return result;
     }
 
     public boolean isSuccess(){

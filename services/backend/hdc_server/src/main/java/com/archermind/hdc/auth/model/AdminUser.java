@@ -12,6 +12,8 @@ public class AdminUser {
     private String displayName;
     private String role;
     private String status;
+    private String sourceApp;
+    private String stageCode;
     private LocalDateTime lastLoginAt;
     private LocalDateTime createdAt;
 
@@ -27,6 +29,10 @@ public class AdminUser {
     public void setRole(String role) { this.role = role; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getSourceApp() { return sourceApp; }
+    public void setSourceApp(String sourceApp) { this.sourceApp = sourceApp; }
+    public String getStageCode() { return stageCode; }
+    public void setStageCode(String stageCode) { this.stageCode = stageCode; }
     public LocalDateTime getLastLoginAt() { return lastLoginAt; }
     public void setLastLoginAt(LocalDateTime lastLoginAt) { this.lastLoginAt = lastLoginAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }

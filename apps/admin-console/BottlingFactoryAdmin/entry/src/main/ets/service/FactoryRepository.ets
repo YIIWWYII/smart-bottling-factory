@@ -2,6 +2,7 @@ import { http } from '@kit.NetworkKit'
 import { ApiClient, apiClient } from './ApiClient'
 import { FactoryRealtime } from './FactoryRealtime'
 import { createMockBundle } from './MockFactoryData'
+import { SessionStore } from './SessionStore'
 import { FactoryBundle, FactoryDashboard, FactoryIncident, LogisticsOverview, OperationsOverview, RuntimeSnapshot } from '../model/FactoryModels'
 
 interface IncidentResolveRequest {
@@ -30,6 +31,12 @@ class FactoryRepositoryImpl {
   }
 
   async refresh(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.bundle = createMockBundle()
+      this.realtimeOnline = false
+      this.notify()
+      return
+    }
     try {
       const dashboard: FactoryDashboard = await this.client.request<FactoryDashboard>('/factory/dashboard')
       const operations: OperationsOverview = await this.client.request<OperationsOverview>('/operations/overview')
@@ -43,6 +50,11 @@ class FactoryRepositoryImpl {
   }
 
   connectRealtime(): void {
+    if (SessionStore.isDemo) {
+      this.realtimeOnline = false
+      this.notify()
+      return
+    }
     this.realtime.connect((payload: string) => {
       if (payload.indexOf('factory.') >= 0) void this.refresh()
     }, (online: boolean) => {
@@ -67,6 +79,10 @@ class FactoryRepositoryImpl {
   }
 
   async listIncidents(status: string = ''): Promise<Array<FactoryIncident>> {
+    if (SessionStore.isDemo) {
+      const incidents: Array<FactoryIncident> = this.bundle.runtime.incidents
+      return status.length === 0 ? incidents : incidents.filter((incident: FactoryIncident) => incident.status === status)
+    }
     const suffix: string = status.length > 0 ? `?status=${status}` : ''
     return await this.client.request<Array<FactoryIncident>>(`/factory/runtime/incidents${suffix}`)
   }

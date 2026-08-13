@@ -1,4 +1,14 @@
 import { router } from '@kit.ArkUI'
+import {
+  AssistantController,
+  AssistantDisplayField,
+  AssistantDock,
+  AssistantEntityType,
+  AssistantSelectionPublisher,
+  AssistantSelectionSource,
+  AssistantVisibilityPublisher,
+  createSelection
+} from '@bottling/harmony-assistant'
 import { Theme, statusColor } from '../common/Theme'
 import { DeviceStateRow, QualityGateRow, SectionTitle, StateBadge } from '../components/IndustrialComponents'
 import { FactoryThreeScene } from '../components/FactoryThreeScene'
@@ -8,6 +18,7 @@ import { FactoryRepository } from '../service/FactoryRepository'
 import { ApiConfig } from '../service/ApiConfig'
 import { apiClient } from '../service/ApiClient'
 import { SessionStore } from '../service/SessionStore'
+import { WorkstationAssistantHostAdapter } from '../service/WorkstationAssistantHostAdapter'
 import { isFinalCommandStatus } from '../service/WorkstationPolicy'
 import {
   AgvTask,
@@ -40,6 +51,9 @@ class ThreeDevicePayload {
   state: string = ''
   source: string = ''
   reading: string = ''
+  role: string = ''
+  actionCode: string = ''
+  progress: number = 0
 }
 
 class ThreeProductPayload {
@@ -47,6 +61,47 @@ class ThreeProductPayload {
   bottleType: string = ''
   status: string = ''
   defectType: string = ''
+  currentStage: string = ''
+  progress: number = 0
+  animationState: string = ''
+}
+
+class ThreeSensorPayload {
+  readingId: string = ''
+  deviceCode: string = ''
+  sensorType: string = ''
+  value: number = 0
+  unit: string = ''
+  quality: string = ''
+}
+
+class ThreeQualityGatePayload {
+  label: string = ''
+  status: string = ''
+  actual: string = ''
+}
+
+class ThreeAlarmPayload {
+  alarmId: string = ''
+  deviceCode: string = ''
+  alarmType: string = ''
+  status: string = ''
+  message: string = ''
+}
+
+class ThreeIncidentPayload {
+  incidentId: string = ''
+  deviceCode: string = ''
+  strategy: string = ''
+  status: string = ''
+  targetStage: string = ''
+}
+
+class ThreeBufferPayload {
+  inputLevel: number = 0
+  outputLevel: number = 0
+  capacity: number = 0
+  blockedReason: string = ''
 }
 
 class ThreeScenePayload {
@@ -62,6 +117,13 @@ class ThreeScenePayload {
   stateVersion: number = 0
   devices: Array<ThreeDevicePayload> = []
   products: Array<ThreeProductPayload> = []
+  sensors: Array<ThreeSensorPayload> = []
+  qualityGates: Array<ThreeQualityGatePayload> = []
+  alarms: Array<ThreeAlarmPayload> = []
+  incidents: Array<ThreeIncidentPayload> = []
+  buffer: ThreeBufferPayload = new ThreeBufferPayload()
+  upstreamImpact: string = ''
+  downstreamImpact: string = ''
 }
 
 class ParameterEdit {
@@ -92,7 +154,9 @@ struct StageDetail {
   @State selectedDeviceCode: string = ''
   @State selectedTraceCode: string = ''
   @State planarEnabled: boolean = true
-  @State threeEnabled: boolean = true
+  @State threeEnabled: boolean = false
+  @State activeVisual: string = 'PLANAR'
+  @State detailTab: string = 'DEVICES'
   @State statusColorsEnabled: boolean = true
   @State layoutEditEnabled: boolean = false
   @State paused: boolean = false
@@ -108,6 +172,19 @@ struct StageDetail {
   @State commandMessage: string = '尚未发起命令'
   @State auditNo: string = '--'
   @State activeCommandId: string = ''
+  private assistantSelectionPublisher: AssistantSelectionPublisher = new AssistantSelectionPublisher()
+  private assistantVisibilityPublisher: AssistantVisibilityPublisher = new AssistantVisibilityPublisher()
+  private assistantAdapter: WorkstationAssistantHostAdapter = new WorkstationAssistantHostAdapter(
+    this.assistantSelectionPublisher,
+    this.assistantVisibilityPublisher,
+    () => this.stageCode,
+    () => this.selectedDeviceCode,
+    () => this.selectedTraceCode,
+    (deviceCode: string) => this.focusDevice(deviceCode),
+    (traceCode: string) => this.focusProduct(traceCode),
+    () => this.clearFocusedEntity()
+  )
+  @State assistantController: AssistantController = new AssistantController(this.assistantAdapter)
   private refreshTimer: number = -1
   private commandTimer: number = -1
   private commandPollCount: number = 0
@@ -211,6 +288,8 @@ struct StageDetail {
     if (params !== undefined && params.stageCode !== undefined && params.stageCode.length > 0) {
       this.stageCode = params.stageCode
     }
+    this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+    this.assistantVisibilityPublisher.publish('VISIBLE')
     this.resetControlTargets()
     FactoryRepository.subscribe(this.listener)
     SessionStore.subscribe(this.sessionListener)
@@ -221,6 +300,9 @@ struct StageDetail {
   }
 
   aboutToDisappear(): void {
+    this.assistantVisibilityPublisher.publish('HIDDEN')
+    this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+    this.clearFocusedEntity()
     FactoryRepository.unsubscribe(this.listener)
     SessionStore.unsubscribe(this.sessionListener)
     FactoryRepository.closeRealtime()
@@ -372,13 +454,27 @@ struct StageDetail {
     payload.speed = this.sceneSpeed()
     payload.progress = this.sceneProgress()
     payload.stateVersion = this.snapshot.stateVersion
+    payload.buffer.inputLevel = this.snapshot.buffer.inputLevel
+    payload.buffer.outputLevel = this.snapshot.buffer.outputLevel
+    payload.buffer.capacity = this.snapshot.buffer.capacity
+    payload.buffer.blockedReason = this.snapshot.buffer.blockedReason || ''
+    payload.upstreamImpact = this.runtimeStageValue().upstreamImpact || '等待数据'
+    payload.downstreamImpact = this.runtimeStageValue().downstreamImpact || '等待数据'
     this.currentStage().devices.forEach((device: DeviceDefinition) => {
       const item = new ThreeDevicePayload()
+      const runtime = this.runtimeDevice(device.code)
       item.code = device.code
       item.name = device.name
       item.state = this.deviceRuntime(device.code)
       item.source = this.deviceSource(device.code)
       item.reading = this.deviceReading(device.code)
+      item.role = device.role
+      item.actionCode = runtime === undefined || runtime.actionCode === undefined ? '' : runtime.actionCode
+      if (runtime !== undefined && runtime.cycleProgressPct !== undefined) {
+        item.progress = runtime.cycleProgressPct
+      } else if (runtime !== undefined && runtime.progress !== undefined) {
+        item.progress = runtime.progress
+      }
       payload.devices.push(item)
     })
     this.stationRunsValue().slice(0, 8).forEach((run: FactoryRun) => {
@@ -387,7 +483,45 @@ struct StageDetail {
       item.bottleType = run.bottleType || '待识别'
       item.status = run.status
       item.defectType = run.defectType || ''
+      item.currentStage = run.currentStage
+      item.progress = run.stageProgressPct === undefined ? payload.progress : run.stageProgressPct
+      item.animationState = run.animationState || ''
       payload.products.push(item)
+    })
+    this.stationReadingsValue().slice(0, 12).forEach((reading: SensorReading) => {
+      const item = new ThreeSensorPayload()
+      item.readingId = reading.readingId
+      item.deviceCode = reading.deviceCode
+      item.sensorType = reading.sensorType
+      item.value = reading.value
+      item.unit = reading.unit
+      item.quality = reading.quality
+      payload.sensors.push(item)
+    })
+    this.qualityGates().forEach((gate: QualityGateView) => {
+      const item = new ThreeQualityGatePayload()
+      item.label = gate.label
+      item.status = gate.status
+      item.actual = gate.actual
+      payload.qualityGates.push(item)
+    })
+    this.stationAlarmsValue().slice(0, 6).forEach((alarm: AlarmRecord) => {
+      const item = new ThreeAlarmPayload()
+      item.alarmId = alarm.alarmId
+      item.deviceCode = alarm.deviceCode
+      item.alarmType = alarm.alarmType
+      item.status = alarm.status
+      item.message = alarm.message
+      payload.alarms.push(item)
+    })
+    this.stationIncidentsValue().slice(0, 6).forEach((incident: FactoryIncident) => {
+      const item = new ThreeIncidentPayload()
+      item.incidentId = incident.incidentId
+      item.deviceCode = incident.deviceCode || ''
+      item.strategy = incident.strategy
+      item.status = incident.status
+      item.targetStage = incident.targetStage || ''
+      payload.incidents.push(item)
     })
     return JSON.stringify(payload)
   }
@@ -663,6 +797,8 @@ struct StageDetail {
   private navigateStage(offset: number): void {
     const next = this.currentStageIndex() + offset
     if (next >= 0 && next < FACTORY_STAGES.length) {
+      this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+      this.clearFocusedEntity()
       router.replaceUrl({ url: 'pages/StageDetail', params: { stageCode: FACTORY_STAGES[next].code } })
     }
   }
@@ -674,22 +810,203 @@ struct StageDetail {
     return '运行中'
   }
 
+  private assistantPageRoute(): string {
+    return 'pages/StageDetail?stageCode=' + this.stageCode
+  }
+
+  private focusDevice(deviceCode: string): void {
+    this.selectedDeviceCode = deviceCode
+    this.selectedTraceCode = ''
+  }
+
+  private focusProduct(traceCode: string): void {
+    this.selectedTraceCode = traceCode
+    this.selectedDeviceCode = ''
+  }
+
+  private clearFocusedEntity(): void {
+    this.selectedDeviceCode = ''
+    this.selectedTraceCode = ''
+  }
+
+  private assistantField(code: string, label: string, displayValue: string, unit: string = ''): AssistantDisplayField {
+    const field: AssistantDisplayField = {
+      code: code,
+      label: label,
+      displayValue: displayValue
+    }
+    if (unit.length > 0) {
+      field.unit = unit
+    }
+    return field
+  }
+
+  private publishAssistantSelection(entityType: AssistantEntityType, entityId: string, displayText: string, source: AssistantSelectionSource, fields: Array<AssistantDisplayField> = []): void {
+    this.assistantSelectionPublisher.publish(createSelection(
+      entityType,
+      entityId,
+      displayText,
+      source,
+      this.assistantPageRoute(),
+      this.snapshot.stateVersion,
+      fields
+    ))
+  }
+
+  private deviceDisplay(deviceCode: string): string {
+    let label: string = deviceCode
+    this.currentStage().devices.forEach((item: DeviceDefinition) => {
+      if (item.code === deviceCode) {
+        label = item.name + ' · ' + item.code
+      }
+    })
+    return label
+  }
+
+  private selectDeviceCodeForAssistant(deviceCode: string, source: AssistantSelectionSource): void {
+    this.focusDevice(deviceCode)
+    this.publishAssistantSelection(
+      AssistantEntityType.DEVICE,
+      deviceCode,
+      this.deviceDisplay(deviceCode),
+      source,
+      [
+        this.assistantField('status', '状态', this.deviceRuntime(deviceCode)),
+        this.assistantField('reading', '读数', this.deviceReading(deviceCode)),
+        this.assistantField('source', '数据源', this.deviceSource(deviceCode))
+      ]
+    )
+  }
+
+  private selectDeviceForAssistant(device: DeviceDefinition, source: AssistantSelectionSource = 'ARKUI'): void {
+    this.selectDeviceCodeForAssistant(device.code, source)
+  }
+
+  private selectProductCodeForAssistant(traceCode: string, source: AssistantSelectionSource): void {
+    this.focusProduct(traceCode)
+    const run = this.stationRunsValue().find((item: FactoryRun) => item.traceCode === traceCode)
+    const display: string = run === undefined ? traceCode : traceCode + ' · ' + (run.bottleType || '待识别')
+    const fields: Array<AssistantDisplayField> = run === undefined
+      ? []
+      : [
+        this.assistantField('status', '状态', this.statusTextForRun(run.status)),
+        this.assistantField('batchCode', '批次', run.batchCode || '待绑定'),
+        this.assistantField('currentStage', '当前工位', run.currentStage)
+      ]
+    this.publishAssistantSelection(AssistantEntityType.PRODUCT, traceCode, display, source, fields)
+  }
+
+  private selectProductForAssistant(run: FactoryRun, source: AssistantSelectionSource = 'ARKUI'): void {
+    this.selectProductCodeForAssistant(run.traceCode, source)
+  }
+
+  private selectSensorForAssistant(reading: SensorReading): void {
+    if (reading.deviceCode.length > 0) {
+      this.focusDevice(reading.deviceCode)
+    }
+    this.publishAssistantSelection(
+      AssistantEntityType.SENSOR,
+      reading.readingId,
+      reading.sensorType + ' · ' + reading.deviceCode,
+      'ARKUI',
+      [
+        this.assistantField('value', '读数', reading.value.toString(), reading.unit),
+        this.assistantField('quality', '质量', reading.quality),
+        this.assistantField('occurredAt', '时间', this.formatTime(reading.occurredAt))
+      ]
+    )
+  }
+
+  private selectQualityGateForAssistant(gate: QualityGateView): void {
+    this.publishAssistantSelection(
+      AssistantEntityType.KPI,
+      this.stageCode + ':quality:' + gate.label,
+      gate.label,
+      'ARKUI',
+      [
+        this.assistantField('standard', '标准', gate.standard),
+        this.assistantField('actual', '实际', gate.actual),
+        this.assistantField('status', '结果', gate.status)
+      ]
+    )
+  }
+
+  private selectAlarmForAssistant(alarm: AlarmRecord): void {
+    if (alarm.deviceCode.length > 0) {
+      this.focusDevice(alarm.deviceCode)
+    }
+    this.publishAssistantSelection(
+      AssistantEntityType.ALARM,
+      alarm.alarmId,
+      alarm.alarmType + ' · ' + alarm.deviceCode,
+      'ARKUI',
+      [
+        this.assistantField('message', '内容', alarm.message),
+        this.assistantField('deviceCode', '设备', alarm.deviceCode)
+      ]
+    )
+  }
+
+  private selectIncidentForAssistant(incident: FactoryIncident): void {
+    if (incident.deviceCode !== undefined && incident.deviceCode.length > 0) {
+      this.focusDevice(incident.deviceCode)
+    }
+    this.publishAssistantSelection(
+      AssistantEntityType.INCIDENT,
+      incident.incidentId,
+      incident.strategy + ' · ' + (incident.deviceCode || this.stageCode),
+      'ARKUI',
+      [
+        this.assistantField('message', '内容', incident.message),
+        this.assistantField('status', '状态', incident.status)
+      ]
+    )
+  }
+
+  private selectParameterForAssistant(control: ParameterControlDefinition): void {
+    this.focusDevice(control.deviceCode)
+    this.publishAssistantSelection(
+      AssistantEntityType.PARAMETER,
+      control.deviceCode + ':' + control.parameterCode,
+      control.label + ' · ' + control.deviceCode,
+      'ARKUI',
+      [
+        this.assistantField('currentValue', '当前值', this.parameterCurrent(control).toString(), control.unit),
+        this.assistantField('targetValue', '目标值', this.targetValue(control.parameterCode).toString(), control.unit),
+        this.assistantField('range', '范围', this.parameterMin(control).toString() + '-' + this.parameterMax(control).toString(), control.unit),
+        this.assistantField('interlock', '联锁', control.interlock)
+      ]
+    )
+  }
+
+  private selectTextForAssistant(entityId: string, displayText: string, selectedText: string): void {
+    this.publishAssistantSelection(AssistantEntityType.TEXT_FRAGMENT, entityId, displayText, 'ARKUI', [
+      this.assistantField('text', '文本', selectedText)
+    ])
+  }
+
   build() {
-    Scroll() {
-      Column() {
-        this.topBar()
-        this.stageHeader()
-        this.visualSection()
-        this.stationSnapshotSection()
-        this.controlSection()
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Scroll() {
+        Column() {
+          this.topBar()
+          this.stageHeader()
+          this.visualSection()
+          this.stationSnapshotSection()
+          this.controlSection()
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .padding({ bottom: 32 })
       }
       .width('100%')
-      .alignItems(HorizontalAlign.Start)
-      .padding({ bottom: 32 })
+      .height('100%')
+      .backgroundColor(Theme.page)
+      AssistantDock({ controller: this.assistantController, panelWidth: 360, panelHeight: 560 })
+        .margin({ top: 18, right: 14 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Theme.page)
   }
 
   @Builder
@@ -699,7 +1016,11 @@ struct StageDetail {
         .type(ButtonType.Normal)
         .fontColor('#FFFFFF')
         .backgroundColor(Color.Transparent)
-        .onClick(() => router.back())
+        .onClick(() => {
+          this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+          this.clearFocusedEntity()
+          router.back()
+        })
       Blank()
       Text(FactoryRepository.realtimeOnline ? 'WebSocket 在线' : 'WebSocket 重连中')
         .fontSize(10)
@@ -733,6 +1054,7 @@ struct StageDetail {
             .fontColor(Theme.muted)
             .lineHeight(18)
             .margin({ top: 6 })
+            .onClick(() => this.selectTextForAssistant(this.stageCode + ':description', this.currentStage().name, this.currentStage().description))
           Text('快照版本 ' + this.snapshot.stateVersion.toString() + ' · ' + FactoryRepository.snapshotMode +
             (FactoryRepository.snapshotError.length > 0 ? ' · ' + FactoryRepository.snapshotError : ''))
             .fontSize(8)
@@ -790,15 +1112,17 @@ struct StageDetail {
       SectionTitle({ code: '01 REALTIME SCENE', title: '实时作业画面', description: '2D 平面工艺图与 3D 立体场景均由 HAP 本地 ArkWeb Three.js 加载，并共享同一份实时快照。' })
       Scroll() {
         Row({ space: 8 }) {
-          this.visualToggle('2D 平面图', this.planarEnabled, 'PLANAR')
-          this.visualToggle('3D 立体图', this.threeEnabled, 'THREE')
-          this.visualToggle('状态着色', this.statusColorsEnabled, 'COLORS')
-          this.visualToggle('布局拖拽', this.layoutEditEnabled, 'LAYOUT')
+          this.visualToggle('2D 平面图', 'PLANAR')
+          this.visualToggle('3D 立体图', 'THREE')
+          this.visualModeButton('查看 2D', 'PLANAR')
+          this.visualModeButton('查看 3D', 'THREE')
+          this.visualToggle('状态着色', 'COLORS')
+          this.visualToggle('布局拖拽', 'LAYOUT')
           Button(this.paused ? '恢复实时' : '暂停画面')
             .type(ButtonType.Normal)
             .fontSize(10)
             .fontColor(this.paused ? '#FFFFFF' : Theme.navy)
-            .backgroundColor(this.paused ? Theme.warning : '#E7F0F5')
+            .backgroundColor(this.paused ? Theme.warning : Theme.panelStrong)
             .border({ width: 1, color: this.paused ? Theme.warning : Theme.line })
             .borderRadius(2)
             .onClick(() => this.paused = !this.paused)
@@ -809,10 +1133,10 @@ struct StageDetail {
       .scrollBar(BarState.Off)
       .width('100%')
 
-      if (this.planarEnabled) {
+      if (this.planarEnabled && this.activeVisual === 'PLANAR') {
         this.scenePanel('THREE.JS 2D PLAN', '平面工艺符号 · 点击设备/物料查看 · 拖拽设备保存本站布局', 'PLANAR', 260)
       }
-      if (this.threeEnabled) {
+      if (this.threeEnabled && this.activeVisual === 'THREE') {
         this.scenePanel('THREE.JS 3D', this.layoutEditEnabled ? '拖拽设备调整位置' : '拖拽旋转 · 滚轮缩放 · 点击查看', 'THREE', 360)
       }
       if (!this.planarEnabled && !this.threeEnabled) {
@@ -849,6 +1173,8 @@ struct StageDetail {
         payload: this.scenePayload(viewMode),
         sceneHeight: height,
         label: title,
+        onDeviceSelected: (deviceCode: string): void => this.selectDeviceCodeForAssistant(deviceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
+        onProductSelected: (traceCode: string): void => this.selectProductCodeForAssistant(traceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
         selectedDeviceCode: $selectedDeviceCode,
         selectedTraceCode: $selectedTraceCode
       })
@@ -862,16 +1188,34 @@ struct StageDetail {
   @Builder
   stationSnapshotSection() {
     Column() {
-      this.deviceSection()
-      this.sensorSection()
-      this.materialSection()
-      this.qualitySection()
-      this.bufferSection()
-      this.alarmSection()
-      if (this.selectedDeviceCode.length > 0) this.deviceProfile()
-      if (this.selectedTraceCode.length > 0) this.productProfile()
+      SectionTitle({ code: '02 STATION DATA', title: '本站实时信息', description: '按现场任务切换信息组，控制操作始终位于独立工作区。' })
+      Row({ space: 6 }) {
+        this.detailTabButton('DEVICES', '设备')
+        this.detailTabButton('SENSORS', '传感器')
+        this.detailTabButton('MATERIAL', '物料与质量')
+        this.detailTabButton('RISK', '异常与缓冲')
+      }.width('100%').padding({ top: 12 })
+      if (this.detailTab === 'DEVICES') {
+        this.deviceSection()
+        if (this.selectedDeviceCode.length > 0) this.deviceProfile()
+      }
+      if (this.detailTab === 'SENSORS') this.sensorSection()
+      if (this.detailTab === 'MATERIAL') {
+        this.materialSection()
+        this.qualitySection()
+        if (this.selectedTraceCode.length > 0) this.productProfile()
+      }
+      if (this.detailTab === 'RISK') {
+        this.alarmSection()
+        this.bufferSection()
+      }
     }
     .width('100%')
+    .padding(18)
+    .margin({ top: 12 })
+    .backgroundColor(Theme.panel)
+    .border({ width: { left: 4, top: 1, right: 1, bottom: 1 }, color: Theme.accent })
+    .borderRadius(4)
   }
 
   @Builder
@@ -883,7 +1227,7 @@ struct StageDetail {
           DeviceStateRow({ index: index, device: device, state: this.deviceRuntime(device.code), source: this.deviceSource(device.code), reading: this.deviceReading(device.code) })
         }
         .width('100%')
-        .onClick(() => this.selectedDeviceCode = device.code)
+        .onClick(() => this.selectDeviceForAssistant(device))
       }, (device: DeviceDefinition) => device.code)
     }
     .width('100%')
@@ -914,6 +1258,7 @@ struct StageDetail {
           .width('100%')
           .padding(11)
           .border({ width: { bottom: 1 }, color: Theme.line })
+          .onClick(() => this.selectSensorForAssistant(reading))
         }, (reading: SensorReading) => reading.readingId)
       }
     }
@@ -945,7 +1290,7 @@ struct StageDetail {
           .width('100%')
           .padding(11)
           .border({ width: { bottom: 1 }, color: Theme.line })
-          .onClick(() => this.selectedTraceCode = run.traceCode)
+          .onClick(() => this.selectProductForAssistant(run))
         }, (run: FactoryRun) => run.traceCode)
       }
     }
@@ -966,10 +1311,14 @@ struct StageDetail {
       }
       .width('100%')
       .padding(12)
-      .backgroundColor('#F1F7FB')
+      .backgroundColor(Theme.panelSoft)
       .margin({ top: 12 })
       ForEach(this.qualityGates(), (gate: QualityGateView) => {
-        QualityGateRow({ gate: gate })
+        Row() {
+          QualityGateRow({ gate: gate })
+        }
+        .width('100%')
+        .onClick(() => this.selectQualityGateForAssistant(gate))
       }, (gate: QualityGateView) => gate.label)
     }
     .width('100%')
@@ -1019,6 +1368,7 @@ struct StageDetail {
         .width('100%')
         .padding(11)
         .border({ width: { bottom: 1 }, color: Theme.line })
+        .onClick(() => this.selectAlarmForAssistant(alarm))
       }, (alarm: AlarmRecord) => alarm.alarmId)
       ForEach(this.stationIncidentsValue(), (incident: FactoryIncident) => {
         Row({ space: 10 }) {
@@ -1034,6 +1384,7 @@ struct StageDetail {
         .width('100%')
         .padding(11)
         .border({ width: { bottom: 1 }, color: Theme.line })
+        .onClick(() => this.selectIncidentForAssistant(incident))
       }, (incident: FactoryIncident) => incident.incidentId)
     }
     .width('100%')
@@ -1080,7 +1431,7 @@ struct StageDetail {
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
         if (SessionStore.isAuthenticated) {
-          Button('退出').height(32).fontSize(10).backgroundColor('#E7F0F5').fontColor(Theme.navy).onClick(() => this.logoutOperator())
+          Button('退出').height(32).fontSize(10).backgroundColor(Theme.panelStrong).fontColor(Theme.navy).onClick(() => this.logoutOperator())
         }
       }
       .width('100%')
@@ -1154,6 +1505,7 @@ struct StageDetail {
     .margin({ top: 10 })
     .backgroundColor(Theme.panelSoft)
     .border({ width: 1, color: Theme.line })
+    .onClick(() => this.selectParameterForAssistant(control))
   }
 
   @Builder
@@ -1191,7 +1543,7 @@ struct StageDetail {
         Text(this.pendingDraft.intent).fontSize(10).fontColor(Theme.text).margin({ top: 6 })
         Text('风险：' + this.pendingDraft.risk).fontSize(9).fontColor(Theme.danger).margin({ top: 6 })
         Row({ space: 8 }) {
-          Button('取消').layoutWeight(1).height(36).backgroundColor('#E7F0F5').fontColor(Theme.navy).onClick(() => this.clearDraft())
+          Button('取消').layoutWeight(1).height(36).backgroundColor(Theme.panelStrong).fontColor(Theme.navy).onClick(() => this.clearDraft())
           Button('确认发送到后端').layoutWeight(1).height(36).backgroundColor(Theme.warning).fontColor('#FFFFFF')
             .enabled(this.commandBlockReason(this.pendingDraft.dangerous, this.pendingDraft.requiredRole, this.pendingDraft.deviceCode, this.pendingDraft.commandType).length === 0)
             .onClick(() => void this.confirmCommand())
@@ -1202,7 +1554,7 @@ struct StageDetail {
       .width('100%')
       .padding(12)
       .margin({ top: 12 })
-      .backgroundColor('#FFF7E8')
+      .backgroundColor(Theme.warningSoft)
       .border({ width: { left: 4, top: 1, right: 1, bottom: 1 }, color: Theme.warning })
     }
   }
@@ -1222,7 +1574,7 @@ struct StageDetail {
     .width('100%')
     .padding(12)
     .margin({ top: 12 })
-    .backgroundColor('#F1F7FB')
+    .backgroundColor(Theme.panelSoft)
     .border({ width: 1, color: Theme.line })
   }
 
@@ -1310,20 +1662,63 @@ struct StageDetail {
   }
 
   @Builder
-  visualToggle(label: string, enabled: boolean, key: string) {
-    Button((enabled ? 'ON  ' : 'OFF  ') + label)
+  visualToggle(label: string, key: string) {
+    Button((this.visualToggleEnabled(key) ? 'ON  ' : 'OFF  ') + label)
       .type(ButtonType.Normal)
       .fontSize(10)
-      .fontColor(enabled ? '#FFFFFF' : Theme.muted)
-      .backgroundColor(enabled ? Theme.blue : '#E7F0F5')
-      .border({ width: 1, color: enabled ? Theme.blue : Theme.line })
+      .fontColor(this.visualToggleEnabled(key) ? '#FFFFFF' : Theme.muted)
+      .backgroundColor(this.visualToggleEnabled(key) ? Theme.blue : Theme.panelStrong)
+      .border({ width: 1, color: this.visualToggleEnabled(key) ? Theme.blue : Theme.line })
       .borderRadius(2)
       .onClick(() => {
-        if (key === 'PLANAR') this.planarEnabled = !this.planarEnabled
-        if (key === 'THREE') this.threeEnabled = !this.threeEnabled
+        if (key === 'PLANAR') {
+          this.planarEnabled = !this.planarEnabled
+          if (this.planarEnabled) this.activeVisual = 'PLANAR'
+          if (!this.planarEnabled && this.activeVisual === 'PLANAR' && this.threeEnabled) this.activeVisual = 'THREE'
+        }
+        if (key === 'THREE') {
+          this.threeEnabled = !this.threeEnabled
+          if (this.threeEnabled) this.activeVisual = 'THREE'
+          if (!this.threeEnabled && this.activeVisual === 'THREE' && this.planarEnabled) this.activeVisual = 'PLANAR'
+        }
         if (key === 'COLORS') this.statusColorsEnabled = !this.statusColorsEnabled
         if (key === 'LAYOUT') this.layoutEditEnabled = !this.layoutEditEnabled
       })
+  }
+
+  @Builder
+  visualModeButton(label: string, key: string) {
+    Button((this.activeVisual === key ? '当前  ' : '') + label)
+      .type(ButtonType.Normal)
+      .fontSize(10)
+      .fontColor(this.activeVisual === key ? '#FFFFFF' : Theme.blue)
+      .backgroundColor(this.activeVisual === key ? Theme.navy : Theme.panelSoft)
+      .border({ width: 1, color: this.activeVisual === key ? Theme.navy : Theme.line })
+      .borderRadius(2)
+      .enabled(key === 'PLANAR' ? this.planarEnabled : this.threeEnabled)
+      .onClick(() => this.activeVisual = key)
+  }
+
+  @Builder
+  detailTabButton(key: string, label: string) {
+    Button(label)
+      .type(ButtonType.Normal)
+      .layoutWeight(1)
+      .height(36)
+      .fontSize(10)
+      .fontColor(this.detailTab === key ? '#FFFFFF' : Theme.text)
+      .backgroundColor(this.detailTab === key ? Theme.blue : Theme.panelSoft)
+      .border({ width: 1, color: this.detailTab === key ? Theme.blue : Theme.line })
+      .borderRadius(3)
+      .onClick(() => this.detailTab = key)
+  }
+
+  private visualToggleEnabled(key: string): boolean {
+    if (key === 'PLANAR') return this.planarEnabled
+    if (key === 'THREE') return this.threeEnabled
+    if (key === 'COLORS') return this.statusColorsEnabled
+    if (key === 'LAYOUT') return this.layoutEditEnabled
+    return false
   }
 
   @Builder
@@ -1339,6 +1734,10 @@ struct StageDetail {
     .padding(10)
     .backgroundColor(Theme.panelSoft)
     .border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: statusColor(tone) })
+    .onClick(() => this.publishAssistantSelection(AssistantEntityType.KPI, this.stageCode + ':metric:' + label, label, 'ARKUI', [
+      this.assistantField('value', '数值', value),
+      this.assistantField('note', '说明', note)
+    ]))
   }
 
   @Builder

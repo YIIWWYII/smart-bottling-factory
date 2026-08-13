@@ -8,9 +8,16 @@ export struct FactoryThreeScene {
   @Prop viewMode: string = 'THREE'
   @Prop caption: string = '本地 Three.js 场景'
   @Prop heightValue: number = 360
+  @Prop selectionSource: string = 'THREE_3D'
   @Link selectedDeviceCode: string
   @Link selectedTraceCode: string
   @State webReady: boolean = false
+  onDeviceSelected: (deviceCode: string, source: string) => void =
+    (deviceCode: string, source: string): void => {}
+  onProductSelected: (traceCode: string, source: string) => void =
+    (traceCode: string, source: string): void => {}
+  onSelectionCleared: (source: string) => void =
+    (source: string): void => {}
   private controller: webview.WebviewController = new webview.WebviewController()
   private syncTimer: number = -1
 
@@ -53,19 +60,28 @@ export struct FactoryThreeScene {
           const url: string = event.data.getRequestUrl()
           const devicePrefix: string = 'factory://device/'
           const productPrefix: string = 'factory://product/'
+          const clearUrl: string = 'factory://clear'
+          if (url === clearUrl || url.indexOf(clearUrl + '/') === 0) {
+            this.selectedDeviceCode = ''
+            this.selectedTraceCode = ''
+            this.onSelectionCleared(this.selectionSource)
+            return true
+          }
           if (url.indexOf(devicePrefix) === 0) {
             this.selectedDeviceCode = this.decodeRouteValue(url, devicePrefix)
+            this.onDeviceSelected(this.selectedDeviceCode, this.selectionSource)
             return true
           }
           if (url.indexOf(productPrefix) === 0) {
             this.selectedTraceCode = this.decodeRouteValue(url, productPrefix)
+            this.onProductSelected(this.selectedTraceCode, this.selectionSource)
             return true
           }
           return false
         })
         .width('100%')
         .height(this.heightValue)
-        .backgroundColor('#DFEAF1')
+        .backgroundColor('#0F2737')
 
       if (!this.webReady) {
         Column({ space: 8 }) {
@@ -75,7 +91,7 @@ export struct FactoryThreeScene {
         .width('100%')
         .height(this.heightValue)
         .justifyContent(FlexAlign.Center)
-        .backgroundColor('#DFEAF1')
+        .backgroundColor('#0F2737')
       }
     }
     .width('100%')

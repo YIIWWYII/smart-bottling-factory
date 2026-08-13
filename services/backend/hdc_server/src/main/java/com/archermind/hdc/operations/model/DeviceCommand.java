@@ -18,6 +18,12 @@ public class DeviceCommand {
     private String reason;
     private Long expectedStateVersion;
     private Long acceptedStateVersion;
+    private Long expectedParameterVersion;
+    private Long acceptedParameterVersion;
+    private String parameterCode;
+    private String atomicGroupId;
+    private String aiDecisionId;
+    private String correlationId;
     private String recipeVersion;
     private String oldValue;
     private String newValue;
@@ -59,6 +65,18 @@ public class DeviceCommand {
     public void setExpectedStateVersion(Long expectedStateVersion) { this.expectedStateVersion = expectedStateVersion; }
     public Long getAcceptedStateVersion() { return acceptedStateVersion; }
     public void setAcceptedStateVersion(Long acceptedStateVersion) { this.acceptedStateVersion = acceptedStateVersion; }
+    public Long getExpectedParameterVersion() { return expectedParameterVersion; }
+    public void setExpectedParameterVersion(Long expectedParameterVersion) { this.expectedParameterVersion = expectedParameterVersion; }
+    public Long getAcceptedParameterVersion() { return acceptedParameterVersion; }
+    public void setAcceptedParameterVersion(Long acceptedParameterVersion) { this.acceptedParameterVersion = acceptedParameterVersion; }
+    public String getParameterCode() { return parameterCode; }
+    public void setParameterCode(String parameterCode) { this.parameterCode = parameterCode; }
+    public String getAtomicGroupId() { return atomicGroupId; }
+    public void setAtomicGroupId(String atomicGroupId) { this.atomicGroupId = atomicGroupId; }
+    public String getAiDecisionId() { return aiDecisionId; }
+    public void setAiDecisionId(String aiDecisionId) { this.aiDecisionId = aiDecisionId; }
+    public String getCorrelationId() { return correlationId; }
+    public void setCorrelationId(String correlationId) { this.correlationId = correlationId; }
     public String getRecipeVersion() { return recipeVersion; }
     public void setRecipeVersion(String recipeVersion) { this.recipeVersion = recipeVersion; }
     public String getOldValue() { return oldValue; }

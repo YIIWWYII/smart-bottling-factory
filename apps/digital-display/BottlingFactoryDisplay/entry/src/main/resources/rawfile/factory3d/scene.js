@@ -14,20 +14,20 @@
 
   var THREE = window.THREE;
   var COLORS = {
-    navy: 0x123a5b,
-    blue: 0x145da0,
-    accent: 0x1f7acb,
-    steel: 0x698395,
-    steelDark: 0x405968,
-    floor: 0xd6e2e9,
-    white: 0xf4f8fb,
+    navy: 0x071219,
+    blue: 0x176f96,
+    accent: 0x2cc4d8,
+    steel: 0x45616d,
+    steelDark: 0x203943,
+    floor: 0x142831,
+    white: 0x8caab4,
     running: 0x238b5a,
     warning: 0xd89016,
     alarm: 0xc83f49,
     offline: 0x8397a6,
     product: 0x2a86cf,
     liquid: 0x40a8d8,
-    box: 0xb68a52
+    box: 0x936e43
   };
 
   var state = {
@@ -63,6 +63,10 @@
   var cameraOrbit = { yaw: -0.65, pitch: 0.62, distance: 19 };
   var isPointerDown = false;
   var resizeObserver;
+  var animationFrameId = 0;
+  var running = true;
+  var lastFrameTime = 0;
+  var motionPhase = 0;
   var testProbe = {
     ready: false,
     mode: 'THREE',
@@ -106,8 +110,8 @@
   function init() {
     try {
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xdfeaf1);
-      scene.fog = new THREE.Fog(0xdfeaf1, 22, 42);
+      scene.background = new THREE.Color(0x0a171e);
+      scene.fog = new THREE.Fog(0x0a171e, 22, 42);
 
       createCameraForMode();
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
@@ -117,9 +121,9 @@
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       host.appendChild(renderer.domElement);
 
-      var hemisphere = new THREE.HemisphereLight(0xf5fbff, 0x657786, 2.2);
+      var hemisphere = new THREE.HemisphereLight(0xbad3d8, 0x071219, 1.65);
       scene.add(hemisphere);
-      var key = new THREE.DirectionalLight(0xffffff, 3.2);
+      var key = new THREE.DirectionalLight(0xd8eef0, 2.35);
       key.position.set(-8, 15, 10);
       key.castShadow = true;
       key.shadow.mapSize.set(1024, 1024);
@@ -128,7 +132,7 @@
       key.shadow.camera.top = 14;
       key.shadow.camera.bottom = -14;
       scene.add(key);
-      var rim = new THREE.DirectionalLight(0x6db7e8, 1.5);
+      var rim = new THREE.DirectionalLight(0x2a9db9, 1.7);
       rim.position.set(10, 8, -10);
       scene.add(rim);
 
@@ -140,7 +144,7 @@
       resizeObserver = new ResizeObserver(resize);
       resizeObserver.observe(host);
       updateProbe();
-      requestAnimationFrame(renderLoop);
+      animationFrameId = requestAnimationFrame(renderLoop);
     } catch (error) {
       fallback.classList.remove('hidden');
       sourceLabel.textContent = 'WEBGL UNAVAILABLE';
@@ -164,9 +168,9 @@
     floor.userData.isFloor = true;
     scene.add(floor);
 
-    var grid = new THREE.GridHelper(36, 36, 0x7c9bad, 0xaec0cb);
+    var grid = new THREE.GridHelper(36, 36, 0x2b5966, 0x1e3d49);
     grid.position.y = -0.035;
-    grid.material.opacity = 0.35;
+    grid.material.opacity = 0.46;
     grid.material.transparent = true;
     scene.add(grid);
 
@@ -407,6 +411,19 @@
     else if (kind === 'lamp') createLamp(group);
     else createMachine(group);
 
+    var statusRail = box(1.76, 0.07, 0.09, COLORS.offline);
+    statusRail.position.set(0, 0.25, 0.72);
+    statusRail.userData.isStatusIndicator = true;
+    group.add(statusRail);
+
+    var lightPost = cylinder(0.035, 0.72, COLORS.steel, 10);
+    lightPost.position.set(-0.82, 0.62, -0.56);
+    group.add(lightPost);
+    var statusLight = cylinder(0.1, 0.18, COLORS.offline, 16);
+    statusLight.position.set(-0.82, 1.02, -0.56);
+    statusLight.userData.isStatusIndicator = true;
+    group.add(statusLight);
+
     group.traverse(function (child) {
       if (child.isMesh) {
         child.userData.deviceOwner = group;
@@ -461,10 +478,20 @@
       group.add(core);
     }
 
+    var statusRail = box(kind === 'agv' ? 2.08 : 1.7, 0.05, 0.09, COLORS.offline);
+    statusRail.position.set(0, 0.29, -0.56);
+    statusRail.userData.isStatusIndicator = true;
+    group.add(statusRail);
+
     var label = createLabelSprite(device.name || device.code, '#173247');
     label.userData.deviceOwner = group;
     label.position.set(0, 0.42, 1.02);
     group.add(label);
+    var stateLabel = createLabelSprite(device.state || 'STANDBY', '#476276');
+    stateLabel.scale.set(1.0, 0.25, 1);
+    stateLabel.userData.deviceOwner = group;
+    stateLabel.position.set(0, 0.42, 1.43);
+    group.add(stateLabel);
 
     group.userData.deviceCode = device.code;
     group.userData.selectType = 'device';
@@ -779,7 +806,9 @@
       group.traverse(function (child) {
         if (!child.isMesh) return;
         var baseColor = child.userData.baseColor === undefined ? COLORS.steel : child.userData.baseColor;
-        var targetColor = state.statusColors ? colorForState(runtimeState, baseColor) : baseColor;
+        var targetColor = child.userData.isStatusIndicator && state.statusColors
+          ? colorForState(runtimeState, COLORS.offline)
+          : baseColor;
         child.material.color.setHex(targetColor);
       });
     });
@@ -803,12 +832,10 @@
     window.__factoryTest__ = testProbe;
   }
 
-  function positionProducts(elapsed) {
+  function positionProducts(phase) {
     if (!productRoot) return;
-    var baseProgress = Number(state.progress || 0) / 100;
-    if (!state.paused) baseProgress += elapsed * Math.max(0.02, state.speed) * 0.035;
     productRoot.children.forEach(function (product, index) {
-      var t = (baseProgress + index * 0.19) % 1;
+      var t = (phase + index * 0.19) % 1;
       if (state.stageCode === 'AGV_TRANSPORT') {
         product.position.set(-6.4 + t * 12.8, 0, 0.1 + index * 0.08);
       } else if (state.stageCode === 'WAREHOUSE_INBOUND') {
@@ -847,13 +874,20 @@
     return 'STANDBY';
   }
 
-  function renderLoop() {
-    requestAnimationFrame(renderLoop);
+  function renderLoop(timestamp) {
+    if (!running) return;
+    animationFrameId = requestAnimationFrame(renderLoop);
     if (!renderer || !scene || !camera) return;
     var delta = Math.min(clock.getDelta(), 0.05);
     var elapsed = clock.elapsedTime;
+    var deltaSeconds = lastFrameTime > 0 ? Math.min(0.1, (timestamp - lastFrameTime) / 1000) : 0;
+    lastFrameTime = timestamp;
+    if (!state.paused) {
+      var speedRate = Math.max(0.012, Math.min(0.12, Math.abs(Number(state.speed || 0.12)) * 0.08));
+      motionPhase = (motionPhase + deltaSeconds * speedRate) % 1;
+    }
     animateEquipment(elapsed, delta);
-    positionProducts(elapsed);
+    positionProducts(motionPhase);
     renderer.render(scene, camera);
     updateProbe();
   }
@@ -863,8 +897,10 @@
       camera.position.set(0, 24, 0);
       camera.up.set(0, 0, -1);
       camera.lookAt(0, 0, 0);
+      document.body.classList.add('planar');
       return;
     }
+    document.body.classList.remove('planar');
     var cosPitch = Math.cos(cameraOrbit.pitch);
     camera.position.set(
       Math.sin(cameraOrbit.yaw) * cosPitch * cameraOrbit.distance,
@@ -891,7 +927,9 @@
     renderer.setSize(width, height, false);
     if (camera.isOrthographicCamera) {
       var aspect = width / height;
-      var frustum = 15;
+      // The stage view is a very wide tablet canvas. Keep the process lane large
+      // enough to read instead of fitting the empty horizontal margins.
+      var frustum = state.viewMode === 'PLANAR' ? 4.7 : 15;
       camera.left = -frustum * aspect;
       camera.right = frustum * aspect;
       camera.top = frustum;
@@ -971,6 +1009,7 @@
     var picked = pickObject(event);
     if (!picked) {
       selectionLabel.classList.add('hidden');
+      window.location.href = 'factory://clear';
       return;
     }
     selectionLabel.textContent = picked.userData.label || 'SELECTED';
@@ -1025,7 +1064,16 @@
         var oldProductSignature = JSON.stringify(state.products.map(function (item) {
           return item.traceCode + ':' + item.status;
         }));
+        var deviceSignature = JSON.stringify((next.devices || []).map(function (item) {
+          return item.code + ':' + item.state;
+        }));
+        var oldDeviceSignature = JSON.stringify(state.devices.map(function (item) {
+          return item.code + ':' + item.state;
+        }));
         Object.keys(next).forEach(function (key) { state[key] = next[key]; });
+        if (Number.isFinite(Number(next.progress))) {
+          motionPhase = ((Number(next.progress) % 100) + 100) % 100 / 100;
+        }
         if (next.errorMessage !== undefined) state.lastError = next.errorMessage;
         if (modeChanged) {
           createCameraForMode();
@@ -1035,6 +1083,8 @@
         } else if (stageChanged) {
           rebuildStage();
           resetCamera();
+        } else if (deviceSignature !== oldDeviceSignature) {
+          rebuildStage();
         } else {
           if (productSignature !== oldProductSignature || statusColorsChanged) rebuildProducts();
           applyRuntimeState();
@@ -1066,9 +1116,14 @@
     },
     resetCamera: resetCamera,
     dispose: function () {
+      running = false;
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
       if (resizeObserver) resizeObserver.disconnect();
       clearObject(stageRoot);
-      if (renderer) renderer.dispose();
+      if (renderer) {
+        renderer.dispose();
+        if (renderer.forceContextLoss) renderer.forceContextLoss();
+      }
       state.lastError = '';
       testProbe.ready = false;
       updateProbe();

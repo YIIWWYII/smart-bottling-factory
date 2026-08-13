@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Production Line Digital Twin</title>
+  <link rel="stylesheet" href="./scene.css">
+</head>
+<body>
+  <main id="scene-host" aria-label="production line digital twin"></main>
+  <section class="scene-status">
+    <span class="live-dot"></span>
+    <strong>LIVE DIGITAL TWIN</strong>
+    <span id="revision">STATE v0</span>
+  </section>
+  <section class="scene-guide">点击工位进入详情 · 画面与实时快照同步</section>
+  <section id="fallback" class="fallback hidden">WebGL 场景不可用</section>
+  <script src="../factory3d/vendor/three.min.js"></script>
+  <script src="./scene.js"></script>
+</body>
+</html>

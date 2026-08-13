@@ -27,7 +27,10 @@
     offline: 0x8397a6,
     product: 0x2a86cf,
     liquid: 0x40a8d8,
-    box: 0xb68a52
+    box: 0xb68a52,
+    line: 0x6f8796,
+    planarBg: 0xe8f1f6,
+    reject: 0xb94040
   };
 
   var state = {
@@ -43,15 +46,26 @@
     stateVersion: 0,
     devices: [],
     products: [],
+    sensors: [],
+    qualityGates: [],
+    alarms: [],
+    incidents: [],
+    buffer: { inputLevel: 0, outputLevel: 0, capacity: 0, blockedReason: '' },
+    upstreamImpact: '',
+    downstreamImpact: '',
     latestError: ''
   };
 
   var scene;
   var camera;
+  var perspectiveCamera;
+  var planarCamera;
   var renderer;
   var stageRoot;
   var deviceRoot;
   var productRoot;
+  var floorRoot;
+  var planarFlowParts = [];
   var movingParts = [];
   var clickable = [];
   var raycaster = new THREE.Raycaster();
@@ -89,6 +103,27 @@
     return mesh(new THREE.CylinderGeometry(radius, radius, height, radialSegments || 20), color);
   }
 
+  function flatMaterial(color, opacity) {
+    return new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: opacity !== undefined && opacity < 1,
+      opacity: opacity === undefined ? 1 : opacity,
+      side: THREE.DoubleSide
+    });
+  }
+
+  function plane(w, h, color, opacity) {
+    return new THREE.Mesh(new THREE.PlaneGeometry(w, h), flatMaterial(color, opacity));
+  }
+
+  function disk(radius, color, opacity, segments) {
+    return new THREE.Mesh(new THREE.CircleGeometry(radius, segments || 32), flatMaterial(color, opacity));
+  }
+
+  function ring(radius, tube, color) {
+    return new THREE.Mesh(new THREE.RingGeometry(Math.max(0.01, radius - tube), radius, 32), flatMaterial(color, 1));
+  }
+
   function setPosition(object, x, y, z) {
     object.position.set(x, y, z);
     return object;
@@ -100,7 +135,9 @@
       scene.background = new THREE.Color(0xdfeaf1);
       scene.fog = new THREE.Fog(0xdfeaf1, 22, 42);
 
-      camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+      perspectiveCamera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+      planarCamera = new THREE.OrthographicCamera(-10, 10, 6, -6, 0.1, 100);
+      camera = perspectiveCamera;
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
       renderer.shadowMap.enabled = true;
@@ -139,23 +176,25 @@
   }
 
   function createFactoryFloor() {
+    floorRoot = new THREE.Group();
     var floor = box(36, 0.35, 22, COLORS.floor);
     floor.position.y = -0.22;
     floor.receiveShadow = true;
     floor.userData.isFloor = true;
-    scene.add(floor);
+    floorRoot.add(floor);
 
     var grid = new THREE.GridHelper(36, 36, 0x7c9bad, 0xaec0cb);
     grid.position.y = -0.035;
     grid.material.opacity = 0.35;
     grid.material.transparent = true;
-    scene.add(grid);
+    floorRoot.add(grid);
 
     for (var x = -17; x <= 17; x += 2) {
       var marker = box(0.08, 0.02, 0.8, x % 4 === 0 ? 0xf0b13a : 0x8297a5);
       marker.position.set(x, 0.01, 9.4);
-      scene.add(marker);
+      floorRoot.add(marker);
     }
+    scene.add(floorRoot);
   }
 
   function clearObject(object) {
@@ -164,8 +203,14 @@
     object.traverse(function (child) {
       if (child.geometry) child.geometry.dispose();
       if (child.material) {
-        if (Array.isArray(child.material)) child.material.forEach(function (item) { item.dispose(); });
-        else child.material.dispose();
+        if (Array.isArray(child.material)) child.material.forEach(function (item) {
+          if (item.map) item.map.dispose();
+          item.dispose();
+        });
+        else {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
+        }
       }
     });
   }
@@ -179,7 +224,9 @@
     stageRoot.add(productRoot);
     scene.add(stageRoot);
     movingParts = [];
+    planarFlowParts = [];
     clickable = [];
+    if (floorRoot) floorRoot.visible = state.viewMode !== 'PLANAR';
 
     createStageEnvironment(state.stageCode);
     var devices = state.devices.length ? state.devices : demoDevices(state.stageCode);
@@ -240,40 +287,171 @@
   }
 
   function createPlanarEnvironment(stageCode) {
-    var laneColor = stageCode === 'AGV_TRANSPORT' || stageCode === 'WAREHOUSE_INBOUND' ? 0x9fb2bd : 0x6f8796;
-    var lane = box(16.5, 0.04, 1.35, laneColor);
-    lane.position.set(0, 0.04, 0);
+    var background = plane(18.6, 9.2, COLORS.planarBg, 1);
+    background.position.z = -0.08;
+    stageRoot.add(background);
+
+    var borderTop = plane(18, 0.08, COLORS.blue, 1);
+    borderTop.position.set(0, 4.35, -0.04);
+    stageRoot.add(borderTop);
+    var borderBottom = plane(18, 0.06, 0x9ab2c0, 1);
+    borderBottom.position.set(0, -4.35, -0.04);
+    stageRoot.add(borderBottom);
+
+    createPlanarProcessLane(stageCode);
+    createPlanarSensorLane();
+    createPlanarQualityLane();
+    createPlanarBufferLane();
+    createPlanarExceptionFlow();
+  }
+
+  function createPlanarProcessLane(stageCode) {
+    var laneColor = stageCode === 'AGV_TRANSPORT' || stageCode === 'WAREHOUSE_INBOUND' ? 0xa6b7c2 : COLORS.line;
+    var lane = plane(16.5, 1.1, laneColor, 0.96);
+    lane.position.set(0, 0, 0);
     stageRoot.add(lane);
+    var center = plane(16.5, 0.06, 0xf4f8fb, 0.86);
+    center.position.set(0, 0, 0.02);
+    stageRoot.add(center);
     for (var i = -7; i <= 7; i += 2) {
       var arrow = createPlanarArrow();
-      arrow.position.set(i, 0.08, 0);
+      arrow.position.set(i, 0, 0.04);
       stageRoot.add(arrow);
+      planarFlowParts.push({ object: arrow, type: 'flow-arrow', originX: i });
     }
     if (stageCode === 'WAREHOUSE_INBOUND') {
       [-5.5, 0, 5.5].forEach(function (x) {
-        var zone = box(2.8, 0.06, 3.2, 0xc7d5df);
-        zone.position.set(x, 0.06, 2.7);
+        var zone = plane(2.8, 1.15, 0xc7d5df, 1);
+        zone.position.set(x, 2.15, 0.02);
         stageRoot.add(zone);
+        stageRoot.add(createPlanarLabel('库位区', x, 2.15, 1.6));
       });
     }
     if (stageCode === 'BEVERAGE_READY') {
-      var pipe = box(13.5, 0.05, 0.22, COLORS.accent);
-      pipe.position.set(0, 0.1, -2.4);
+      var pipe = plane(13.5, 0.18, COLORS.accent, 1);
+      pipe.position.set(0, -2.25, 0.03);
       stageRoot.add(pipe);
+      stageRoot.add(createPlanarLabel('配料/杀菌管线', 0, -2.55, 3.1));
     }
   }
 
   function createPlanarArrow() {
     var group = new THREE.Group();
-    var body = box(0.62, 0.04, 0.08, 0xf1c34a);
+    var body = plane(0.58, 0.08, 0xf1c34a, 1);
     body.position.x = -0.08;
     group.add(body);
-    var head = mesh(new THREE.ConeGeometry(0.16, 0.35, 3), 0xf1c34a, 0.1, 0.4);
-    head.rotation.z = -Math.PI / 2;
-    head.rotation.y = Math.PI / 2;
+    var shape = new THREE.Shape();
+    shape.moveTo(-0.16, -0.17);
+    shape.lineTo(0.18, 0);
+    shape.lineTo(-0.16, 0.17);
+    shape.lineTo(-0.16, -0.17);
+    var head = new THREE.Mesh(new THREE.ShapeGeometry(shape), flatMaterial(0xf1c34a, 1));
     head.position.x = 0.32;
     group.add(head);
     return group;
+  }
+
+  function createPlanarSensorLane() {
+    var sensors = state.sensors || [];
+    var startX = -7.2;
+    var step = sensors.length <= 1 ? 0 : 14.4 / Math.max(1, sensors.length - 1);
+    sensors.slice(0, 8).forEach(function (reading, index) {
+      var x = sensors.length <= 1 ? 0 : startX + index * step;
+      var qualityColor = reading.quality === 'BAD' || reading.quality === 'FAIL' ? COLORS.alarm : reading.quality === 'STALE' ? COLORS.warning : COLORS.running;
+      var node = new THREE.Group();
+      node.position.set(x, 3.35, 0.06);
+      node.add(disk(0.22, qualityColor, 1, 24));
+      node.add(ring(0.34, 0.035, COLORS.blue));
+      node.add(createPlanarLabel(reading.sensorType || 'SENSOR', 0, -0.55, 1.2));
+      node.add(createPlanarLabel(String(reading.value) + (reading.unit || ''), 0, -0.88, 1.2));
+      stageRoot.add(node);
+    });
+    if (!sensors.length) {
+      stageRoot.add(createPlanarLabel('传感器读数等待后端快照', 0, 3.2, 4.2));
+    }
+  }
+
+  function createPlanarQualityLane() {
+    var gates = state.qualityGates || [];
+    gates.slice(0, 5).forEach(function (gate, index) {
+      var x = -6.3 + index * 3.15;
+      var gateColor = colorForState(gate.status || 'WAIT', COLORS.warning);
+      var tile = new THREE.Group();
+      tile.position.set(x, -3.15, 0.05);
+      tile.add(plane(2.35, 0.78, 0xf4f8fb, 0.94));
+      tile.add(plane(2.35, 0.08, gateColor, 1));
+      tile.children[1].position.y = 0.35;
+      tile.add(createPlanarLabel(gate.label || '质量门', 0, 0.08, 1.9));
+      tile.add(createPlanarLabel(gate.actual || gate.status || 'WAIT', 0, -0.22, 1.9));
+      stageRoot.add(tile);
+    });
+  }
+
+  function createPlanarBufferLane() {
+    var buffer = state.buffer || { inputLevel: 0, outputLevel: 0, capacity: 0, blockedReason: '' };
+    var capacity = Math.max(1, Number(buffer.capacity || 0));
+    var inputRatio = Math.max(0, Math.min(1, Number(buffer.inputLevel || 0) / capacity));
+    var outputRatio = Math.max(0, Math.min(1, Number(buffer.outputLevel || 0) / capacity));
+    var input = createBufferBar('IN ' + String(buffer.inputLevel || 0) + '/' + String(capacity), inputRatio, -7.1, -1.8);
+    var output = createBufferBar('OUT ' + String(buffer.outputLevel || 0) + '/' + String(capacity), outputRatio, 7.1, -1.8);
+    stageRoot.add(input);
+    stageRoot.add(output);
+    stageRoot.add(createPlanarLabel('上游: ' + (state.upstreamImpact || '等待数据'), -4.1, -2.32, 3.1));
+    stageRoot.add(createPlanarLabel('下游: ' + (state.downstreamImpact || '等待数据'), 4.1, -2.32, 3.1));
+    if (buffer.blockedReason) {
+      stageRoot.add(createPlanarLabel('阻塞: ' + buffer.blockedReason, 0, -2.75, 4.8, COLORS.alarm));
+    }
+  }
+
+  function createBufferBar(label, ratio, x, y) {
+    var group = new THREE.Group();
+    group.position.set(x, y, 0.04);
+    group.add(plane(2.55, 0.42, 0xd5e1e8, 1));
+    var fill = plane(2.55 * ratio, 0.42, ratio > 0.8 ? COLORS.warning : COLORS.running, 1);
+    fill.position.x = -1.275 + (2.55 * ratio) / 2;
+    fill.position.z = 0.02;
+    group.add(fill);
+    group.add(createPlanarLabel(label, 0, 0, 2));
+    return group;
+  }
+
+  function createPlanarExceptionFlow() {
+    var alarms = state.alarms || [];
+    var incidents = state.incidents || [];
+    if (!alarms.length && !incidents.length) return;
+    var bypass = plane(13.6, 0.08, COLORS.reject, 1);
+    bypass.position.set(0, 1.75, 0.04);
+    stageRoot.add(bypass);
+    [-6, -3, 0, 3, 6].forEach(function (x, index) {
+      var marker = disk(0.13 + (index % 2) * 0.04, COLORS.reject, 1, 18);
+      marker.position.set(x, 1.75, 0.06);
+      stageRoot.add(marker);
+      planarFlowParts.push({ object: marker, type: 'exception-pulse', originX: x });
+    });
+    stageRoot.add(createPlanarLabel('异常/剔除/回流通道 ' + String(alarms.length + incidents.length) + ' 项', 0, 2.05, 4.4, COLORS.reject));
+  }
+
+  function createPlanarLabel(text, x, y, width, color) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 96;
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#' + (color || COLORS.navy).toString(16).padStart(6, '0');
+    ctx.font = '700 30px HarmonyOS Sans SC, Microsoft YaHei, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(text).slice(0, 28), canvas.width / 2, canvas.height / 2);
+    var texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    var label = new THREE.Mesh(new THREE.PlaneGeometry(width || 2.2, 0.42), new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      side: THREE.DoubleSide
+    }));
+    label.userData.noStatusColor = true;
+    label.position.set(x, y, 0.12);
+    return label;
   }
 
   function createConveyor(length) {
@@ -396,24 +574,28 @@
   function createPlanarDevice(device, index, count) {
     var group = new THREE.Group();
     var x = count <= 1 ? 0 : -6.6 + index * (13.2 / (count - 1));
-    var z = index % 2 === 0 ? -2.35 : 2.35;
-    if (state.stageCode === 'AGV_TRANSPORT') z = index === 0 ? 0 : index === 1 ? -3 : 3;
-    if (state.stageCode === 'WAREHOUSE_INBOUND') z = -2.55 + index * 0.35;
-    group.position.set(x, 0, z);
+    var y = index % 2 === 0 ? -0.98 : 0.98;
+    if (state.stageCode === 'AGV_TRANSPORT') y = index === 0 ? 0 : index === 1 ? -1.25 : 1.25;
+    if (state.stageCode === 'WAREHOUSE_INBOUND') y = -0.8 + index * 0.55;
+    group.position.set(x, y, 0.08);
 
     var kind = kindForDevice(device.code);
-    var base = box(1.55, 0.08, 1.05, COLORS.white);
-    base.position.y = 0.18;
+    var stateColor = colorForState(device.state || 'RUNNING', COLORS.accent);
+    var base = plane(1.7, 0.92, COLORS.white, 0.98);
     group.add(base);
-    var band = box(1.55, 0.09, 0.16, COLORS.blue);
-    band.position.set(0, 0.25, -0.45);
+    var band = plane(1.7, 0.1, stateColor, 1);
+    band.position.set(0, 0.41, 0.02);
     group.add(band);
-    var marker = cylinder(0.24, 0.08, colorForState(device.state || 'RUNNING', COLORS.accent), 24);
-    marker.position.set(-0.47, 0.34, 0.08);
+    var marker = disk(0.18, stateColor, 1, 24);
+    marker.position.set(-0.58, 0.03, 0.04);
     group.add(marker);
     var symbol = createPlanarSymbol(kind);
-    symbol.position.set(0.25, 0.35, 0.12);
+    symbol.position.set(0.22, 0.02, 0.05);
     group.add(symbol);
+    group.add(createPlanarLabel(device.name || device.code, 0, -0.62, 1.9));
+    if (device.actionCode) {
+      group.add(createPlanarLabel(device.actionCode, 0, -0.92, 1.9, COLORS.blue));
+    }
     movingParts.push({ object: marker, type: 'pulse', deviceCode: device.code });
     group.traverse(function (child) {
       if (child.isMesh) {
@@ -427,33 +609,33 @@
   function createPlanarSymbol(kind) {
     var group = new THREE.Group();
     if (kind === 'robot') {
-      var armA = box(0.1, 0.08, 0.66, COLORS.accent);
-      armA.rotation.y = 0.55;
+      var armA = plane(0.12, 0.7, COLORS.accent, 1);
+      armA.rotation.z = 0.55;
       group.add(armA);
-      var armB = box(0.1, 0.08, 0.54, COLORS.blue);
-      armB.rotation.y = -0.55;
+      var armB = plane(0.12, 0.55, COLORS.blue, 1);
+      armB.rotation.z = -0.55;
       armB.position.x = 0.22;
       group.add(armB);
     } else if (kind === 'agv') {
-      var car = box(0.78, 0.08, 0.48, COLORS.blue);
+      var car = plane(0.82, 0.48, COLORS.blue, 1);
       group.add(car);
       [-0.25, 0.25].forEach(function (x) {
-        var wheel = cylinder(0.08, 0.06, COLORS.navy, 14);
-        wheel.position.set(x, 0.06, -0.32);
+        var wheel = disk(0.08, COLORS.navy, 1, 14);
+        wheel.position.set(x, -0.32, 0.02);
         group.add(wheel);
       });
     } else if (kind === 'sensor' || kind === 'camera') {
-      var eye = cylinder(0.22, 0.08, COLORS.accent, 24);
+      var eye = disk(0.23, COLORS.accent, 1, 24);
       group.add(eye);
-      var ray = box(0.08, 0.05, 0.62, 0x9bc4dc);
-      ray.position.z = 0.38;
+      var ray = plane(0.08, 0.62, 0x9bc4dc, 0.8);
+      ray.position.y = -0.43;
       group.add(ray);
     } else if (kind === 'reject') {
-      var gate = box(0.72, 0.08, 0.12, COLORS.warning);
-      gate.rotation.y = 0.45;
+      var gate = plane(0.78, 0.14, COLORS.warning, 1);
+      gate.rotation.z = 0.45;
       group.add(gate);
     } else {
-      var core = box(0.64, 0.08, 0.44, COLORS.accent);
+      var core = plane(0.68, 0.46, COLORS.accent, 1);
       group.add(core);
     }
     return group;
@@ -693,12 +875,13 @@
     var group = new THREE.Group();
     var productColor = colorForState(product.status, COLORS.product);
     if (state.viewMode === 'PLANAR') {
-      var dot = cylinder(0.23, 0.1, state.statusColors ? productColor : COLORS.product, 24);
-      dot.position.y = 0.42;
+      var dot = disk(0.23, state.statusColors ? productColor : COLORS.product, 1, 24);
+      dot.position.z = 0.06;
       group.add(dot);
-      var tail = box(0.42, 0.06, 0.08, COLORS.navy);
-      tail.position.set(-0.3, 0.44, 0);
+      var tail = plane(0.42, 0.06, COLORS.navy, 1);
+      tail.position.set(-0.3, 0, 0.08);
       group.add(tail);
+      group.add(createPlanarLabel(product.traceCode || 'WIP', 0, -0.42, 1.35));
     } else if (state.stageCode === 'PACKING' || state.stageCode === 'AGV_TRANSPORT' || state.stageCode === 'WAREHOUSE_INBOUND') {
       var carton = box(1.0, 0.78, 0.82, state.statusColors ? productColor : COLORS.box);
       carton.position.y = 1.45;
@@ -740,6 +923,7 @@
       group.userData.runtimeState = runtimeState;
       group.traverse(function (child) {
         if (!child.isMesh) return;
+        if (child.userData.noStatusColor) return;
         var baseColor = child.userData.baseColor === undefined ? COLORS.steel : child.userData.baseColor;
         var targetColor = state.statusColors ? colorForState(runtimeState, baseColor) : baseColor;
         child.material.color.setHex(targetColor);
@@ -752,9 +936,13 @@
     var baseProgress = Number(state.progress || 0) / 100;
     if (!state.paused) baseProgress += elapsed * Math.max(0.02, state.speed) * 0.035;
     productRoot.children.forEach(function (product, index) {
-      var t = (baseProgress + index * 0.19) % 1;
+      var productState = state.products[index] || {};
+      var productProgress = productState.progress === undefined ? baseProgress * 100 : Number(productState.progress || 0);
+      var t = ((productProgress / 100) + index * 0.05) % 1;
+      if (!state.paused && productState.progress === undefined) t = (baseProgress + index * 0.19) % 1;
       if (state.viewMode === 'PLANAR') {
-        product.position.set(-7.3 + t * 14.6, 0, index % 2 ? 0.34 : -0.34);
+        var y = productState.status === 'REJECTED' || productState.status === 'FAILED' || productState.defectType ? 1.75 : (index % 2 ? 0.34 : -0.34);
+        product.position.set(-7.3 + t * 14.6, y, 0.12);
       } else if (state.stageCode === 'AGV_TRANSPORT') {
         product.position.set(-6.4 + t * 12.8, 0, 0.1 + index * 0.08);
       } else if (state.stageCode === 'WAREHOUSE_INBOUND') {
@@ -770,6 +958,15 @@
   }
 
   function animateEquipment(elapsed, delta) {
+    planarFlowParts.forEach(function (part, index) {
+      if (state.paused) return;
+      if (part.type === 'flow-arrow') {
+        part.object.position.x = part.originX + (Math.sin(elapsed * Math.max(0.45, state.speed) + index) * 0.08);
+        part.object.material && (part.object.material.opacity = 0.78 + Math.sin(elapsed * 2 + index) * 0.12);
+      } else if (part.type === 'exception-pulse') {
+        part.object.scale.setScalar(1 + Math.sin(elapsed * 3 + index) * 0.22);
+      }
+    });
     movingParts.forEach(function (part, index) {
       var ownerState = findDeviceState(part.deviceCode);
       if (state.paused || (ownerState !== 'RUNNING' && part.deviceCode)) return;
@@ -806,10 +1003,12 @@
 
   function updateCamera() {
     if (state.viewMode === 'PLANAR') {
-      camera.position.set(0, 24, 0.01);
+      camera = planarCamera;
+      camera.position.set(0, 0, 18);
       camera.lookAt(0, 0, 0);
       return;
     }
+    camera = perspectiveCamera;
     var cosPitch = Math.cos(cameraOrbit.pitch);
     camera.position.set(
       Math.sin(cameraOrbit.yaw) * cosPitch * cameraOrbit.distance,
@@ -821,7 +1020,6 @@
 
   function resetCamera() {
     if (state.viewMode === 'PLANAR') {
-      cameraOrbit = { yaw: 0, pitch: 1.2, distance: 24 };
       updateCamera();
       return;
     }
@@ -835,7 +1033,19 @@
     var width = Math.max(1, host.clientWidth);
     var height = Math.max(1, host.clientHeight);
     renderer.setSize(width, height, false);
-    camera.aspect = width / height;
+    if (perspectiveCamera) {
+      perspectiveCamera.aspect = width / height;
+      perspectiveCamera.updateProjectionMatrix();
+    }
+    if (planarCamera) {
+      var aspect = width / height;
+      var vertical = 5.2;
+      planarCamera.left = -vertical * aspect;
+      planarCamera.right = vertical * aspect;
+      planarCamera.top = vertical;
+      planarCamera.bottom = -vertical;
+      planarCamera.updateProjectionMatrix();
+    }
     camera.updateProjectionMatrix();
   }
 
@@ -875,11 +1085,18 @@
       if (draggedDevice) {
         updatePointer(event);
         raycaster.setFromCamera(pointer, camera);
-        var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        var dragPlane = state.viewMode === 'PLANAR'
+          ? new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
+          : new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
         var point = new THREE.Vector3();
-        if (raycaster.ray.intersectPlane(plane, point)) {
+        if (raycaster.ray.intersectPlane(dragPlane, point)) {
           draggedDevice.position.x = Math.max(-8, Math.min(8, point.x));
-          draggedDevice.position.z = Math.max(-5, Math.min(5, point.z));
+          if (state.viewMode === 'PLANAR') {
+            draggedDevice.position.y = Math.max(-3.8, Math.min(3.8, point.y));
+            draggedDevice.position.z = 0.08;
+          } else {
+            draggedDevice.position.z = Math.max(-5, Math.min(5, point.z));
+          }
         }
       } else if (state.viewMode !== 'PLANAR') {
         cameraOrbit.yaw -= dx * 0.007;
@@ -924,7 +1141,7 @@
   }
 
   function positionStorageKey(code) {
-    return 'factory3d.layout.' + state.stageCode + '.' + code;
+    return 'factory3d.layout.' + state.stageCode + '.' + state.viewMode + '.' + code;
   }
 
   function applySavedPosition(group) {
@@ -934,7 +1151,12 @@
       var saved = JSON.parse(raw);
       if (Number.isFinite(saved.x) && Number.isFinite(saved.z)) {
         group.position.x = saved.x;
-        group.position.z = saved.z;
+        if (state.viewMode === 'PLANAR') {
+          group.position.y = Number.isFinite(saved.y) ? saved.y : group.position.y;
+          group.position.z = 0.08;
+        } else {
+          group.position.z = saved.z;
+        }
       }
     } catch (_) {}
   }
@@ -943,6 +1165,7 @@
     try {
       localStorage.setItem(positionStorageKey(group.userData.deviceCode), JSON.stringify({
         x: Number(group.position.x.toFixed(2)),
+        y: Number(group.position.y.toFixed(2)),
         z: Number(group.position.z.toFixed(2))
       }));
     } catch (_) {}
@@ -959,6 +1182,8 @@
         var next = normalizePayload(payload);
         var stageChanged = next.stageCode && next.stageCode !== state.stageCode;
         var viewModeChanged = next.viewMode && next.viewMode !== state.viewMode;
+        var pausedChanged = next.paused !== undefined && next.paused !== state.paused;
+        var versionChanged = next.stateVersion !== undefined && next.stateVersion !== state.stateVersion;
         var statusColorsChanged = next.statusColors !== undefined && next.statusColors !== state.statusColors;
         var productSignature = JSON.stringify((next.products || []).map(function (item) {
           return item.traceCode + ':' + item.status;
@@ -967,7 +1192,8 @@
           return item.traceCode + ':' + item.status;
         }));
         Object.keys(next).forEach(function (key) { state[key] = next[key]; });
-        if (stageChanged || viewModeChanged) {
+        var shouldRebuildPlanar = state.viewMode === 'PLANAR' && !state.paused && (versionChanged || pausedChanged || statusColorsChanged);
+        if (stageChanged || viewModeChanged || shouldRebuildPlanar) {
           rebuildStage();
         } else {
           if (productSignature !== oldProductSignature || statusColorsChanged) rebuildProducts();
@@ -1014,11 +1240,15 @@
       return {
         ready: Boolean(renderer && scene && camera && !disposed),
         mode: state.viewMode,
+        sceneKind: state.viewMode === 'PLANAR' ? 'PLANAR_PROCESS_2D' : 'THREE_DIMENSIONAL_3D',
         stateVersion: state.stateVersion,
         rendererInfo: renderer ? { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles } : { calls: 0, triangles: 0 },
         canvas: { width: canvas ? canvas.width : 0, height: canvas ? canvas.height : 0 },
         deviceCount: state.devices.length,
         productCount: state.products.length,
+        sensorCount: state.sensors.length,
+        qualityGateCount: state.qualityGates.length,
+        alarmCount: state.alarms.length,
         paused: state.paused,
         latestError: state.latestError
       };
