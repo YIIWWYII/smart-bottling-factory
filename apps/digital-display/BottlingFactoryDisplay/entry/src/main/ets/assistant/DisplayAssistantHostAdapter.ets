@@ -17,7 +17,6 @@ import {
 } from '@bottling/harmony-assistant'
 import { ApiConfig } from '../service/ApiConfig'
 import { FactoryBundle } from '../model/FactoryModels'
-import { SessionStore } from '../service/SessionStore'
 
 interface DisplayAssistantPageState {
   pageRoute: string
@@ -33,6 +32,7 @@ const DEFAULT_LINE_ID: string = 'LINE-01'
 
 export class DisplayAssistantHostAdapter implements AssistantHostAdapter {
   readonly sourceApp: AssistantSourceApp = 'DISPLAY'
+  private readonly aiAccessToken: string = 'DISPLAY_DEMO'
 
   private selectionPublisher: AssistantSelectionPublisher = new AssistantSelectionPublisher()
   private visibilityPublisher: AssistantVisibilityPublisher = new AssistantVisibilityPublisher()
@@ -104,7 +104,7 @@ export class DisplayAssistantHostAdapter implements AssistantHostAdapter {
   }
 
   async getAccessToken(): Promise<string | undefined> {
-    return SessionStore.token.length > 0 ? SessionStore.token : undefined
+    return this.aiAccessToken
   }
 
   getServiceEndpoint(): AssistantServiceEndpoint {

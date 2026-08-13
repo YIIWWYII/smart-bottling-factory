@@ -24,6 +24,7 @@ import {
 @Component
 struct FactoryOverview {
   @State bundle: FactoryBundle = FactoryRepository.bundle
+  @State realtimeOnline: boolean = FactoryRepository.realtimeOnline
   @State revision: number = 0
   @State dashboardTotal: number = 0
   @State dashboardCompleted: number = 0
@@ -43,6 +44,7 @@ struct FactoryOverview {
   private refreshTimer: number = -1
   private listener: () => void = () => {
     this.bundle = FactoryRepository.bundle
+    this.realtimeOnline = FactoryRepository.realtimeOnline
     this.syncSnapshot()
     displayAssistantHost.updatePage('pages/FactoryOverview', this.bundle)
     this.revision += 1
@@ -52,6 +54,7 @@ struct FactoryOverview {
     displayAssistantHost.updatePage('pages/FactoryOverview', this.bundle)
     displayAssistantHost.publishVisibility('VISIBLE')
     FactoryRepository.subscribe(this.listener)
+    this.realtimeOnline = FactoryRepository.realtimeOnline
     this.syncSnapshot()
     void FactoryRepository.refresh()
     FactoryRepository.connectRealtime()
@@ -203,7 +206,7 @@ struct FactoryOverview {
               status: this.bundle.online ? (this.openExceptionCount > 0 ? 'HOLD' : 'RUNNING') : 'STANDBY',
               label: this.bundle.online ? (this.openExceptionCount > 0 ? '连续运行 · 局部异常' : '后端在线') : 'LOCAL DEMO'
             })
-            Text('实时通道：' + (FactoryRepository.realtimeOnline ? '在线' : '重连中')).fontSize(9).fontColor('#D2E0EB').margin({ top: 8 })
+            Text('实时通道：' + (this.realtimeOnline ? '在线' : '重连中')).fontSize(9).fontColor('#D2E0EB').margin({ top: 8 })
             Text(this.formatTime(this.bundle.updatedAt)).fontSize(8).fontColor('#B8CEDC').margin({ top: 4 })
           }.alignItems(HorizontalAlign.End)
         }.width('100%').padding(22).backgroundColor(Theme.navy)
