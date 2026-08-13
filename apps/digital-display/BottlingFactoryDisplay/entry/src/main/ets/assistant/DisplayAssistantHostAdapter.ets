@@ -17,7 +17,6 @@ import {
 } from '@bottling/harmony-assistant'
 import { ApiConfig } from '../service/ApiConfig'
 import { FactoryBundle } from '../model/FactoryModels'
-import { SessionStore } from '../service/SessionStore'
 
 interface DisplayAssistantPageState {
   pageRoute: string
