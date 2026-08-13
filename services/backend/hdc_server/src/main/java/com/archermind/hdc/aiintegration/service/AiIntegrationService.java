@@ -65,6 +65,7 @@ public class AiIntegrationService {
         requireAiService(authorization);
         String source = normalizeSourceApp(sourceApp);
         AdminUser user = authenticateSubjectIfPresent(subjectAuthorization);
+        ensureSubjectScope(user, source, stageCode, deviceCode);
         String scopedStage = scopedStage(source, stageCode);
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("sourceApp", source);
@@ -128,6 +129,7 @@ public class AiIntegrationService {
         rejectConversationOrigin(request.getOriginType());
         AdminUser operator = authService.authenticate(subjectAuthorization);
         require(!"VIEWER".equals(operator.getRole()), "VIEWER cannot approve AI command intents");
+        ensureSubjectScope(operator, normalizeSourceApp(request.getSourceApp()), request.getStageCode(), request.getDeviceCode());
 
         CommandIntentRecord existing = findIntent(request.getIdempotencyKey());
         if (existing != null) return intentResponse(existing);
@@ -433,6 +435,23 @@ public class AiIntegrationService {
         String value = originType.trim().toUpperCase(Locale.ROOT);
         require(!Arrays.asList("ASSISTANT_MESSAGE", "CONVERSATION", "FREE_TEXT", "CHAT").contains(value),
                 "assistant conversation/message cannot create command-intent");
+    }
+
+    private void ensureSubjectScope(AdminUser user, String sourceApp, String stageCode, String deviceCode) {
+        if (user == null) return;
+        String subjectSource = upper(user.getSourceApp());
+        String boundStage = upper(user.getStageCode());
+        if ("WORKSTATION".equals(subjectSource)) {
+            require("WORKSTATION".equals(sourceApp), "WORKSTATION subject cannot access non-workstation AI scope");
+            require(StringUtils.hasText(boundStage), "WORKSTATION subject is not bound to stageCode");
+            String requestedStage = upper(stageCode);
+            require(StringUtils.hasText(requestedStage), "WORKSTATION AI scope requires stageCode");
+            require(boundStage.equals(requestedStage), "WORKSTATION subject cannot access another stage");
+        }
+        if (StringUtils.hasText(deviceCode) && StringUtils.hasText(boundStage)) {
+            String deviceStage = capabilities.stageForDevice(upper(deviceCode));
+            require(deviceStage == null || boundStage.equals(deviceStage), "subject cannot access device outside bound stage");
+        }
     }
 
     private String scopedStage(String sourceApp, String stageCode) {
