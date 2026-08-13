@@ -24,6 +24,7 @@ import {
 
 interface AiRequestHeaders {
   'Content-Type': string
+  'X-Client-Type': string
   Authorization?: string
 }
 
@@ -201,9 +202,16 @@ export class AiCenterClient {
   }
 
   private headers(contentType: string): AiRequestHeaders {
-    return SessionStore.token.length > 0
-      ? { 'Content-Type': contentType, 'Authorization': SessionStore.token }
-      : { 'Content-Type': contentType }
+    const token: string = this.authorizationToken()
+    return token.length > 0
+      ? { 'Content-Type': contentType, 'X-Client-Type': 'ADMIN', 'Authorization': token }
+      : { 'Content-Type': contentType, 'X-Client-Type': 'ADMIN' }
+  }
+
+  private authorizationToken(): string {
+    if (!SessionStore.isAuthenticated || SessionStore.isDemo || SessionStore.token.length === 0) return ''
+    const token: string = SessionStore.token.trim()
+    return token.toLowerCase().startsWith('bearer ') ? token : 'Bearer ' + token
   }
 
   private unwrap<T>(responseCode: number, raw: string): T {

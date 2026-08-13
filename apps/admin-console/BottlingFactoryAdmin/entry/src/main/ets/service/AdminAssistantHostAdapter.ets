@@ -89,7 +89,8 @@ export class AdminAssistantHostAdapter implements AssistantHostAdapter {
 
   async getAccessToken(): Promise<string | undefined> {
     if (!SessionStore.isAuthenticated || SessionStore.isDemo) return undefined
-    return SessionStore.token
+    const token: string = SessionStore.token.trim()
+    return token.toLowerCase().startsWith('bearer ') ? token : 'Bearer ' + token
   }
 
   getServiceEndpoint(): AssistantServiceEndpoint {
