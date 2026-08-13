@@ -261,7 +261,7 @@ export struct KnowledgeGovernance {
       'KNOWLEDGE_SUBMISSION',
       review.submission.submissionId,
       review.submission.title + ' · ' + review.submission.status,
-      'AdminConsole/KNOWLEDGE',
+      'AdminConsole/AI_CENTER',
       this.stateVersion,
       [
         assistantField('title', review.submission.title),

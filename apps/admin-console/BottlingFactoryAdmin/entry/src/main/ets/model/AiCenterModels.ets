@@ -10,6 +10,16 @@ export interface AiItemsResponse<T> {
   source?: string
 }
 
+export interface AiProviderPreset {
+  provider: string
+  label: string
+  description: string
+  baseUrl: string
+  models: Array<string>
+  requiresApiKey: boolean
+  compatible: boolean
+}
+
 export interface AiConfigResponse {
   config: AiRuntimeConfig
   source?: string

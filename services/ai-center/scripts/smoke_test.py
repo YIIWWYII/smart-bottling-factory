@@ -346,6 +346,15 @@ def main() -> None:
             raise AssertionError(f"config did not mask key metadata: {config}")
         print("ai config read OK")
 
+        providers = assert_envelope(http_json("GET", "/admin/ai/providers"), "get ai providers")
+        provider_codes = {item["provider"] for item in providers["items"]}
+        for required_provider in {"LOCAL_DEMO", "OPENAI", "DEEPSEEK", "QWEN", "CUSTOM_OPENAI_COMPATIBLE"}:
+            if required_provider not in provider_codes:
+                raise AssertionError(f"provider preset missing: {required_provider}")
+        if any("apiKey" in item for item in providers["items"]):
+            raise AssertionError(f"provider catalog exposed an api key: {providers}")
+        print("ai provider catalog OK")
+
         updated_config = assert_envelope(
             http_json(
                 "PUT",

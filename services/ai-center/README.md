@@ -55,6 +55,7 @@ python .\scripts\smoke_test.py
 The admin console can manage AI runtime settings through the AI center. API keys are stored server-side and are always masked when returned to the frontend.
 
 - `GET /api/admin/ai/config`
+- `GET /api/admin/ai/providers` (read-only provider metadata; no authentication secret is returned)
 - `PUT /api/admin/ai/config`
 - `POST /api/admin/ai/config/test`
 - `POST /api/admin/ai/config/test-question`
@@ -70,6 +71,11 @@ Supported config fields:
 - `requestTimeoutSeconds`, `retryCount`, `streamingEnabled`.
 - `embeddingModel`, `vectorStoreType`, `vectorStoreUrl`.
 - `ragTopK`, `chunkSize`, `chunkOverlap`, `knowledgeIndexEnabled`.
+
+The provider catalog includes LOCAL DEMO, OpenAI, DeepSeek, Qwen, Moonshot/Kimi,
+Zhipu GLM, SiliconFlow, and a custom OpenAI-compatible option. The admin console
+uses these entries to prefill the base URL and recommended models; the API key is
+entered by the administrator and remains stored and masked in the AI center.
 
 Timeout behavior:
 

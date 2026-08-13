@@ -60,7 +60,7 @@ export struct AiDecisionAuditPanel {
       'AI_DECISION',
       decision.decisionId,
       decision.status + ' · ' + (decision.statusReason || decision.validationSummary),
-      'AdminConsole/AI_AUDIT',
+      'AdminConsole/AI_CENTER',
       decision.contextStateVersion || this.stateVersion,
       [
         assistantField('lineId', decision.lineId),

@@ -12,6 +12,7 @@ import {
   AiItemsResponse,
   AiModelConfig,
   AiModelConfigUpdate,
+  AiProviderPreset,
   AiRuntimeConfig,
   KnowledgeReview,
   KnowledgeReviewAction,
@@ -68,7 +69,7 @@ export class AiCenterError extends Error {
 
 export class AiCenterClient {
   async request<T>(path: string, method: http.RequestMethod = http.RequestMethod.GET, body?: string): Promise<T> {
-    this.assertNetworkAllowed()
+    this.assertNetworkAllowed(path)
     const client = http.createHttp()
     const headers: AiRequestHeaders = this.headers('application/json;charset=UTF-8')
     try {
@@ -121,6 +122,10 @@ export class AiCenterClient {
   async getModelConfig(): Promise<AiModelConfig> {
     const result: AiConfigResponse = await this.request<AiConfigResponse>('/admin/ai/config')
     return this.mapRuntimeConfig(result.config)
+  }
+
+  async listProviderPresets(): Promise<Array<AiProviderPreset>> {
+    return await this.requestItems<AiProviderPreset>('/admin/ai/providers')
   }
 
   async updateModelConfig(payload: AiModelConfigUpdate): Promise<AiModelConfig> {
@@ -216,8 +221,8 @@ export class AiCenterClient {
     return token.toLowerCase().startsWith('bearer ') ? token : 'Bearer ' + token
   }
 
-  private assertNetworkAllowed(): void {
-    if (SessionStore.isDemo) throw new AiCenterError('本地演示模式不访问 AI 中枢接口')
+  private assertNetworkAllowed(path: string = ''): void {
+    if (SessionStore.isDemo && path !== '/admin/ai/providers') throw new AiCenterError('本地演示模式不访问 AI 中枢接口')
   }
 
   private unwrap<T>(responseCode: number, raw: string): T {

@@ -54,7 +54,8 @@ import {
   AiConnectionTestRequest,
   AiConnectionTestResult,
   AiModelConfig,
-  AiModelConfigUpdate
+  AiModelConfigUpdate,
+  AiProviderPreset
 } from '../model/AiCenterModels'
 
 interface MenuItem {
@@ -81,9 +82,7 @@ const MENU: Array<MenuItem> = [
   { code: 'DEVICES', label: '设备管理', description: '档案、在线态、维护和模板', minRole: 'VIEWER' },
   { code: 'MATERIALS', label: '产品与物料', description: '追踪、质量事件和箱码', minRole: 'VIEWER' },
   { code: 'LOGISTICS', label: '物流仓储', description: 'AGV、库位、库存和安全', minRole: 'VIEWER' },
-  { code: 'AI_AUDIT', label: 'AI 决策审计', description: 'RAG、校验、建议和结果', minRole: 'VIEWER' },
-  { code: 'AI_CONFIG', label: 'AI 管理', description: '模型、Key、超时、RAG 和连接测试', minRole: 'VIEWER' },
-  { code: 'KNOWLEDGE', label: '知识资料', description: '上传、解析、审核、撤销和索引', minRole: 'VIEWER' },
+  { code: 'AI_CENTER', label: 'AI 中心', description: '模型连接、知识库治理和决策审计', minRole: 'VIEWER' },
   { code: 'USERS', label: '用户权限', description: '账号、角色和状态', minRole: 'ADMIN' },
   { code: 'SETTINGS', label: '系统配置', description: '阈值和策略版本', minRole: 'VIEWER' },
   { code: 'AUDIT', label: '操作审计', description: '用户操作和后端结果', minRole: 'VIEWER' }
@@ -92,7 +91,7 @@ const MENU: Array<MenuItem> = [
 const MENU_GROUPS: Array<MenuGroup> = [
   { label: '运营监控', items: MENU.filter((item: MenuItem) => item.code === 'DASHBOARD' || item.code === 'PRODUCTION' || item.code === 'INCIDENTS') },
   { label: '现场资产', items: MENU.filter((item: MenuItem) => item.code === 'DEVICES' || item.code === 'MATERIALS' || item.code === 'LOGISTICS') },
-  { label: 'AI 治理', items: MENU.filter((item: MenuItem) => item.code === 'AI_AUDIT' || item.code === 'AI_CONFIG' || item.code === 'KNOWLEDGE') },
+  { label: 'AI 治理', items: MENU.filter((item: MenuItem) => item.code === 'AI_CENTER') },
   { label: '系统管理', items: MENU.filter((item: MenuItem) => item.code === 'USERS' || item.code === 'SETTINGS' || item.code === 'AUDIT') }
 ]
 
@@ -127,6 +126,10 @@ struct AdminConsole {
   @State message: string = ''
   @State loading: boolean = false
   @State aiConfigLoading: boolean = false
+  @State aiCenterTab: string = 'MODEL'
+  @State aiProviders: Array<AiProviderPreset> = []
+  @State aiProviderDescription: string = ''
+  @State aiProviderRequiresKey: boolean = true
   @State aiConfigMessage: string = ''
   @State aiConfigAvailable: boolean = false
   @State aiProvider: string = ''
@@ -191,7 +194,7 @@ struct AdminConsole {
     } else {
       this.users = []
     }
-    if (this.section === 'AI_CONFIG') await this.loadAiModelConfig()
+    if (this.section === 'AI_CENTER') await this.loadAiCenter()
     if (this.section === 'AUDIT') await this.loadAuditRecords()
     this.loading = false
   }
@@ -256,6 +259,103 @@ struct AdminConsole {
     }
   }
 
+  private async loadAiCenter(): Promise<void> {
+    if (SessionStore.isDemo) {
+      if (this.aiProviders.length > 0) return
+      this.aiConfigLoading = true
+      try {
+        this.aiProviders = await aiCenterClient.listProviderPresets()
+        this.aiProvider = 'LOCAL_DEMO'
+        this.aiModelName = 'local-demo-assistant'
+        this.aiBaseUrl = ''
+        this.aiMaskedApiKey = ''
+        this.aiConfigAvailable = false
+        this.aiConfigMessage = '本地演示模式可查看厂商预设；保存 API Key 和真实模型测试需要登录 ADMIN。'
+        this.syncSelectedProvider()
+      } catch (error) {
+        this.aiConfigMessage = '厂商预设暂不可用：' + (error instanceof Error ? error.message : 'AI 中枢请求失败')
+      } finally {
+        this.aiConfigLoading = false
+      }
+      return
+    }
+    this.aiConfigLoading = true
+    this.aiConfigMessage = ''
+    try {
+      this.aiProviders = await aiCenterClient.listProviderPresets()
+      await this.loadAiModelConfig()
+      this.syncSelectedProvider()
+    } catch (error) {
+      this.aiConfigAvailable = false
+      this.aiConfigMessage = 'AI 中心接口不可用：' + (error instanceof Error ? error.message : 'AI 中枢请求失败')
+    } finally {
+      this.aiConfigLoading = false
+    }
+  }
+
+  private syncSelectedProvider(): void {
+    let matched: boolean = false
+    this.aiProviders.forEach((provider: AiProviderPreset) => {
+      if (provider.provider === this.aiProvider.toUpperCase()) {
+        matched = true
+        this.aiProviderDescription = provider.description
+        this.aiProviderRequiresKey = provider.requiresApiKey
+      }
+    })
+    if (!matched) {
+      this.aiProviderDescription = '当前配置未匹配预设，可继续使用自定义 OpenAI 兼容服务。'
+      this.aiProviderRequiresKey = true
+    }
+  }
+
+  private selectAiProvider(provider: AiProviderPreset): void {
+    const changed: boolean = this.aiProvider !== provider.provider
+    this.aiProvider = provider.provider
+    this.aiProviderDescription = provider.description
+    this.aiProviderRequiresKey = provider.requiresApiKey
+    this.aiBaseUrl = provider.baseUrl
+    if (provider.models.length > 0 && provider.models[0] !== '请输入模型名称') {
+      this.aiModelName = provider.models[0]
+    } else {
+      this.aiModelName = ''
+    }
+    if (changed) {
+      this.aiApiKeyInput = ''
+      this.aiMaskedApiKey = ''
+    }
+    this.aiConfigMessage = '已选择 ' + provider.label + '，Base URL 和推荐模型已填入；仍可手动覆盖。'
+  }
+
+  private changeAiProvider(value: string): void {
+    const changed: boolean = this.aiProvider !== value
+    this.aiProvider = value
+    this.syncSelectedProvider()
+    if (changed) {
+      this.aiApiKeyInput = ''
+      this.aiMaskedApiKey = ''
+    }
+  }
+
+  private selectAiModel(model: string): void {
+    if (model !== '请输入模型名称') this.aiModelName = model
+  }
+
+  private currentProviderModels(): Array<string> {
+    let models: Array<string> = []
+    this.aiProviders.forEach((provider: AiProviderPreset) => {
+      if (provider.provider === this.aiProvider.toUpperCase()) models = provider.models
+    })
+    return models
+  }
+
+  private selectAiCenterTab(tab: string): void {
+    this.aiCenterTab = tab
+    this.query = ''
+    this.filter = 'ALL'
+    this.pageIndex = 0
+    if (tab === 'MODEL' && this.aiProviders.length === 0) void this.loadAiCenter()
+  }
+
   private applyAiModelConfig(config: AiModelConfig): void {
     this.aiProvider = config.provider
     this.aiModelName = config.modelName
@@ -303,8 +403,14 @@ struct AdminConsole {
   }
 
   private buildAiConfigPayload(): AiModelConfigUpdate {
-    if (this.aiProvider.trim().length === 0 || this.aiModelName.trim().length === 0 || this.aiBaseUrl.trim().length === 0) {
-      throw new Error('供应商、模型名称和 baseUrl 必填')
+    if (this.aiProvider.trim().length === 0 || this.aiModelName.trim().length === 0) {
+      throw new Error('供应商和模型名称必填')
+    }
+    if (this.aiProvider.toUpperCase() !== 'LOCAL_DEMO' && this.aiBaseUrl.trim().length === 0) {
+      throw new Error('非本地演示模式必须填写 baseUrl')
+    }
+    if (this.aiProviderRequiresKey && this.aiApiKeyInput.trim().length === 0 && this.aiMaskedApiKey.length === 0) {
+      throw new Error('当前厂商需要填写 API Key')
     }
     const payload: AiModelConfigUpdate = {
       provider: this.aiProvider.trim(),
@@ -409,7 +515,7 @@ struct AdminConsole {
     this.message = ''
     if (code === 'USERS' && SessionStore.isAdmin) void this.loadUsers()
     if (code === 'INCIDENTS') void this.loadIncidents()
-    if (code === 'AI_CONFIG') void this.loadAiModelConfig()
+    if (code === 'AI_CENTER') void this.loadAiCenter()
     if (code === 'AUDIT') void this.loadAuditRecords()
   }
 
@@ -568,7 +674,7 @@ struct AdminConsole {
               if (!this.canUsePage(this.currentMenu().code)) {
                 this.noAccessView()
               } else {
-                this.adminToolbar()
+                if (!(this.section === 'AI_CENTER' && this.aiCenterTab === 'MODEL')) this.adminToolbar()
                 this.loadingState()
                 if (this.section === 'DASHBOARD') this.dashboardView()
                 if (this.section === 'PRODUCTION') this.productionView()
@@ -576,9 +682,7 @@ struct AdminConsole {
                 if (this.section === 'DEVICES') this.deviceView()
                 if (this.section === 'MATERIALS') this.materialView()
                 if (this.section === 'LOGISTICS') this.logisticsView()
-                if (this.section === 'AI_AUDIT') this.aiAuditView()
-                if (this.section === 'AI_CONFIG') this.aiConfigView()
-                if (this.section === 'KNOWLEDGE') this.knowledgeView()
+                if (this.section === 'AI_CENTER') this.aiCenterView()
                 if (this.section === 'USERS') this.userView()
                 if (this.section === 'SETTINGS') this.settingsView()
                 if (this.section === 'AUDIT') this.auditView()
@@ -708,8 +812,8 @@ struct AdminConsole {
     if (this.section === 'INCIDENTS') return ['ALL', 'OPEN', 'RESOLVED']
     if (this.section === 'DEVICES') return ['ALL', 'RUNNING', 'STANDBY', 'ALARM', 'OFFLINE', 'MAINTENANCE']
     if (this.section === 'LOGISTICS') return ['ALL', 'PENDING', 'RUNNING', 'ACKNOWLEDGED', 'FAILED', 'TIMEOUT']
-    if (this.section === 'AI_AUDIT') return ['ALL', 'PROPOSED', 'APPROVAL_REQUIRED', 'COMMAND_PENDING', 'APPLIED', 'FAILED', 'STALE']
-    if (this.section === 'KNOWLEDGE') return ['ALL', 'PROCESSING', 'PENDING_REVIEW', 'APPROVED', 'INGESTING', 'INDEXED', 'REJECTED', 'FAILED', 'REVOKED']
+    if (this.section === 'AI_CENTER' && this.aiCenterTab === 'AUDIT') return ['ALL', 'PROPOSED', 'APPROVAL_REQUIRED', 'COMMAND_PENDING', 'APPLIED', 'FAILED', 'STALE']
+    if (this.section === 'AI_CENTER' && this.aiCenterTab === 'KNOWLEDGE') return ['ALL', 'PROCESSING', 'PENDING_REVIEW', 'APPROVED', 'INGESTING', 'INDEXED', 'REJECTED', 'FAILED', 'REVOKED']
     if (this.section === 'USERS') return ['ALL', 'ACTIVE', 'DISABLED']
     if (this.section === 'AUDIT') return ['ALL', 'ACCEPTED', 'FAILED', 'DENIED', 'PENDING']
     return ['ALL']
@@ -995,13 +1099,26 @@ struct AdminConsole {
   }
 
   @Builder
-  aiConfigView() {
+  aiCenterView() {
     Column({ space: 14 }) {
-      SectionTitle({ code: 'AI MANAGEMENT', title: 'AI 模型与 RAG 配置', description: '管理供应商、模型、Key、超时、流式、RAG 和连接测试；不属于共享助手会话。' })
-      this.aiConfigState()
-      this.aiModelForm()
-      this.aiConnectionTestPanel()
-      this.aiRagStatusPanel()
+      SectionTitle({ code: 'AI CENTER', title: 'AI 中心', description: '统一管理模型连接、知识库治理和 AI 决策审计；助手问答只读，生产命令仍由后端安全闸口处理。' })
+      Row({ space: 8 }) {
+        Button('模型与连接').height(38).fontColor(this.aiCenterTab === 'MODEL' ? '#FFFFFF' : Theme.blue).backgroundColor(this.aiCenterTab === 'MODEL' ? Theme.blue : Theme.panelSoft).border({ width: 1, color: Theme.line }).onClick(() => this.selectAiCenterTab('MODEL'))
+        Button('知识库治理').height(38).fontColor(this.aiCenterTab === 'KNOWLEDGE' ? '#FFFFFF' : Theme.blue).backgroundColor(this.aiCenterTab === 'KNOWLEDGE' ? Theme.blue : Theme.panelSoft).border({ width: 1, color: Theme.line }).onClick(() => this.selectAiCenterTab('KNOWLEDGE'))
+        Button('决策审计').height(38).fontColor(this.aiCenterTab === 'AUDIT' ? '#FFFFFF' : Theme.blue).backgroundColor(this.aiCenterTab === 'AUDIT' ? Theme.blue : Theme.panelSoft).border({ width: 1, color: Theme.line }).onClick(() => this.selectAiCenterTab('AUDIT'))
+      }.width('100%')
+      if (this.aiCenterTab === 'MODEL') {
+        this.aiConfigState()
+        this.aiModelForm()
+        this.aiConnectionTestPanel()
+        this.aiRagStatusPanel()
+      }
+      if (this.aiCenterTab === 'KNOWLEDGE') {
+        KnowledgeGovernance({ query: this.query, filter: this.filter, stateVersion: this.currentStateVersion() })
+      }
+      if (this.aiCenterTab === 'AUDIT') {
+        AiDecisionAuditPanel({ query: this.query, filter: this.filter, stateVersion: this.currentStateVersion() })
+      }
       if (this.aiConfigMessage.length > 0) {
         Text(this.aiConfigMessage).fontSize(10).fontColor(this.aiConfigAvailable ? Theme.warning : Theme.danger).width('100%').padding(10).backgroundColor(this.aiConfigAvailable ? Theme.warningSoft : Theme.dangerSoft)
       }
@@ -1013,7 +1130,7 @@ struct AdminConsole {
     Row({ space: 10 }) {
       StateBadge({ status: this.aiConfigAvailable ? 'PASS' : 'FAILED', label: this.aiConfigAvailable ? '配置已加载' : '接口未就绪' })
       Text('AI 中枢：' + AiCenterConfig.API_BASE).fontSize(9).fontColor(Theme.muted).layoutWeight(1)
-      Button('刷新配置').height(34).backgroundColor(Theme.blue).fontColor('#FFFFFF').onClick(() => void this.loadAiModelConfig())
+      Button('刷新配置').height(34).backgroundColor(Theme.blue).fontColor('#FFFFFF').onClick(() => void this.loadAiCenter())
       Button('选择配置').height(34).fontColor(Theme.blue).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line }).onClick(() => this.selectAiConfig())
     }.width('100%')
     if (this.aiConfigLoading) {
@@ -1027,16 +1144,31 @@ struct AdminConsole {
   @Builder
   aiModelForm() {
     Column({ space: 10 }) {
-      Text('模型配置').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text('常用模型厂商').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(this.aiProviders, (provider: AiProviderPreset) => {
+          Button(provider.label).height(36).fontSize(10).fontColor(this.aiProvider === provider.provider ? '#FFFFFF' : Theme.blue).backgroundColor(this.aiProvider === provider.provider ? Theme.blue : Theme.panel).border({ width: 1, color: Theme.line }).margin({ right: 8, bottom: 8 }).onClick(() => this.selectAiProvider(provider))
+        }, (provider: AiProviderPreset) => provider.provider)
+      }.width('100%')
+      Text(this.aiProviderDescription.length > 0 ? this.aiProviderDescription : '选择一个预设后自动填充 Base URL 和推荐模型；自定义兼容服务仍可手动填写。').fontSize(10).fontColor(Theme.muted).width('100%')
+      if (this.currentProviderModels().length > 0) {
+        Row({ space: 8 }) {
+          Text('推荐模型').fontSize(10).fontColor(Theme.muted).width(72)
+          ForEach(this.currentProviderModels(), (model: string) => {
+            Button(model).height(30).fontSize(9).fontColor(this.aiModelName === model ? '#FFFFFF' : Theme.blue).backgroundColor(this.aiModelName === model ? Theme.blue : Theme.panel).border({ width: 1, color: Theme.line }).onClick(() => this.selectAiModel(model))
+          }, (model: string) => model)
+        }.width('100%')
+      }
+      Text('模型连接').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
       Row({ space: 8 }) {
-        TextInput({ text: this.aiProvider, placeholder: '供应商，例如 OpenAI / DeepSeek / 本地模型' }).layoutWeight(1).onChange((value: string) => this.aiProvider = value)
+        TextInput({ text: this.aiProvider, placeholder: '供应商，例如 OpenAI / DeepSeek / 本地模型' }).layoutWeight(1).onChange((value: string) => this.changeAiProvider(value))
         TextInput({ text: this.aiModelName, placeholder: '模型名称，例如 gpt-4.1 / deepseek-chat' }).layoutWeight(1).onChange((value: string) => this.aiModelName = value)
         TextInput({ text: this.aiBaseUrl, placeholder: 'baseUrl，例如 https://api.xxx.com/v1' }).layoutWeight(1).onChange((value: string) => this.aiBaseUrl = value)
       }.width('100%')
       Row({ space: 8 }) {
         Column() {
-          Text('当前 Key：' + (this.aiMaskedApiKey.length > 0 ? this.aiMaskedApiKey : '未设置或接口未返回')).fontSize(10).fontColor(Theme.muted)
-          TextInput({ text: this.aiApiKeyInput, placeholder: '填写新 API Key 才会更新；留空表示不变' })
+          Text('当前 Key：' + (this.aiMaskedApiKey.length > 0 ? this.aiMaskedApiKey : '未设置或接口未返回') + (this.aiProviderRequiresKey ? '' : ' · 此预设无需 Key')).fontSize(10).fontColor(Theme.muted)
+          TextInput({ text: this.aiApiKeyInput, placeholder: this.aiProviderRequiresKey ? '填写 API Key；留空表示沿用现有 Key' : '本地演示模式无需填写 API Key' })
             .type(InputType.Password)
             .width('100%')
             .onChange((value: string) => this.aiApiKeyInput = value)
@@ -1099,7 +1231,7 @@ struct AdminConsole {
         Text(this.aiKnowledgeVersion.length > 0 ? this.aiKnowledgeVersion : '等待 AI 中枢返回已发布版本').fontSize(10).fontColor(Theme.text).layoutWeight(1)
       }.width('100%').padding(9).border({ width: { bottom: 1 }, color: Theme.line })
       Text('资料上传、解析预览、审核、拒绝、撤销、索引进度和失败原因在“知识资料”页面处理；只有 INDEXED 且未 REVOKED 的版本才允许参与 RAG。').fontSize(10).fontColor(Theme.muted).width('100%')
-      Button('进入知识资料管理').fontColor('#FFFFFF').backgroundColor(Theme.blue).onClick(() => this.selectSection('KNOWLEDGE'))
+      Button('打开知识库治理页签').fontColor('#FFFFFF').backgroundColor(Theme.blue).onClick(() => this.selectAiCenterTab('KNOWLEDGE'))
     }.width('100%').padding(12).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
   }
 
@@ -1322,12 +1454,13 @@ struct AdminConsole {
       this.message = '助手引用的报警不存在或当前角色不可见：' + entityId
       return { handled: false, reason: this.message }
     }
-    if (entityType === AssistantEntityType.CONFIG) {
-      if (entityId === 'AI_MODEL_CONFIG') {
-        this.selectSection('AI_CONFIG')
-        this.selectAiConfig()
-        return { handled: true }
-      }
+      if (entityType === AssistantEntityType.CONFIG) {
+        if (entityId === 'AI_MODEL_CONFIG') {
+          this.aiCenterTab = 'MODEL'
+          this.selectSection('AI_CENTER')
+          this.selectAiConfig()
+          return { handled: true }
+        }
       let target: SystemPolicy | undefined = undefined
       SYSTEM_POLICIES.forEach((policy: SystemPolicy) => {
         if (policy.policyCode === entityId) target = policy
@@ -1354,7 +1487,8 @@ struct AdminConsole {
       this.bundle.operations.aiAudits.forEach((audit: AiAudit) => {
         if (audit.auditId === entityId) aiAudit = audit
       })
-      this.selectSection('AI_AUDIT')
+      this.aiCenterTab = 'AUDIT'
+      this.selectSection('AI_CENTER')
       if (aiAudit !== undefined) {
         this.selectedDetail = this.aiDetail(aiAudit)
         return { handled: true }
@@ -1363,7 +1497,8 @@ struct AdminConsole {
       return { handled: false, reason: this.message }
     }
     if (entityType === AssistantEntityType.KNOWLEDGE_DOCUMENT) {
-      this.selectSection('KNOWLEDGE')
+      this.aiCenterTab = 'KNOWLEDGE'
+      this.selectSection('AI_CENTER')
       this.selectedDetail = '知识资料：' + entityId + '\n已定位到知识资料页面。资料预览和审核仍必须在后台业务页面中执行，助手不能替代审批。'
       return { handled: true }
     }
@@ -1462,7 +1597,7 @@ struct AdminConsole {
       'CONFIGURATION',
       'AI_MODEL_CONFIG',
       'AI 模型配置 · ' + (this.aiModelName || '未加载'),
-      'AdminConsole/AI_CONFIG',
+      'AdminConsole/AI_CENTER',
       this.currentStateVersion(),
       [
         assistantField('provider', this.aiProvider),

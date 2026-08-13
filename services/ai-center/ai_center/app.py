@@ -43,6 +43,80 @@ DEFAULT_AI_CONFIG = {
     "chunkOverlap": 120,
     "knowledgeIndexEnabled": True,
 }
+AI_PROVIDER_PRESETS = [
+    {
+        "provider": "LOCAL_DEMO",
+        "label": "本地演示模式",
+        "description": "无需 API Key，返回可追溯的本地产线模拟回答，适合离线演示和联调。",
+        "baseUrl": "",
+        "models": ["local-demo-assistant"],
+        "requiresApiKey": False,
+        "compatible": False,
+    },
+    {
+        "provider": "OPENAI",
+        "label": "OpenAI",
+        "description": "OpenAI 官方接口，适合使用 GPT 系列模型。",
+        "baseUrl": "https://api.openai.com/v1",
+        "models": ["gpt-4.1", "gpt-4o-mini"],
+        "requiresApiKey": True,
+        "compatible": True,
+    },
+    {
+        "provider": "DEEPSEEK",
+        "label": "DeepSeek",
+        "description": "DeepSeek OpenAI-compatible 接口，支持 chat 和 reasoner 模型。",
+        "baseUrl": "https://api.deepseek.com/v1",
+        "models": ["deepseek-chat", "deepseek-reasoner"],
+        "requiresApiKey": True,
+        "compatible": True,
+    },
+    {
+        "provider": "QWEN",
+        "label": "阿里云百炼 / Qwen",
+        "description": "阿里云百炼兼容接口，适合通义千问系列模型。",
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "models": ["qwen-plus", "qwen-turbo", "qwen-max"],
+        "requiresApiKey": True,
+        "compatible": True,
+    },
+    {
+        "provider": "MOONSHOT",
+        "label": "Moonshot / Kimi",
+        "description": "Moonshot AI 兼容接口，适合 Kimi 系列模型。",
+        "baseUrl": "https://api.moonshot.cn/v1",
+        "models": ["kimi-k2-0711-preview", "moonshot-v1-8k"],
+        "requiresApiKey": True,
+        "compatible": True,
+    },
+    {
+        "provider": "ZHIPU",
+        "label": "智谱 GLM",
+        "description": "智谱开放平台兼容接口，适合 GLM 系列模型。",
+        "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+        "models": ["glm-4.5", "glm-4-flash"],
+        "requiresApiKey": True,
+        "compatible": True,
+    },
+    {
+        "provider": "SILICONFLOW",
+        "label": "SiliconFlow",
+        "description": "SiliconFlow 统一模型接口，可选择其平台上的多种模型。",
+        "baseUrl": "https://api.siliconflow.cn/v1",
+        "models": ["Qwen/Qwen3-8B", "deepseek-ai/DeepSeek-V3"],
+        "requiresApiKey": True,
+        "compatible": True,
+    },
+    {
+        "provider": "CUSTOM_OPENAI_COMPATIBLE",
+        "label": "自定义 OpenAI 兼容",
+        "description": "用于企业内网、本地模型或其他兼容 /chat/completions 的服务。",
+        "baseUrl": "",
+        "models": ["请输入模型名称"],
+        "requiresApiKey": True,
+        "compatible": True,
+    },
+]
 DEFAULT_AUTH_TOKENS = {
     "AI_SERVICE_DEMO": {
         "userId": "ai-service-demo",
@@ -85,7 +159,7 @@ DEFAULT_AUTH_TOKENS = {
         "stageCodes": ["ALL"],
     },
 }
-PUBLIC_HTTP_PATHS = {f"{API_PREFIX}/health"}
+PUBLIC_HTTP_PATHS = {f"{API_PREFIX}/health", f"{API_PREFIX}/admin/ai/providers"}
 ADMIN_PREFIXES = (
     f"{API_PREFIX}/admin/",
 )
@@ -306,6 +380,11 @@ def create_app() -> FastAPI:
     @app.get(f"{API_PREFIX}/admin/ai/config")
     async def get_ai_config() -> dict[str, Any]:
         return envelope({"config": mask_ai_config(state.ai_config), "source": SOURCE_MARK})
+
+    @app.get(f"{API_PREFIX}/admin/ai/providers")
+    async def get_ai_providers() -> dict[str, Any]:
+        # Provider metadata is public configuration, while API keys remain server-side.
+        return envelope({"items": deepcopy(AI_PROVIDER_PRESETS), "source": "AI_CENTER_PROVIDER_CATALOG"})
 
     @app.api_route(f"{API_PREFIX}/admin/ai/config", methods=["PUT", "POST"])
     async def update_ai_config(request_body: dict[str, Any]) -> dict[str, Any]:
