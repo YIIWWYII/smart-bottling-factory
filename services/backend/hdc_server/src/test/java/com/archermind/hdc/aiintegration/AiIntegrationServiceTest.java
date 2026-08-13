@@ -88,6 +88,36 @@ class AiIntegrationServiceTest {
     }
 
     @Test
+    void workstationSubjectCannotReadFactsOutsideBoundStage() {
+        AuthService auth = mock(AuthService.class);
+        when(auth.authenticate("Bearer station-token")).thenReturn(user("station_filling", "OPERATOR", "WORKSTATION", "FILLING"));
+        AiIntegrationService scopedService = new AiIntegrationService(auth, mock(FactoryContractService.class),
+                mock(OperationsService.class), new DeviceCapabilityCatalog(),
+                new FactoryRealtimeEventPublisher(new FactoryStateVersionService(new JdbcTemplate())),
+                new AiIntegrationPersistence(new JdbcTemplate()));
+        ReflectionTestUtils.setField(scopedService, "serviceToken", "test-ai-token");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> scopedService.facts("Bearer test-ai-token", "Bearer station-token", "WORKSTATION",
+                        "LINE-01", "GAS_INSPECTION", null, null));
+    }
+
+    @Test
+    void workstationSubjectCannotSubmitCommandIntentForAnotherStage() {
+        AuthService auth = mock(AuthService.class);
+        when(auth.authenticate("Bearer station-token")).thenReturn(user("station_gas", "OPERATOR", "WORKSTATION", "GAS_INSPECTION"));
+        AiIntegrationService scopedService = new AiIntegrationService(auth, mock(FactoryContractService.class),
+                mock(OperationsService.class), new DeviceCapabilityCatalog(),
+                new FactoryRealtimeEventPublisher(new FactoryStateVersionService(new JdbcTemplate())),
+                new AiIntegrationPersistence(new JdbcTemplate()));
+        ReflectionTestUtils.setField(scopedService, "serviceToken", "test-ai-token");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> scopedService.commandIntent("Bearer test-ai-token", "Bearer station-token",
+                        intent("AI-INTENT-004", "DEC-004", "FIL-PUMP-01", "FLOW_RATE", 120D)));
+    }
+
+    @Test
     void visionRecognitionRequiresAiServiceToken() {
         VisionRecognitionRequest request = new VisionRecognitionRequest();
         request.setTaskType("BOTTLE_TYPE");
@@ -121,12 +151,18 @@ class AiIntegrationServiceTest {
     }
 
     private AdminUser user(String username, String role) {
+        return user(username, role, "ADMIN", null);
+    }
+
+    private AdminUser user(String username, String role, String sourceApp, String stageCode) {
         AdminUser user = new AdminUser();
         user.setId(7L);
         user.setUsername(username);
         user.setDisplayName(username);
         user.setRole(role);
         user.setStatus("ACTIVE");
+        user.setSourceApp(sourceApp);
+        user.setStageCode(stageCode);
         return user;
     }
 }
