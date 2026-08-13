@@ -94,6 +94,7 @@ export class AdminAssistantHostAdapter implements AssistantHostAdapter {
   }
 
   getServiceEndpoint(): AssistantServiceEndpoint {
+    if (SessionStore.isDemo) return { httpBaseUrl: '', wsBaseUrl: '' }
     return {
       httpBaseUrl: AiCenterConfig.API_BASE,
       wsBaseUrl: AiCenterConfig.WS_BASE

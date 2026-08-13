@@ -99,15 +99,30 @@ if (-not (Test-Path -LiteralPath $rolePolicyFile)) {
 }
 
 $sessionText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\SessionStore.ets')
-@('expiresAt', 'isExpired()', "token === 'LOCAL-DEMO'") | ForEach-Object {
+@('expiresAt', 'isExpired()', 'setDemoSession(', 'demoMode') | ForEach-Object {
     if (-not $sessionText.Contains($_)) { $errors.Add("Missing session expiry evidence: $_") }
 }
+if ($sessionText -notmatch "setDemoSession[\s\S]*this\.token\s*=\s*''") { $errors.Add('Demo session token must stay empty') }
 
 $apiClientText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\ApiClient.ets')
 if (-not ($apiClientText -match 'responseCode\s*===\s*401[\s\S]*SessionStore\.clear\(\)')) { $errors.Add('HTTP 401 must clear the session') }
 if ($apiClientText -match 'responseCode\s*===\s*403[\s\S]{0,100}SessionStore\.clear\(\)') { $errors.Add('HTTP 403 must not clear a valid session') }
+if ($apiClientText -notmatch 'SessionStore\.isDemo[\s\S]{0,120}throw new ApiError') { $errors.Add('HTTP client must reject demo-mode requests before creating a client') }
+
+$loginText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\pages\Login.ets')
+if ($loginText -notmatch 'setSession\(result\.token') { $errors.Add('Real login must preserve the backend token') }
+if ($loginText -notmatch 'setDemoSession\(') { $errors.Add('Demo login must use a separate demo session') }
+
+$realtimeText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\FactoryRealtime.ets')
+if ($realtimeText -notmatch 'SessionStore\.isDemo[\s\S]{0,300}createWebSocket') { $errors.Add('WebSocket client must stop before connecting in demo mode') }
+
+$assistantAdapterText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\AdminAssistantHostAdapter.ets')
+if ($assistantAdapterText -notmatch "SessionStore\.isDemo[\s\S]{0,100}httpBaseUrl:\s*''") { $errors.Add('Assistant endpoint must be disabled in demo mode') }
 
 $adminSourceText = ($etsFiles | ForEach-Object { Get-Content -Raw -Encoding UTF8 $_.FullName }) -join "`n"
+$projectText = (Get-ChildItem -Path $root -Recurse -File | Where-Object { $_.FullName -notmatch '\\(oh_modules|build)\\' } | ForEach-Object { Get-Content -Raw -Encoding UTF8 $_.FullName }) -join "`n"
+$fixedDemoToken = 'LOCAL' + '-DEMO'
+if ($projectText.Contains($fixedDemoToken)) { $errors.Add('Fixed demo tokens are forbidden in the admin console') }
 @('/assistant/conversations', '/assistant/conversations/', 'ai.conversation', 'AssistantApiClient', 'conversationId') | ForEach-Object {
     if ($adminSourceText.Contains($_)) { $errors.Add("Admin console must not implement shared assistant conversation client: $_") }
 }
@@ -129,6 +144,7 @@ if (Test-Path -LiteralPath $aiCenterClientFile) {
         if (-not $aiCenterClientText.Contains($_)) { $errors.Add("Missing admin AI business endpoint: $_") }
     }
     if ($aiCenterClientText.Contains('/assistant/')) { $errors.Add('AiCenterClient must not call shared assistant conversation endpoints') }
+    if ($aiCenterClientText -notmatch 'assertNetworkAllowed\(\)[\s\S]{0,120}createHttp') { $errors.Add('AI client must reject demo-mode requests before creating a client') }
 }
 
 if ($errors.Count -gt 0) {

@@ -2,6 +2,7 @@ import { webSocket } from '@kit.NetworkKit'
 import { BusinessError } from '@kit.BasicServicesKit'
 import { util } from '@kit.ArkTS'
 import { ApiConfig } from './ApiConfig'
+import { SessionStore } from './SessionStore'
 
 export type RealtimeCallback = (payload: string) => void
 export type RealtimeStatusCallback = (online: boolean) => void
@@ -16,12 +17,17 @@ export class FactoryRealtime {
   connect(onEvent: RealtimeCallback, onStatus: RealtimeStatusCallback): void {
     this.onEvent = onEvent
     this.onStatus = onStatus
+    if (SessionStore.isDemo) {
+      this.stopped = true
+      this.reportStatus(false)
+      return
+    }
     this.stopped = false
     this.open()
   }
 
   private open(): void {
-    if (this.stopped) return
+    if (this.stopped || SessionStore.isDemo) return
     this.reportStatus(false)
     const socket = webSocket.createWebSocket()
     this.socket = socket

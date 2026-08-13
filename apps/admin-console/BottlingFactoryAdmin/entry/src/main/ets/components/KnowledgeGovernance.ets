@@ -59,6 +59,10 @@ export struct KnowledgeGovernance {
   @State reviewComment: string = ''
 
   aboutToAppear(): void {
+    if (SessionStore.isDemo) {
+      this.errorMessage = '本地演示模式不访问 AI 中枢知识治理接口。'
+      return
+    }
     void this.refresh()
   }
 
@@ -84,6 +88,15 @@ export struct KnowledgeGovernance {
   }
 
   private async refresh(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.submissions = []
+      this.reviews = []
+      this.ragDocuments = []
+      this.ragStatus = undefined
+      this.serviceAvailable = false
+      this.errorMessage = '本地演示模式不访问 AI 中枢知识治理接口。'
+      return
+    }
     this.loading = true
     this.errorMessage = ''
     try {
@@ -166,6 +179,10 @@ export struct KnowledgeGovernance {
   }
 
   private async openReview(review: KnowledgeReview): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.actionMessage = '演示账号只读，不能读取 AI 中枢审核详情。'
+      return
+    }
     this.loading = true
     try {
       this.selectedReview = await aiCenterClient.getKnowledgeReview(review.reviewId)
@@ -202,6 +219,10 @@ export struct KnowledgeGovernance {
   }
 
   private async executeReviewAction(review: KnowledgeReview, action: string): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.actionMessage = '演示账号只读，不能提交 AI 中枢审核操作。'
+      return
+    }
     this.loading = true
     try {
       let result: KnowledgeSubmission
@@ -219,6 +240,10 @@ export struct KnowledgeGovernance {
   }
 
   private async reindexAll(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.actionMessage = '演示账号只读，不能触发 AI 中枢索引命令。'
+      return
+    }
     this.loading = true
     try {
       this.ragDocuments = await aiCenterClient.reindexRagDocuments()

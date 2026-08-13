@@ -150,7 +150,7 @@ struct AdminConsole {
     }
     this.assistantAdapter.setNavigator((entity: AssistantEntityRef) => this.navigateAssistantEntity(entity))
     this.assistantAdapter.setHostContext(this.assistantPageRoute(), this.currentStateVersion(), this.bundle.updatedAt)
-    this.assistantAdapter.setVisibility('VISIBLE')
+    this.assistantAdapter.setVisibility(SessionStore.isDemo ? 'HIDDEN' : 'VISIBLE')
     FactoryRepository.subscribe(this.listener)
     this.loading = true
     void this.refreshAll()
@@ -194,6 +194,11 @@ struct AdminConsole {
   }
 
   private async loadAuditRecords(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.auditRecords = []
+      this.auditError = '本地演示模式不访问后端操作审计接口。'
+      return
+    }
     try {
       this.auditRecords = await apiClient.request<Array<AdminAuditRecord>>('/audit/operations')
       this.auditError = ''
@@ -218,6 +223,11 @@ struct AdminConsole {
   }
 
   private async loadAiModelConfig(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.aiConfigAvailable = false
+      this.aiConfigMessage = '本地演示模式不访问 AI 中枢管理接口。'
+      return
+    }
     this.aiConfigLoading = true
     this.aiConfigMessage = ''
     try {
@@ -568,8 +578,10 @@ struct AdminConsole {
           }.width('100%').layoutWeight(1).backgroundColor(Theme.page)
         }.layoutWeight(1).height('100%')
       }.width('100%').height('100%').backgroundColor(Theme.page)
-      AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
-        .margin({ top: 18, right: 18 })
+      if (!SessionStore.isDemo) {
+        AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
+          .margin({ top: 18, right: 18 })
+      }
     }.width('100%').height('100%').backgroundColor(Theme.page)
   }
 
