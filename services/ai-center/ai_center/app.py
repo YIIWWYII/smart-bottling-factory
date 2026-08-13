@@ -718,9 +718,15 @@ def create_app() -> FastAPI:
         return envelope(item)
 
     @app.post(f"{API_PREFIX}/ai-integration/command-intents")
-    async def accept_command_intent(request_body: dict[str, Any]) -> dict[str, Any]:
+    async def accept_command_intent(request_body: dict[str, Any], request_obj: Request) -> dict[str, Any]:
+        subject_auth = authenticate_request_headers(
+            request_obj.headers.get("x-subject-authorization", ""),
+            str(request_body.get("sourceApp") or ""),
+        )
+        if not subject_auth["ok"]:
+            return error_envelope(f"invalid command subject: {subject_auth['message']}", subject_auth["status"])
         intent_id = new_id("intent")
-        backend_result = submit_command_intent_to_backend(request_body, current_auth())
+        backend_result = submit_command_intent_to_backend(request_body, subject_auth)
         item = {
             "intentId": intent_id,
             "status": backend_result["status"],
@@ -829,7 +835,8 @@ def authenticate_request_headers(authorization: str, client_type: str) -> dict[s
     token = extract_bearer_token(authorization)
     if not token:
         return {"ok": False, "status": 401, "message": "missing Authorization bearer token"}
-    principal = load_principal_for_token(token)
+    requested_source_app = client_type.strip().upper()
+    principal = load_principal_for_token(token, requested_source_app)
     if principal is None:
         return {"ok": False, "status": 401, "message": "invalid Authorization token"}
     source_app = client_type.strip().upper()
@@ -847,14 +854,14 @@ def authenticate_request_headers(authorization: str, client_type: str) -> dict[s
 
 def extract_bearer_token(value: str) -> str:
     text = value.strip()
-    if not text:
+    if not text or text.lower() == "bearer":
         return ""
     if text.lower().startswith("bearer "):
         return text[7:].strip()
     return text
 
 
-def load_principal_for_token(token: str) -> dict[str, Any] | None:
+def load_principal_for_token(token: str, requested_source_app: str = "") -> dict[str, Any] | None:
     configured = os.getenv("AI_CENTER_AUTH_TOKENS", "")
     if configured.strip():
         try:
@@ -865,10 +872,10 @@ def load_principal_for_token(token: str) -> dict[str, Any] | None:
             pass
     if token in DEFAULT_AUTH_TOKENS:
         return normalize_principal(DEFAULT_AUTH_TOKENS[token])
-    return introspect_subject_token(token)
+    return introspect_subject_token(token, requested_source_app)
 
 
-def introspect_subject_token(token: str) -> dict[str, Any] | None:
+def introspect_subject_token(token: str, requested_source_app: str = "") -> dict[str, Any] | None:
     backend_base = os.getenv("PRODUCTION_BACKEND_BASE_URL", DEFAULT_BACKEND_BASE_URL).rstrip("/")
     try:
         headers = {
@@ -877,7 +884,12 @@ def introspect_subject_token(token: str) -> dict[str, Any] | None:
             "X-Subject-Authorization": bearer_value(token),
             "X-Client-Type": "AI_CENTER",
         }
-        payload = {"token": token, "requestedAt": now_iso(), "source": "AI_CENTER_AUTH_INTROSPECT"}
+        payload = {
+            "token": token,
+            "sourceApp": requested_source_app,
+            "requestedAt": now_iso(),
+            "source": "AI_CENTER_AUTH_INTROSPECT",
+        }
         req = request.Request(
             f"{backend_base}/auth/introspect",
             data=json.dumps(payload).encode("utf-8"),
@@ -912,6 +924,11 @@ def principal_from_introspection(data: dict[str, Any]) -> dict[str, Any] | None:
             permissions = ["ASSISTANT_READ", "AI_CONFIG_MANAGE", "KNOWLEDGE_SUBMIT", "KNOWLEDGE_REVIEW", "DECISION_READ"]
         else:
             permissions = ["ASSISTANT_READ", "DECISION_READ"]
+    stage_codes = data.get("stageCodes")
+    if not stage_codes:
+        scope = data.get("scope") if isinstance(data.get("scope"), dict) else {}
+        stage_code = data.get("stageCode") or scope.get("stageCode")
+        stage_codes = [stage_code] if stage_code else ["ALL"]
     return normalize_principal(
         {
             "userId": data.get("userId") or data.get("username") or data.get("id") or "unknown",
@@ -919,7 +936,7 @@ def principal_from_introspection(data: dict[str, Any]) -> dict[str, Any] | None:
             "role": role,
             "sourceApps": source_apps,
             "permissions": permissions,
-            "stageCodes": data.get("stageCodes") or ["ALL"],
+            "stageCodes": stage_codes,
         }
     )
 

@@ -32,17 +32,21 @@ def http_json(
     timeout: float = 10.0,
     token: str = "LOCAL_DEMO",
     client_type: str = "ADMIN",
+    subject_token: str = "",
 ) -> dict:
     data = None if payload is None else json.dumps(payload).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json;charset=UTF-8",
+        "Authorization": f"Bearer {token}",
+        "X-Client-Type": client_type,
+    }
+    if subject_token:
+        headers["X-Subject-Authorization"] = f"Bearer {subject_token}"
     req = request.Request(
         BASE + path,
         data=data,
         method=method,
-        headers={
-            "Content-Type": "application/json;charset=UTF-8",
-            "Authorization": f"Bearer {token}",
-            "X-Client-Type": client_type,
-        },
+        headers=headers,
     )
     with request.urlopen(req, timeout=timeout) as response:
         body = response.read().decode("utf-8")
@@ -87,8 +91,8 @@ def start_server() -> subprocess.Popen:
         [sys.executable, "-m", "ai_center", "--host", HOST, "--port", str(PORT)],
         cwd=str(ROOT),
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         text=True,
     )
 
@@ -139,6 +143,7 @@ class FakeBackendState:
     last_facts_subject_auth: str = ""
     last_command_subject_auth: str = ""
     last_command_status_subject_auth: str = ""
+    last_introspection_source_app: str = ""
 
 
 class FakeBackendHandler(BaseHTTPRequestHandler):
@@ -187,6 +192,29 @@ class FakeBackendHandler(BaseHTTPRequestHandler):
             payload = json.loads(body)
         except Exception:
             payload = {}
+        if self.path == "/api/auth/introspect":
+            if payload.get("token") != "SUBJECT_STATION_TOKEN":
+                self.write_json({"code": 4105, "message": "inactive subject token", "success": False, "data": None})
+                return
+            FakeBackendState.last_introspection_source_app = str(payload.get("sourceApp") or "")
+            self.write_json(
+                {
+                    "code": 0,
+                    "message": "OK",
+                    "success": True,
+                    "data": {
+                        "active": True,
+                        "userId": "station-filling",
+                        "displayName": "Filling station",
+                        "role": "OPERATOR",
+                        "status": "ACTIVE",
+                        "sourceApp": "WORKSTATION",
+                        "stageCode": "FILLING",
+                        "scope": {"sourceApp": "WORKSTATION", "stageCode": "FILLING"},
+                    },
+                }
+            )
+            return
         if self.path == "/api/ai-integration/command-intents":
             FakeBackendState.command_calls += 1
             FakeBackendState.last_command_subject_auth = self.headers.get("X-Subject-Authorization", "")
@@ -274,6 +302,42 @@ def main() -> None:
         expect_http_error("GET", "/admin/ai/config", 401, token="", client_type="ADMIN")
         expect_http_error("GET", "/admin/ai/config", 403, token="DISPLAY_DEMO", client_type="DISPLAY")
         print("security negative auth/rbac OK")
+
+        station_context = {
+            "contextVersion": 1,
+            "sourceApp": "WORKSTATION",
+            "pageRoute": "/factoryStage/FILLING",
+            "lineId": "LINE-01",
+            "stageCode": "FILLING",
+        }
+        station_conversation = assert_envelope(
+            http_json(
+                "POST",
+                "/assistant/conversations",
+                {"context": station_context},
+                token="SUBJECT_STATION_TOKEN",
+                client_type="WORKSTATION",
+            ),
+            "subject token workstation create",
+        )
+        if not station_conversation["conversationId"] or FakeBackendState.last_introspection_source_app != "WORKSTATION":
+            raise AssertionError("workstation sourceApp was not forwarded during subject token introspection")
+        forbidden_context = dict(station_context)
+        forbidden_context["stageCode"] = "GAS_INSPECTION"
+        try:
+            http_json(
+                "POST",
+                "/assistant/conversations",
+                {"context": forbidden_context},
+                token="SUBJECT_STATION_TOKEN",
+                client_type="WORKSTATION",
+            )
+        except HTTPError as exc:
+            if exc.code != 403:
+                raise AssertionError(f"expected cross-stage HTTP 403, got {exc.code}")
+        else:
+            raise AssertionError("workstation subject token accessed a different stage")
+        print("subject token workstation introspection/scope OK")
 
         config = assert_envelope(http_json("GET", "/admin/ai/config"), "get ai config")
         if config["config"]["provider"] != "LOCAL_DEMO":
@@ -539,9 +603,10 @@ def main() -> None:
             http_json(
                 "POST",
                 "/ai-integration/command-intents",
-                {"deviceCode": "FILLER-01", "parameterCode": "flow_rate"},
+                {"sourceApp": "WORKSTATION", "deviceCode": "FILLER-01", "parameterCode": "flow_rate"},
                 client_type="AI_CENTER",
                 token="AI_SERVICE_DEMO",
+                subject_token="SUBJECT_STATION_TOKEN",
             ),
             "command intent",
         )
@@ -549,7 +614,7 @@ def main() -> None:
             raise AssertionError(f"backend tool calls were not closed: facts={facts}, intent={command_intent}")
         if command_intent["status"] != "PENDING":
             raise AssertionError(f"accepted command intent should preserve backend pending status: {command_intent}")
-        if "Bearer AI_SERVICE_DEMO" not in FakeBackendState.last_command_subject_auth:
+        if "Bearer SUBJECT_STATION_TOKEN" not in FakeBackendState.last_command_subject_auth:
             raise AssertionError(f"subject authorization header missing for command intent: {FakeBackendState.last_command_subject_auth}")
         command_status = assert_envelope(
             http_json("GET", f"/ai-integration/commands/{command_intent['commandIds'][0]}", client_type="AI_CENTER", token="AI_SERVICE_DEMO"),
@@ -561,9 +626,10 @@ def main() -> None:
             http_json(
                 "POST",
                 "/ai-integration/command-intents",
-                {"deviceCode": "FILLER-01", "parameterCode": "flow_rate", "forceReject": True},
+                {"sourceApp": "WORKSTATION", "deviceCode": "FILLER-01", "parameterCode": "flow_rate", "forceReject": True},
                 client_type="AI_CENTER",
                 token="AI_SERVICE_DEMO",
+                subject_token="SUBJECT_STATION_TOKEN",
             ),
             "command intent reject",
         )
