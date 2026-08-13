@@ -1,5 +1,6 @@
 import { router } from '@kit.ArkUI'
 import { Theme } from '../common/Theme'
+import { StateBadge } from '../components/IndustrialComponents'
 import { FACTORY_STAGES } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { FactoryBundle, StageDefinition } from '../model/FactoryModels'
@@ -25,16 +26,44 @@ struct Workstation {
   build() {
     Column() {
       Row() {
-        Column() { Text('WORKSTATION HMI').fontSize(10).fontColor('#A9CDE6').fontWeight(FontWeight.Bold); Text('工位工作台').fontSize(27).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 5 }); Text('现场只显示本站必需信息，控制请求仍由后端安全门校验').fontSize(11).fontColor('#C8DCE9').margin({ top: 5 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Text(FactoryRepository.realtimeOnline ? '实时通道在线' : '实时通道重连中').fontSize(10).fontColor('#FFFFFF')
-      }.width('100%').padding(18).backgroundColor(Theme.navy)
+        Column() {
+          Text('WORKSTATION / HMI').fontSize(10).fontColor('#9CC9E3').fontWeight(FontWeight.Bold)
+          Text('现场工位终端').fontSize(25).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 6 })
+          Text('先选工位，再进入本站的实时画面和控制面板').fontSize(11).fontColor('#C8DCE9').margin({ top: 6 })
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        Column() {
+          Row({ space: 6 }) {
+            Circle().width(7).height(7).fill(FactoryRepository.realtimeOnline ? '#6FD0A4' : '#F0AD42')
+            Text(FactoryRepository.realtimeOnline ? '实时在线' : '重连中').fontSize(10).fontColor('#FFFFFF')
+          }
+          Text('数据来自 WebSocket / 模拟回退').fontSize(8).fontColor('#9EBBC8').margin({ top: 6 })
+        }.alignItems(HorizontalAlign.End)
+      }.width('100%').padding({ left: 22, right: 22, top: 22, bottom: 20 }).backgroundColor(Theme.navy)
       Scroll() {
         Column() {
-          Text('选择工位').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 16, bottom: 8 }).alignSelf(ItemAlign.Start)
+          Row() {
+            Column() {
+              Text('STATION SELECT').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+              Text('选择当前工位').fontSize(18).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 4 })
+            }.alignItems(HorizontalAlign.Start)
+            Blank()
+            Text('共 ' + FACTORY_STAGES.length + ' 个业务工位').fontSize(9).fontColor(Theme.muted)
+          }.width('100%').margin({ top: 20, bottom: 12 })
+          Text('每个工位独立显示设备、物料、质量门和本站控制，数据实时同步。').fontSize(10).fontColor(Theme.muted).margin({ bottom: 8 }).alignSelf(ItemAlign.Start)
           ForEach(FACTORY_STAGES, (stage: StageDefinition) => {
-            Row() { Column() { Text(stage.name).fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold); Text(stage.code).fontSize(8).fontColor(Theme.muted).margin({ top: 3 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1); Text(this.stageState(stage.code)).fontSize(9).fontColor(Theme.success); Text('进入 →').fontSize(10).fontColor(Theme.blue).margin({ left: 12 }) }.width('100%').padding(13).backgroundColor(this.selectedCode === stage.code ? '#E7F1F8' : Theme.panel).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => { this.selectedCode = stage.code; router.pushUrl({ url: 'pages/StageDetail', params: { stageCode: stage.code } }) })
+            Row({ space: 12 }) {
+              Column() {
+                Text(stage.name).fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold)
+                Text(stage.code).fontSize(8).fontColor(Theme.muted).margin({ top: 4 })
+                Text(stage.description).fontSize(9).fontColor(Theme.muted).maxLines(1).margin({ top: 6 })
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              Column() {
+                StateBadge({ status: this.stageState(stage.code), label: this.stageState(stage.code) === 'RUNNING' ? '运行中' : this.stageState(stage.code) })
+                Text('进入工位  →').fontSize(10).fontColor(Theme.blue).margin({ top: 9 })
+              }.alignItems(HorizontalAlign.End)
+            }.width('100%').padding({ left: 14, right: 14, top: 13, bottom: 13 }).backgroundColor(this.selectedCode === stage.code ? Theme.successSoft : Theme.panel).border({ width: { left: this.selectedCode === stage.code ? 4 : 1, top: 1, right: 1, bottom: 1 }, color: this.selectedCode === stage.code ? Theme.success : Theme.line }).borderRadius(4).onClick(() => { this.selectedCode = stage.code; router.pushUrl({ url: 'pages/StageDetail', params: { stageCode: stage.code } }) })
           }, (stage: StageDefinition) => stage.code)
-        }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 14, right: 14, bottom: 24 })
+        }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 18, right: 18, bottom: 28 })
       }.width('100%').layoutWeight(1).backgroundColor(Theme.page)
     }.width('100%').height('100%')
   }

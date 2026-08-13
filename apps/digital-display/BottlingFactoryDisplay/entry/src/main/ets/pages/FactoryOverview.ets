@@ -194,34 +194,38 @@ struct FactoryOverview {
   build() {
     Stack({ alignContent: Alignment.TopEnd }) {
       Scroll() {
-      Column() {
+      Column({ space: 14 }) {
         Row() {
           Column() {
-            Text('BOTTLING LINE · NATIVE MONITOR').fontSize(10).fontColor('#A9CDE6').fontWeight(FontWeight.Bold)
-            Text('智慧装瓶产线全局监控').fontSize(29).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 6 })
-            Text('生产、质量、设备、物流与仓储一体化运行态势').fontSize(12).fontColor('#D2E0EB').margin({ top: 5 })
+            Text('LINE 01  /  OPERATIONS MONITOR').fontSize(10).fontColor('#9CC9E3').fontWeight(FontWeight.Bold)
+            Text('智慧装瓶产线').fontSize(28).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 7 })
+            Text('生产流 · 质量门 · 设备状态 · 物流仓储').fontSize(11).fontColor('#C7DCE8').margin({ top: 6 })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           Column() {
             StateBadge({
               status: this.bundle.online ? (this.openExceptionCount > 0 ? 'HOLD' : 'RUNNING') : 'STANDBY',
               label: this.bundle.online ? (this.openExceptionCount > 0 ? '连续运行 · 局部异常' : '后端在线') : 'LOCAL DEMO'
             })
-            Text('实时通道：' + (this.realtimeOnline ? '在线' : '重连中')).fontSize(9).fontColor('#D2E0EB').margin({ top: 8 })
-            Text(this.formatTime(this.bundle.updatedAt)).fontSize(8).fontColor('#B8CEDC').margin({ top: 4 })
+            Text('数据通道  ' + (this.realtimeOnline ? '在线' : '重连中')).fontSize(9).fontColor('#D2E0EB').margin({ top: 8 })
+            Text('更新于  ' + this.formatTime(this.bundle.updatedAt)).fontSize(8).fontColor('#B8CEDC').margin({ top: 4 })
           }.alignItems(HorizontalAlign.End)
-        }.width('100%').padding(22).backgroundColor(Theme.navy)
+        }.width('100%').padding({ left: 24, right: 24, top: 22, bottom: 20 }).backgroundColor(Theme.navy)
 
         Row() {
-          Text('全局总览').fontSize(10).fontColor(Theme.muted).fontWeight(FontWeight.Bold)
+          Column() {
+            Text('CONTROL ROOM').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+            Text('产线总览').fontSize(17).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 3 })
+          }.alignItems(HorizontalAlign.Start)
           Blank()
-          Button('刷新数据').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => void FactoryRepository.refresh())
-        }.width('100%').padding({ left: 16, right: 8, top: 4, bottom: 4 })
+          Text('状态颜色：运行 / 等待 / 异常').fontSize(9).fontColor(Theme.muted).margin({ right: 16 })
+          Button('刷新').type(ButtonType.Normal).height(32).fontSize(11).fontColor('#FFFFFF').backgroundColor(Theme.blue).borderRadius(3).onClick(() => void FactoryRepository.refresh())
+        }.width('100%').padding({ left: 22, right: 22, top: 8, bottom: 4 })
 
         Column() {
           SectionTitle({
             code: 'CONTINUOUS PRODUCTION FLOW',
-            title: '整线生产流程',
-            description: '点击任一工位查看设备、物料、质量门和异常影响。'
+            title: '生产流程',
+            description: '工序持续并行运行。选择工位进入设备和物料详情。'
           })
           Scroll() {
             Row({ space: 10 }) {
@@ -230,9 +234,15 @@ struct FactoryOverview {
               }, (stage: StageDefinition) => stage.code)
             }.padding({ top: 16, bottom: 8 })
           }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Auto).width('100%')
-        }.width('100%').padding(18).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.blue }).borderRadius(3)
+        }.width('100%').padding(20).backgroundColor(Theme.panel).border({ width: { top: 3 }, color: Theme.blue }).borderRadius(4)
 
-        Scroll() {
+        Column() {
+          Row() {
+            Text('关键运行指标').fontSize(15).fontColor(Theme.text).fontWeight(FontWeight.Bold)
+            Blank()
+            Text('整线实时快照').fontSize(9).fontColor(Theme.muted)
+          }.width('100%')
+          Scroll() {
           Row({ space: 8 }) {
             this.kpiTile('累计投入', String(this.dashboardTotal), '进入产线的追踪批次', 'total')
             this.kpiTile('完成入库', String(this.dashboardCompleted), '全流程完成', 'completed', 'PASS')
@@ -240,8 +250,9 @@ struct FactoryOverview {
             this.kpiTile('检测剔除', String(this.dashboardRejected), '不合格品已隔离', 'rejected', 'FAIL')
             this.kpiTile('待人工处理', String(this.dashboardHolding), '暂停自动放行', 'holding', 'WAIT')
             this.kpiTile('批次通过率', this.dashboardPassRate, '完成 / 已判定批次', 'passRate', 'PASS')
-          }.padding({ top: 14, bottom: 4 })
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
+          }.padding({ top: 10, bottom: 4 })
+          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
+        }.width('100%').padding({ left: 20, right: 20, top: 4, bottom: 4 })
 
         Flex({ wrap: FlexWrap.Wrap }) {
           this.productionPanel()
@@ -249,8 +260,8 @@ struct FactoryOverview {
           this.logisticsPanel()
           this.exceptionPanel()
           this.tracePanel()
-        }.width('100%').padding({ top: 10, bottom: 24 })
-      }.width('100%').alignItems(HorizontalAlign.Start)
+        }.width('100%').padding({ top: 2, bottom: 28, left: 14, right: 14 })
+      }.width('100%').alignItems(HorizontalAlign.Start).backgroundColor(Theme.page)
       }.width('100%').height('100%').backgroundColor(Theme.page)
       AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
         .margin({ top: 16, right: 16 })
@@ -284,7 +295,7 @@ struct FactoryOverview {
         this.selectStage(stage)
         router.pushUrl({ url: 'pages/StageDetail', params: { stageCode: stage.code } })
       })
-    }.width(198).height(220).alignItems(HorizontalAlign.Start).padding(13).backgroundColor(Theme.panel).border({ width: { top: 4, left: 1, right: 1, bottom: 2 }, color: statusColor(this.stageStatus(stage)) }).borderRadius(3)
+    }.width(208).height(224).alignItems(HorizontalAlign.Start).padding(14).backgroundColor(Theme.panel).border({ width: { left: 4, top: 1, right: 1, bottom: 1 }, color: statusColor(this.stageStatus(stage)) }).borderRadius(4)
   }
 
   @Builder

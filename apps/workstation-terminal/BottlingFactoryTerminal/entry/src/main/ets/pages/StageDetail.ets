@@ -155,6 +155,8 @@ struct StageDetail {
   @State selectedTraceCode: string = ''
   @State planarEnabled: boolean = true
   @State threeEnabled: boolean = false
+  @State activeVisual: string = 'PLANAR'
+  @State detailTab: string = 'DEVICES'
   @State statusColorsEnabled: boolean = true
   @State layoutEditEnabled: boolean = false
   @State paused: boolean = false
@@ -1112,13 +1114,15 @@ struct StageDetail {
         Row({ space: 8 }) {
           this.visualToggle('2D 平面图', 'PLANAR')
           this.visualToggle('3D 立体图', 'THREE')
+          this.visualModeButton('查看 2D', 'PLANAR')
+          this.visualModeButton('查看 3D', 'THREE')
           this.visualToggle('状态着色', 'COLORS')
           this.visualToggle('布局拖拽', 'LAYOUT')
           Button(this.paused ? '恢复实时' : '暂停画面')
             .type(ButtonType.Normal)
             .fontSize(10)
             .fontColor(this.paused ? '#FFFFFF' : Theme.navy)
-            .backgroundColor(this.paused ? Theme.warning : '#E7F0F5')
+            .backgroundColor(this.paused ? Theme.warning : Theme.panelStrong)
             .border({ width: 1, color: this.paused ? Theme.warning : Theme.line })
             .borderRadius(2)
             .onClick(() => this.paused = !this.paused)
@@ -1129,10 +1133,10 @@ struct StageDetail {
       .scrollBar(BarState.Off)
       .width('100%')
 
-      if (this.planarEnabled) {
+      if (this.planarEnabled && this.activeVisual === 'PLANAR') {
         this.scenePanel('THREE.JS 2D PLAN', '平面工艺符号 · 点击设备/物料查看 · 拖拽设备保存本站布局', 'PLANAR', 260)
       }
-      if (this.threeEnabled) {
+      if (this.threeEnabled && this.activeVisual === 'THREE') {
         this.scenePanel('THREE.JS 3D', this.layoutEditEnabled ? '拖拽设备调整位置' : '拖拽旋转 · 滚轮缩放 · 点击查看', 'THREE', 360)
       }
       if (!this.planarEnabled && !this.threeEnabled) {
@@ -1184,16 +1188,34 @@ struct StageDetail {
   @Builder
   stationSnapshotSection() {
     Column() {
-      this.deviceSection()
-      this.sensorSection()
-      this.materialSection()
-      this.qualitySection()
-      this.bufferSection()
-      this.alarmSection()
-      if (this.selectedDeviceCode.length > 0) this.deviceProfile()
-      if (this.selectedTraceCode.length > 0) this.productProfile()
+      SectionTitle({ code: '02 STATION DATA', title: '本站实时信息', description: '按现场任务切换信息组，控制操作始终位于独立工作区。' })
+      Row({ space: 6 }) {
+        this.detailTabButton('DEVICES', '设备')
+        this.detailTabButton('SENSORS', '传感器')
+        this.detailTabButton('MATERIAL', '物料与质量')
+        this.detailTabButton('RISK', '异常与缓冲')
+      }.width('100%').padding({ top: 12 })
+      if (this.detailTab === 'DEVICES') {
+        this.deviceSection()
+        if (this.selectedDeviceCode.length > 0) this.deviceProfile()
+      }
+      if (this.detailTab === 'SENSORS') this.sensorSection()
+      if (this.detailTab === 'MATERIAL') {
+        this.materialSection()
+        this.qualitySection()
+        if (this.selectedTraceCode.length > 0) this.productProfile()
+      }
+      if (this.detailTab === 'RISK') {
+        this.alarmSection()
+        this.bufferSection()
+      }
     }
     .width('100%')
+    .padding(18)
+    .margin({ top: 12 })
+    .backgroundColor(Theme.panel)
+    .border({ width: { left: 4, top: 1, right: 1, bottom: 1 }, color: Theme.accent })
+    .borderRadius(4)
   }
 
   @Builder
@@ -1289,7 +1311,7 @@ struct StageDetail {
       }
       .width('100%')
       .padding(12)
-      .backgroundColor('#F1F7FB')
+      .backgroundColor(Theme.panelSoft)
       .margin({ top: 12 })
       ForEach(this.qualityGates(), (gate: QualityGateView) => {
         Row() {
@@ -1409,7 +1431,7 @@ struct StageDetail {
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
         if (SessionStore.isAuthenticated) {
-          Button('退出').height(32).fontSize(10).backgroundColor('#E7F0F5').fontColor(Theme.navy).onClick(() => this.logoutOperator())
+          Button('退出').height(32).fontSize(10).backgroundColor(Theme.panelStrong).fontColor(Theme.navy).onClick(() => this.logoutOperator())
         }
       }
       .width('100%')
@@ -1521,7 +1543,7 @@ struct StageDetail {
         Text(this.pendingDraft.intent).fontSize(10).fontColor(Theme.text).margin({ top: 6 })
         Text('风险：' + this.pendingDraft.risk).fontSize(9).fontColor(Theme.danger).margin({ top: 6 })
         Row({ space: 8 }) {
-          Button('取消').layoutWeight(1).height(36).backgroundColor('#E7F0F5').fontColor(Theme.navy).onClick(() => this.clearDraft())
+          Button('取消').layoutWeight(1).height(36).backgroundColor(Theme.panelStrong).fontColor(Theme.navy).onClick(() => this.clearDraft())
           Button('确认发送到后端').layoutWeight(1).height(36).backgroundColor(Theme.warning).fontColor('#FFFFFF')
             .enabled(this.commandBlockReason(this.pendingDraft.dangerous, this.pendingDraft.requiredRole, this.pendingDraft.deviceCode, this.pendingDraft.commandType).length === 0)
             .onClick(() => void this.confirmCommand())
@@ -1532,7 +1554,7 @@ struct StageDetail {
       .width('100%')
       .padding(12)
       .margin({ top: 12 })
-      .backgroundColor('#FFF7E8')
+      .backgroundColor(Theme.warningSoft)
       .border({ width: { left: 4, top: 1, right: 1, bottom: 1 }, color: Theme.warning })
     }
   }
@@ -1552,7 +1574,7 @@ struct StageDetail {
     .width('100%')
     .padding(12)
     .margin({ top: 12 })
-    .backgroundColor('#F1F7FB')
+    .backgroundColor(Theme.panelSoft)
     .border({ width: 1, color: Theme.line })
   }
 
@@ -1645,15 +1667,50 @@ struct StageDetail {
       .type(ButtonType.Normal)
       .fontSize(10)
       .fontColor(this.visualToggleEnabled(key) ? '#FFFFFF' : Theme.muted)
-      .backgroundColor(this.visualToggleEnabled(key) ? Theme.blue : '#E7F0F5')
+      .backgroundColor(this.visualToggleEnabled(key) ? Theme.blue : Theme.panelStrong)
       .border({ width: 1, color: this.visualToggleEnabled(key) ? Theme.blue : Theme.line })
       .borderRadius(2)
       .onClick(() => {
-        if (key === 'PLANAR') this.planarEnabled = !this.planarEnabled
-        if (key === 'THREE') this.threeEnabled = !this.threeEnabled
+        if (key === 'PLANAR') {
+          this.planarEnabled = !this.planarEnabled
+          if (this.planarEnabled) this.activeVisual = 'PLANAR'
+          if (!this.planarEnabled && this.activeVisual === 'PLANAR' && this.threeEnabled) this.activeVisual = 'THREE'
+        }
+        if (key === 'THREE') {
+          this.threeEnabled = !this.threeEnabled
+          if (this.threeEnabled) this.activeVisual = 'THREE'
+          if (!this.threeEnabled && this.activeVisual === 'THREE' && this.planarEnabled) this.activeVisual = 'PLANAR'
+        }
         if (key === 'COLORS') this.statusColorsEnabled = !this.statusColorsEnabled
         if (key === 'LAYOUT') this.layoutEditEnabled = !this.layoutEditEnabled
       })
+  }
+
+  @Builder
+  visualModeButton(label: string, key: string) {
+    Button((this.activeVisual === key ? '当前  ' : '') + label)
+      .type(ButtonType.Normal)
+      .fontSize(10)
+      .fontColor(this.activeVisual === key ? '#FFFFFF' : Theme.blue)
+      .backgroundColor(this.activeVisual === key ? Theme.navy : Theme.panelSoft)
+      .border({ width: 1, color: this.activeVisual === key ? Theme.navy : Theme.line })
+      .borderRadius(2)
+      .enabled(key === 'PLANAR' ? this.planarEnabled : this.threeEnabled)
+      .onClick(() => this.activeVisual = key)
+  }
+
+  @Builder
+  detailTabButton(key: string, label: string) {
+    Button(label)
+      .type(ButtonType.Normal)
+      .layoutWeight(1)
+      .height(36)
+      .fontSize(10)
+      .fontColor(this.detailTab === key ? '#FFFFFF' : Theme.text)
+      .backgroundColor(this.detailTab === key ? Theme.blue : Theme.panelSoft)
+      .border({ width: 1, color: this.detailTab === key ? Theme.blue : Theme.line })
+      .borderRadius(3)
+      .onClick(() => this.detailTab = key)
   }
 
   private visualToggleEnabled(key: string): boolean {

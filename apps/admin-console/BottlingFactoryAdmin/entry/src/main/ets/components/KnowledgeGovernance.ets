@@ -368,7 +368,7 @@ export struct KnowledgeGovernance {
       this.reviewQueue()
       this.previewPanel()
       if (this.actionMessage.length > 0) {
-        Text(this.actionMessage).fontSize(10).fontColor(Theme.warning).width('100%').padding(10).backgroundColor('#FFF7E6')
+        Text(this.actionMessage).fontSize(10).fontColor(Theme.warning).width('100%').padding(10).backgroundColor(Theme.warningSoft)
       }
     }.width('100%').alignItems(HorizontalAlign.Start).padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
   }
@@ -392,7 +392,7 @@ export struct KnowledgeGovernance {
       }.width('100%').padding(8).backgroundColor(Theme.panelSoft)
     }
     if (this.errorMessage.length > 0) {
-      Text('接口阻塞：' + this.errorMessage + '。页面不会以本地数据伪造审核或索引成功。').fontSize(10).fontColor(Theme.danger).width('100%').padding(10).backgroundColor('#FFF1F2')
+      Text('接口阻塞：' + this.errorMessage + '。页面不会以本地数据伪造审核或索引成功。').fontSize(10).fontColor(Theme.danger).width('100%').padding(10).backgroundColor(Theme.dangerSoft)
     }
   }
 
@@ -488,7 +488,7 @@ export struct KnowledgeGovernance {
           this.checkBadge('版权', this.selectedReview?.copyrightConfirmed || false)
         }.width('100%')
         ForEach(this.selectedReview?.conflicts || [], (conflict: KnowledgeConflict) => {
-          Text(conflict.severity + ' · ' + conflict.field + '：' + conflict.message).fontSize(10).fontColor(Theme.danger).width('100%').padding(8).backgroundColor('#FFF1F2')
+          Text(conflict.severity + ' · ' + conflict.field + '：' + conflict.message).fontSize(10).fontColor(Theme.danger).width('100%').padding(8).backgroundColor(Theme.dangerSoft)
         }, (conflict: KnowledgeConflict) => conflict.conflictId)
         ForEach(this.selectedReview?.preview || [], (block: KnowledgePreviewBlock) => {
           Column() {

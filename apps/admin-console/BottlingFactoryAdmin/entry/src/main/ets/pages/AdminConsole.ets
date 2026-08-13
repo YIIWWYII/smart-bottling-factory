@@ -64,6 +64,11 @@ interface MenuItem {
   minRole: string
 }
 
+interface MenuGroup {
+  label: string
+  items: Array<MenuItem>
+}
+
 interface UpdateUserPayload {
   role: string
   status: string
@@ -82,6 +87,13 @@ const MENU: Array<MenuItem> = [
   { code: 'USERS', label: '用户权限', description: '账号、角色和状态', minRole: 'ADMIN' },
   { code: 'SETTINGS', label: '系统配置', description: '阈值和策略版本', minRole: 'VIEWER' },
   { code: 'AUDIT', label: '操作审计', description: '用户操作和后端结果', minRole: 'VIEWER' }
+]
+
+const MENU_GROUPS: Array<MenuGroup> = [
+  { label: '运营监控', items: MENU.filter((item: MenuItem) => item.code === 'DASHBOARD' || item.code === 'PRODUCTION' || item.code === 'INCIDENTS') },
+  { label: '现场资产', items: MENU.filter((item: MenuItem) => item.code === 'DEVICES' || item.code === 'MATERIALS' || item.code === 'LOGISTICS') },
+  { label: 'AI 治理', items: MENU.filter((item: MenuItem) => item.code === 'AI_AUDIT' || item.code === 'AI_CONFIG' || item.code === 'KNOWLEDGE') },
+  { label: '系统管理', items: MENU.filter((item: MenuItem) => item.code === 'USERS' || item.code === 'SETTINGS' || item.code === 'AUDIT') }
 ]
 
 const DEMO_USERS: Array<AuthUser> = [
@@ -572,7 +584,7 @@ struct AdminConsole {
                 if (this.section === 'AUDIT') this.auditView()
               }
               if (this.message.length > 0) {
-                Text(this.message).fontSize(11).fontColor(Theme.danger).padding(12).width('100%').backgroundColor('#FFF1F2').margin({ top: 12 })
+                Text(this.message).fontSize(11).fontColor(Theme.danger).padding(12).width('100%').backgroundColor(Theme.dangerSoft).margin({ top: 12 })
               }
             }.width('100%').alignItems(HorizontalAlign.Start).padding(20)
           }.width('100%').layoutWeight(1).backgroundColor(Theme.page)
@@ -588,23 +600,31 @@ struct AdminConsole {
   @Builder
   sidebar() {
     Column() {
-      Text('BOTTLING ADMIN').fontSize(10).fontColor('#A9CDE6').fontWeight(FontWeight.Bold)
-      Text('后台管理').fontSize(24).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 8 })
-      Text(this.roleName()).fontSize(10).fontColor('#C8DCE9').margin({ top: 16 })
-      Divider().color('#45687F').margin({ top: 14, bottom: 10 })
+      Text('BOTTLING / CONTROL').fontSize(10).fontColor('#9CC9E3').fontWeight(FontWeight.Bold)
+      Text('管理控制台').fontSize(23).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 8 })
+      Row({ space: 7 }) {
+        Circle().width(7).height(7).fill('#6FD0A4')
+        Text(this.roleName() + ' · ' + this.dataSourceLabel()).fontSize(10).fontColor('#C8DCE9')
+      }.margin({ top: 14 })
+      Divider().color('#45687F').margin({ top: 16, bottom: 12 })
       Scroll() {
-        Column({ space: 5 }) {
-          ForEach(MENU, (item: MenuItem) => {
-            Button(item.label)
-              .type(ButtonType.Normal)
-              .width('100%')
-              .height(40)
-              .fontSize(12)
-              .fontColor(this.section === item.code ? '#FFFFFF' : '#C7D8E4')
-              .backgroundColor(this.section === item.code ? Theme.blue : Color.Transparent)
-              .borderRadius(2)
-              .onClick(() => this.selectSection(item.code))
-          }, (item: MenuItem) => item.code)
+        Column({ space: 13 }) {
+          ForEach(MENU_GROUPS, (group: MenuGroup) => {
+            Column({ space: 3 }) {
+              Text(group.label).fontSize(9).fontColor('#7FA4B8').fontWeight(FontWeight.Bold).margin({ left: 10, bottom: 3 })
+              ForEach(group.items, (item: MenuItem) => {
+                Button(item.label)
+                  .type(ButtonType.Normal)
+                  .width('100%')
+                  .height(38)
+                  .fontSize(12)
+                  .fontColor(this.section === item.code ? '#FFFFFF' : '#C7D8E4')
+                  .backgroundColor(this.section === item.code ? Theme.blue : Color.Transparent)
+                  .borderRadius(3)
+                  .onClick(() => this.selectSection(item.code))
+              }, (item: MenuItem) => item.code)
+            }.width('100%').alignItems(HorizontalAlign.Start)
+          }, (group: MenuGroup) => group.label)
         }.width('100%').alignItems(HorizontalAlign.Start)
       }.width('100%').layoutWeight(1)
       Button('退出登录')
@@ -615,15 +635,15 @@ struct AdminConsole {
         .backgroundColor(Color.Transparent)
         .border({ width: 1, color: '#5B7A92' })
         .onClick(() => void this.logout())
-    }.width(232).height('100%').padding(18).alignItems(HorizontalAlign.Start).backgroundColor(Theme.navy)
+    }.width(244).height('100%').padding({ left: 16, right: 16, top: 20, bottom: 16 }).alignItems(HorizontalAlign.Start).backgroundColor(Theme.navy)
   }
 
   @Builder
   topbar() {
     Row() {
       Column() {
-        Text(this.currentMenu().label).fontSize(25).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
-        Text(this.currentMenu().description).fontSize(11).fontColor(Theme.muted).margin({ top: 4 })
+        Text(this.currentMenu().label).fontSize(23).fontColor(Theme.text).fontWeight(FontWeight.Bold)
+        Text(this.currentMenu().description).fontSize(10).fontColor(Theme.muted).margin({ top: 5 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       StateBadge({ status: this.bundle.online ? 'RUNNING' : 'WAIT', label: this.dataSourceLabel() })
       Text(SessionStore.user === undefined ? '--' : SessionStore.user.displayName)
@@ -631,7 +651,7 @@ struct AdminConsole {
         .fontColor(Theme.text)
         .fontWeight(FontWeight.Bold)
         .margin({ left: 16 })
-    }.width('100%').height(76).padding({ left: 22, right: 22 }).backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
+    }.width('100%').height(82).padding({ left: 24, right: 24 }).backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
   }
 
   @Builder
@@ -642,7 +662,7 @@ struct AdminConsole {
         .fontColor(Theme.warning)
         .padding(12)
         .width('100%')
-        .backgroundColor('#FFF7E6')
+        .backgroundColor(Theme.warningSoft)
         .border({ width: { left: 4 }, color: Theme.warning })
         .margin({ bottom: 14 })
     }
@@ -652,12 +672,14 @@ struct AdminConsole {
   adminToolbar() {
     Row({ space: 10 }) {
       TextInput({ text: this.query, placeholder: '搜索编号、工位、设备、追踪号或操作者' })
-        .height(38)
+        .height(40)
         .layoutWeight(1)
         .backgroundColor(Theme.panel)
+        .border({ width: 1, color: Theme.line })
+        .borderRadius(3)
         .onChange((value: string) => { this.query = value; this.resetPage() })
-      Button(this.filter).type(ButtonType.Normal).height(38).fontColor(Theme.blue).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line }).onClick(() => this.nextFilter())
-      Button('刷新').height(38).backgroundColor(Theme.blue).fontColor('#FFFFFF').onClick(() => { this.loading = true; void this.refreshAll() })
+      Button('筛选  ' + this.filter).type(ButtonType.Normal).height(40).fontSize(11).fontColor(Theme.blue).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line }).borderRadius(3).onClick(() => this.nextFilter())
+      Button('刷新数据').height(40).fontSize(11).backgroundColor(Theme.blue).fontColor('#FFFFFF').borderRadius(3).onClick(() => { this.loading = true; void this.refreshAll() })
     }.width('100%').margin({ bottom: 12 })
   }
 
@@ -721,18 +743,41 @@ struct AdminConsole {
 
   @Builder
   dashboardView() {
-    Flex({ wrap: FlexWrap.Wrap }) {
-      this.metric('累计批次', this.bundle.dashboard.total.toString(), '进入产线', 'NORMAL')
-      this.metric('运行中', this.bundle.dashboard.running.toString(), '连续流水', 'RUNNING')
-      this.metric('完成入库', this.bundle.dashboard.completed.toString(), '箱级库存', 'PASS')
-      this.metric('待处理', this.bundle.dashboard.holding.toString(), '人工待办', 'WAIT')
-      this.metric('开放异常', this.openIncidentCount().toString(), '质量或设备', this.openIncidentCount() > 0 ? 'ALARM' : 'PASS')
-      this.metric('AI 审计', this.bundle.operations.aiAudits.length.toString(), '建议与校验', 'NORMAL')
-    }.width('100%').margin({ bottom: 14 })
+    Column() {
+      Row({ space: 8 }) {
+        this.compactMetric('运行中', this.bundle.dashboard.running.toString(), 'RUNNING')
+        this.compactMetric('待处理', this.bundle.dashboard.holding.toString(), 'WAIT')
+        this.compactMetric('开放异常', this.openIncidentCount().toString(), this.openIncidentCount() > 0 ? 'ALARM' : 'PASS')
+        this.compactMetric('AI 待审', this.aiReviewCount().toString(), this.aiReviewCount() > 0 ? 'WAIT' : 'PASS')
+        this.compactMetric('已入库', this.bundle.dashboard.completed.toString(), 'PASS')
+      }.width('100%').margin({ bottom: 12 })
+      Row() {
+        Text('产线持续运行，下方优先呈现需要管理人员判断的状态。').fontSize(10).fontColor(Theme.muted)
+        Blank()
+        Text('快照版本 ' + this.currentStateVersion().toString()).fontSize(9).fontColor(Theme.muted)
+      }.width('100%').padding({ bottom: 12 })
+    }
     Row({ space: 12 }) {
       this.stageSummary()
       this.todoSummary()
     }.width('100%').alignItems(VerticalAlign.Top)
+    Column() {
+      SectionTitle({ code: 'RECENT OPERATIONS', title: '最近需要关注的事项', description: '异常、设备离线和仓区风险按优先级汇总，进入对应菜单处理。' })
+      this.todoRow('开放报警', this.openAlarmCount().toString(), this.openAlarmCount() > 0 ? 'ALARM' : 'PASS')
+      this.todoRow('仓区风险', this.unsafeZoneCount().toString(), this.unsafeZoneCount() > 0 ? 'ALARM' : 'PASS')
+      this.todoRow('离线设备', this.offlineDeviceCount().toString(), this.offlineDeviceCount() > 0 ? 'ALARM' : 'PASS')
+    }.width('100%').padding(15).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
+  }
+
+  @Builder
+  compactMetric(label: string, value: string, tone: string) {
+    Row({ space: 8 }) {
+      Column().width(4).height(36).backgroundColor(statusColor(tone))
+      Column() {
+        Text(label).fontSize(9).fontColor(Theme.muted)
+        Text(value).fontSize(19).fontColor(statusColor(tone)).fontWeight(FontWeight.Bold).margin({ top: 3 })
+      }.alignItems(HorizontalAlign.Start)
+    }.layoutWeight(1).height(62).padding(10).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
   }
 
   @Builder
@@ -958,7 +1003,7 @@ struct AdminConsole {
       this.aiConnectionTestPanel()
       this.aiRagStatusPanel()
       if (this.aiConfigMessage.length > 0) {
-        Text(this.aiConfigMessage).fontSize(10).fontColor(this.aiConfigAvailable ? Theme.warning : Theme.danger).width('100%').padding(10).backgroundColor(this.aiConfigAvailable ? '#FFF7E6' : '#FFF1F2')
+        Text(this.aiConfigMessage).fontSize(10).fontColor(this.aiConfigAvailable ? Theme.warning : Theme.danger).width('100%').padding(10).backgroundColor(this.aiConfigAvailable ? Theme.warningSoft : Theme.dangerSoft)
       }
     }.width('100%').alignItems(HorizontalAlign.Start).padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
   }
@@ -1118,7 +1163,7 @@ struct AdminConsole {
     Column() {
       SectionTitle({ code: 'OPERATION AUDIT', title: '操作审计', description: '记录谁在何时做了什么、目标、结果和失败原因。' })
       if (this.auditError.length > 0) {
-        Text('服务端审计不可用：' + this.auditError + '。目标端点为 GET /audit/operations。').fontSize(10).fontColor(Theme.warning).width('100%').padding(10).backgroundColor('#FFF7E6').margin({ bottom: 10 })
+        Text('服务端审计不可用：' + this.auditError + '。目标端点为 GET /audit/operations。').fontSize(10).fontColor(Theme.warning).width('100%').padding(10).backgroundColor(Theme.warningSoft).margin({ bottom: 10 })
       }
       if (this.filteredAuditRecords().length === 0) {
         this.emptyState('没有可验证的服务端操作审计记录。')

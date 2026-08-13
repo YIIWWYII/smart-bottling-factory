@@ -10,9 +10,10 @@ struct Index {
 
   build() {
     Column({ space: 12 }) {
-      Text('智慧工厂数字展板').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#FFFFFF')
-      Text('正在连接产线实时数据').fontSize(13).fontColor('#C8DCE9')
-      LoadingProgress().width(42).height(42).color('#FFFFFF')
+      Text('BOTTLING / DISPLAY').fontSize(11).fontWeight(FontWeight.Bold).fontColor('#A9CDE6')
+      Text('数字展板').fontSize(28).fontWeight(FontWeight.Bold).fontColor('#FFFFFF')
+      Text('正在连接产线实时数据').fontSize(12).fontColor('#C8DCE9')
+      LoadingProgress().width(36).height(36).color('#FFFFFF')
     }
     .width('100%').height('100%')
     .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)

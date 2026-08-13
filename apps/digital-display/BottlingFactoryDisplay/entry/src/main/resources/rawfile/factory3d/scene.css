@@ -1,6 +1,6 @@
 :root {
-  color: #17344c;
-  background: #dfeaf1;
+  color: #d9e8ef;
+  background: #0f2737;
   font-family: "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -18,7 +18,7 @@ body {
   background:
     linear-gradient(rgba(27, 91, 136, .05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(27, 91, 136, .05) 1px, transparent 1px),
-    #dfeaf1;
+    #0f2737;
   background-size: 24px 24px;
   touch-action: none;
 }
@@ -33,10 +33,10 @@ canvas { display: block; width: 100%; height: 100%; }
   gap: 8px;
   min-height: 30px;
   padding: 7px 10px;
-  border: 1px solid rgba(78, 113, 138, .35);
-  border-top: 3px solid #145da0;
-  background: rgba(246, 250, 252, .92);
-  box-shadow: 0 5px 18px rgba(18, 58, 91, .14);
+  border: 1px solid rgba(128, 177, 199, .42);
+  border-top: 3px solid #36a5d2;
+  background: rgba(12, 38, 53, .94);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .24);
   font-size: 10px;
   pointer-events: none;
 }
@@ -44,7 +44,7 @@ canvas { display: block; width: 100%; height: 100%; }
 .hud-left { left: 10px; }
 .hud-right { right: 10px; }
 .hud strong { font-size: 11px; letter-spacing: 0; }
-.hud-left > span:last-child { color: #61788b; }
+.hud-left > span:last-child { color: #91afbd; }
 
 .live-dot {
   width: 7px;
@@ -62,9 +62,9 @@ canvas { display: block; width: 100%; height: 100%; }
   border-radius: 50%;
 }
 
-.legend.running { background: #238b5a; }
-.legend.warning { background: #d89016; }
-.legend.alarm { background: #c83f49; }
+.legend.running { background: #42c58a; }
+.legend.warning { background: #f0ad42; }
+.legend.alarm { background: #ef6f72; }
 
 .selection {
   position: absolute;
@@ -91,13 +91,13 @@ canvas { display: block; width: 100%; height: 100%; }
   justify-content: center;
   gap: 8px;
   padding: 24px;
-  background: #edf4f8;
-  color: #123a5b;
+  background: #102f42;
+  color: #e4f1f5;
   text-align: center;
 }
 
 .fallback strong { font-size: 16px; }
-.fallback span { color: #61788b; font-size: 11px; }
+.fallback span { color: #9ab5c1; font-size: 11px; }
 
 @media (max-width: 620px) {
   .hud-right { top: auto; right: 10px; bottom: 10px; }

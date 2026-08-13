@@ -72,6 +72,7 @@ struct StageDetail {
   @State planarEnabled: boolean = true
   @State threeEnabled: boolean = true
   @State activeVisual: string = 'THREE'
+  @State detailTab: string = 'EQUIPMENT'
   @State statusColorsEnabled: boolean = true
   @State layoutEditEnabled: boolean = false
   @State paused: boolean = false
@@ -483,7 +484,7 @@ struct StageDetail {
                 .type(ButtonType.Normal)
                 .fontSize(10)
                 .fontColor(this.paused ? '#FFFFFF' : Theme.navy)
-                .backgroundColor(this.paused ? Theme.warning : '#E7F0F5')
+                .backgroundColor(this.paused ? Theme.warning : Theme.panelStrong)
                 .border({ width: 1, color: this.paused ? Theme.warning : Theme.line })
                 .borderRadius(2)
                 .onClick(() => this.togglePaused())
@@ -551,46 +552,7 @@ struct StageDetail {
           }
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 12 })
 
-        Column() {
-          SectionTitle({
-            code: '02',
-            title: '设备运行清单',
-            description: '点击设备可查看当前状态、来源和传感器读数。'
-          })
-          ForEach(this.stageData().devices, (device: DeviceDefinition, index: number) => {
-            Row() {
-              DeviceStateRow({
-                index: index,
-                device: device,
-                state: this.deviceRuntime(device.code),
-                source: this.deviceSource(device.code),
-                reading: this.deviceReading(device.code)
-              })
-              Blank()
-            }.width('100%').onClick(() => this.selectDeviceByCode(device.code, 'ARKUI'))
-          }, (device: DeviceDefinition) => device.code)
-        }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
-
-        if (this.selectedDeviceCode.length > 0) this.deviceInfoPanel()
-        if (this.selectedTraceCode.length > 0) this.selectedProductPanel()
-
-        Column() {
-          SectionTitle({
-            code: '03',
-            title: '质量放行门',
-            description: '放行优先级为：工序事件、设备联锁、工位专属传感器。'
-          })
-          Row() {
-            Circle().width(9).height(9).fill(this.qualitySummary() === '满足放行条件' ? Theme.success : this.qualitySummary() === '等待判定数据' ? Theme.warning : Theme.danger)
-            Text(this.qualitySummary()).fontSize(14).fontColor(this.qualitySummary() === '满足放行条件' ? Theme.success : Theme.danger).fontWeight(FontWeight.Bold).margin({ left: 8 })
-          }.width('100%').padding(12).backgroundColor('#F1F7FB').margin({ top: 12 })
-          ForEach(this.qualityGates(), (gate: QualityGateView) => {
-            QualityGateRow({ gate: gate })
-          }, (gate: QualityGateView) => gate.label)
-        }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
-
-        this.materialPanel()
-          this.tracePanel()
+        this.detailWorkspace()
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ bottom: 28 })
       }.width('100%').height('100%').backgroundColor(Theme.page)
       AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
@@ -599,12 +561,83 @@ struct StageDetail {
   }
 
   @Builder
+  detailWorkspace() {
+    Column() {
+      SectionTitle({
+        code: '02 STATION DATA',
+        title: '工位实时详情',
+        description: '按任务查看设备、产品或质量影响，避免所有信息同时堆叠。'
+      })
+      Row({ space: 6 }) {
+        this.detailTabButton('EQUIPMENT', '设备')
+        this.detailTabButton('MATERIAL', '产品与追溯')
+        this.detailTabButton('QUALITY', '质量与影响')
+      }.width('100%').padding({ top: 12, bottom: 12 })
+
+      if (this.detailTab === 'EQUIPMENT') {
+        ForEach(this.stageData().devices, (device: DeviceDefinition, index: number) => {
+          Row() {
+            DeviceStateRow({
+              index: index,
+              device: device,
+              state: this.deviceRuntime(device.code),
+              source: this.deviceSource(device.code),
+              reading: this.deviceReading(device.code)
+            })
+          }.width('100%').onClick(() => this.selectDeviceByCode(device.code, 'ARKUI'))
+        }, (device: DeviceDefinition) => device.code)
+        if (this.selectedDeviceCode.length > 0) this.deviceInfoPanel()
+      }
+
+      if (this.detailTab === 'MATERIAL') {
+        if (this.selectedTraceCode.length > 0) this.selectedProductPanel()
+        this.materialPanel()
+        this.tracePanel()
+      }
+
+      if (this.detailTab === 'QUALITY') {
+        Row() {
+          Circle().width(9).height(9).fill(this.qualitySummary() === '满足放行条件' ? Theme.success : this.qualitySummary() === '等待判定数据' ? Theme.warning : Theme.danger)
+          Text(this.qualitySummary())
+            .fontSize(14)
+            .fontColor(this.qualitySummary() === '满足放行条件' ? Theme.success : this.qualitySummary() === '等待判定数据' ? Theme.warning : Theme.danger)
+            .fontWeight(FontWeight.Bold)
+            .margin({ left: 8 })
+        }.width('100%').padding(12).backgroundColor(this.qualitySummary() === '满足放行条件' ? Theme.successSoft : this.qualitySummary() === '等待判定数据' ? Theme.warningSoft : Theme.dangerSoft)
+        ForEach(this.qualityGates(), (gate: QualityGateView) => {
+          QualityGateRow({ gate: gate })
+        }, (gate: QualityGateView) => gate.label)
+      }
+    }
+    .width('100%')
+    .padding(18)
+    .margin({ top: 12 })
+    .backgroundColor(Theme.panel)
+    .border({ width: { left: 4, top: 1, right: 1, bottom: 1 }, color: Theme.accent })
+    .borderRadius(4)
+  }
+
+  @Builder
+  detailTabButton(key: string, label: string) {
+    Button(label)
+      .type(ButtonType.Normal)
+      .layoutWeight(1)
+      .height(36)
+      .fontSize(10)
+      .fontColor(this.detailTab === key ? '#FFFFFF' : Theme.text)
+      .backgroundColor(this.detailTab === key ? Theme.blue : Theme.panelSoft)
+      .border({ width: 1, color: this.detailTab === key ? Theme.blue : Theme.line })
+      .borderRadius(3)
+      .onClick(() => this.detailTab = key)
+  }
+
+  @Builder
   visualToggle(label: string, enabled: boolean, key: string) {
     Button((enabled ? 'ON  ' : 'OFF  ') + label)
       .type(ButtonType.Normal)
       .fontSize(10)
       .fontColor(enabled ? '#FFFFFF' : Theme.muted)
-      .backgroundColor(enabled ? Theme.blue : '#E7F0F5')
+      .backgroundColor(enabled ? Theme.blue : Theme.panelStrong)
       .border({ width: 1, color: enabled ? Theme.blue : Theme.line })
       .borderRadius(2)
       .onClick(() => this.toggleVisual(key))
@@ -616,7 +649,7 @@ struct StageDetail {
       .type(ButtonType.Normal)
       .fontSize(10)
       .fontColor(this.activeVisual === key ? '#FFFFFF' : Theme.blue)
-      .backgroundColor(this.activeVisual === key ? Theme.navy : '#F4FAFD')
+      .backgroundColor(this.activeVisual === key ? Theme.navy : Theme.panelSoft)
       .border({ width: 1, color: this.activeVisual === key ? Theme.navy : Theme.line })
       .borderRadius(2)
       .enabled(key === 'THREE' ? this.threeEnabled : this.planarEnabled)
