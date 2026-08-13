@@ -11,6 +11,8 @@ export interface ThemeConfig {
   lineStrong: string
   text: string
   muted: string
+  onDark: string
+  onDarkMuted: string
   success: string
   successSoft: string
   warning: string
@@ -21,25 +23,27 @@ export interface ThemeConfig {
 }
 
 export const Theme: ThemeConfig = {
-  navy: '#102A3B',
-  steel: '#1C4056',
-  blue: '#146A9F',
-  accent: '#2E8ABF',
-  page: '#E9EFF3',
+  navy: '#123247',
+  steel: '#D7E6EB',
+  blue: '#116B95',
+  accent: '#129CBF',
+  page: '#EAF2F4',
   panel: '#FFFFFF',
-  panelSoft: '#F3F7F9',
-  panelStrong: '#DCE7ED',
-  line: '#CDD9DF',
-  lineStrong: '#9EB2BE',
-  text: '#142E3E',
-  muted: '#5F7280',
-  success: '#1F7A57',
-  successSoft: '#E5F2EC',
-  warning: '#B66A0A',
-  warningSoft: '#FFF1D9',
-  danger: '#B23C43',
-  dangerSoft: '#FBE8E9',
-  neutral: '#70838E'
+  panelSoft: '#F4F8F9',
+  panelStrong: '#D7E6EB',
+  line: '#C7D9DF',
+  lineStrong: '#8EAAB5',
+  text: '#17303B',
+  muted: '#5D7480',
+  onDark: '#F5FAFB',
+  onDarkMuted: '#B6C9CF',
+  success: '#198866',
+  successSoft: '#DDF2EB',
+  warning: '#C97816',
+  warningSoft: '#FFF0D9',
+  danger: '#C84B54',
+  dangerSoft: '#F9E1E3',
+  neutral: '#718A94'
 }
 
 export function statusSurface(status: string): string {

@@ -6,24 +6,25 @@ export struct SectionTitle {
   @Prop code: string = 'SECTION'
   @Prop title: string = ''
   @Prop description: string = ''
+  @Prop dark: boolean = false
 
   build() {
     Row({ space: 12 }) {
-      Column()
-        .width(4)
-        .height(this.description.length > 0 ? 48 : 34)
-        .backgroundColor(Theme.accent)
+      Text(this.code)
+        .fontSize(8)
+        .fontColor(this.dark ? Theme.accent : Theme.blue)
+        .fontWeight(FontWeight.Bold)
+        .width(104)
       Column() {
-        Text(this.code).fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-        Text(this.title).fontSize(19).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 3 })
+        Text(this.title).fontSize(15).fontColor(this.dark ? Theme.onDark : Theme.text).fontWeight(FontWeight.Bold)
         if (this.description.length > 0) {
-          Text(this.description).fontSize(10).fontColor(Theme.muted).margin({ top: 4 }).maxLines(2)
+          Text(this.description).fontSize(9).fontColor(this.dark ? Theme.onDarkMuted : Theme.muted).margin({ top: 4 }).maxLines(1)
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
     }
     .width('100%')
-    .padding({ bottom: 10 })
-    .border({ width: { bottom: 1 }, color: Theme.line })
+    .padding({ left: 0, bottom: 10 })
+    .border({ width: { bottom: 1 }, color: this.dark ? Theme.lineStrong : Theme.line })
   }
 }
 
@@ -36,17 +37,16 @@ export struct MetricTile {
 
   build() {
     Column() {
-      Text(this.label).fontSize(10).fontColor(Theme.muted).fontWeight(FontWeight.Medium)
-      Text(this.value).fontSize(26).fontColor(this.tone === 'NORMAL' ? Theme.text : statusColor(this.tone)).fontWeight(FontWeight.Bold).margin({ top: 8, bottom: 5 })
+      Text(this.label).fontSize(9).fontColor(Theme.muted).fontWeight(FontWeight.Medium)
+      Text(this.value).fontSize(24).fontColor(this.tone === 'NORMAL' ? Theme.text : statusColor(this.tone)).fontWeight(FontWeight.Bold).margin({ top: 5, bottom: 3 })
       Text(this.note).fontSize(9).fontColor(Theme.muted).maxLines(2)
     }
     .alignItems(HorizontalAlign.Start)
-    .width(176)
-    .height(104)
-    .padding(14)
-    .backgroundColor(Theme.panel)
-    .border({ width: { left: 4, top: 1, right: 1, bottom: 1 }, color: this.tone === 'NORMAL' ? Theme.accent : statusColor(this.tone) })
-    .borderRadius(4)
+    .width(174)
+    .height(76)
+    .padding({ left: 16, right: 12, top: 5, bottom: 5 })
+    .backgroundColor(Color.Transparent)
+    .border({ width: { left: 1 }, color: this.tone === 'NORMAL' ? Theme.lineStrong : statusColor(this.tone) })
   }
 }
 
@@ -62,7 +62,6 @@ export struct StateBadge {
     }
     .padding({ left: 9, right: 9, top: 5, bottom: 5 })
     .border({ width: 1, color: statusColor(this.status) })
-    .borderRadius(12)
     .backgroundColor(statusSurface(this.status))
   }
 }

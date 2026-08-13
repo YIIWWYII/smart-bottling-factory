@@ -114,6 +114,7 @@
       camera.lookAt(0, 0, 0);
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
+      renderer.setClearColor(COLORS.floor, 1);
       host.appendChild(renderer.domElement);
       bindInteractions();
       rebuildPlan();
@@ -154,6 +155,8 @@
     root.add(deviceRoot);
     root.add(productRoot);
     scene.add(root);
+    root.position.set(0, 0, 0);
+    root.scale.set(1, 1, 1);
     clickable = [];
 
     createGrid();

@@ -436,65 +436,82 @@ struct StageDetail {
     return JSON.stringify(payload)
   }
 
-  build() {
+  @Builder
+  legacyBuild() {
     Stack({ alignContent: Alignment.TopEnd }) {
       Scroll() {
         Column() {
         Row() {
-          Button('← 总览').type(ButtonType.Normal).fontColor('#FFFFFF').backgroundColor(Color.Transparent).onClick(() => router.back())
+          Button('← 产线总览').type(ButtonType.Normal).fontColor(Theme.accent).backgroundColor(Color.Transparent).fontSize(11).padding({ left: 0, right: 14 }).onClick(() => router.back())
+          Text('工位作业 / ' + this.stageData().code).fontSize(9).fontColor(Theme.onDarkMuted).margin({ left: 16 })
           Blank()
-          Text(this.stageData().code + ' · 工位 ' + (this.currentStageIndex() + 1) + ' / ' + FACTORY_STAGES.length).fontSize(10).fontColor('#C8DCE9')
-        }.width('100%').padding({ left: 10, right: 10, top: 7, bottom: 7 }).backgroundColor(Theme.navy)
+          Text('STATION ' + (this.currentStageIndex() + 1).toString().padStart(2, '0') + ' / ' + FACTORY_STAGES.length).fontSize(9).fontColor(Theme.onDarkMuted)
+        }.width('100%').padding({ left: 38, right: 166, top: 12, bottom: 12 }).backgroundColor(Theme.navy).border({ width: { bottom: 2 }, color: Theme.accent })
 
         Row() {
           Column() {
-            Text(this.stageData().code).fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-            Text(this.stageData().name + ' 工位').fontSize(30).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7 })
+            Text('WORKSTATION  /  ' + this.stageData().code).fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+            Text(this.stageData().name + ' 工位').fontSize(30).fontColor(Theme.onDark).fontWeight(FontWeight.Bold).margin({ top: 5 })
             Text(this.stageData().description)
-              .fontSize(12)
-              .fontColor(Theme.muted)
-              .lineHeight(18)
+              .fontSize(11)
+              .fontColor(Theme.onDarkMuted)
+              .lineHeight(16)
               .margin({ top: 6 })
               .onClick(() => this.selectTextFragment('stageDescription', this.stageData().description))
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-          StateBadge({ status: this.statusValue(), label: this.statusText() })
-        }.width('100%').alignItems(VerticalAlign.Bottom).padding(18).border({ width: { bottom: 3 }, color: Theme.blue })
+          Column() {
+            Text('CURRENT STATE').fontSize(8).fontColor(Theme.onDarkMuted)
+            StateBadge({ status: this.statusValue(), label: this.statusText() }).margin({ top: 7 })
+            Text('v' + this.bundle.stateVersion + '  ·  ' + this.bundle.source).fontSize(8).fontColor(Theme.onDarkMuted).margin({ top: 8 })
+          }.alignItems(HorizontalAlign.End)
+        }.width('100%').alignItems(VerticalAlign.Bottom).padding({ left: 38, right: 38, top: 20, bottom: 20 }).backgroundColor(Theme.navy).border({ width: { bottom: 2 }, color: statusColor(this.statusValue()) })
 
         Row() {
-          Button('← 上一工位').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.currentStageIndex() > 0).onClick(() => this.navigateStage(-1))
+          Button('← 上一工位').type(ButtonType.Normal).fontColor(this.currentStageIndex() > 0 ? Theme.accent : Theme.muted).backgroundColor(Color.Transparent).fontSize(10).enabled(this.currentStageIndex() > 0).onClick(() => this.navigateStage(-1))
           Blank()
-          Button('下一工位 →').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).enabled(this.currentStageIndex() < FACTORY_STAGES.length - 1).onClick(() => this.navigateStage(1))
-        }.width('100%').padding({ left: 10, right: 10 })
+          Text('工位导航').fontSize(8).fontColor(Theme.muted)
+          Blank()
+          Button('下一工位 →').type(ButtonType.Normal).fontColor(this.currentStageIndex() < FACTORY_STAGES.length - 1 ? Theme.accent : Theme.muted).backgroundColor(Color.Transparent).fontSize(10).enabled(this.currentStageIndex() < FACTORY_STAGES.length - 1).onClick(() => this.navigateStage(1))
+        }.width('100%').padding({ left: 38, right: 38, top: 6, bottom: 6 }).backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
 
         Column() {
           SectionTitle({
-            code: '01',
-            title: '工位可视化',
-            description: '2D 平面图和 Three.js 3D 场景都由同一份设备、物料和速度数据驱动，可单独开关以节省性能。'
+            code: '01  LIVE CELL VIEW',
+            title: '工位作业画面',
+            description: '图形、设备状态与产品流转使用同一份实时快照。'
           })
-          Scroll() {
-            Row({ space: 8 }) {
-              this.visualToggle('二维', this.planarEnabled, 'PLANAR')
-              this.visualToggle('三维', this.threeEnabled, 'THREE')
-              this.visualModeButton('查看3D', 'THREE')
-              this.visualModeButton('查看2D', 'PLANAR')
-              this.visualToggle('状态颜色', this.statusColorsEnabled, 'COLORS')
-              this.visualToggle('布局编辑', this.layoutEditEnabled, 'LAYOUT')
-              Button(this.paused ? '恢复实时' : '暂停画面')
-                .type(ButtonType.Normal)
-                .fontSize(10)
-                .fontColor(this.paused ? '#FFFFFF' : Theme.navy)
-                .backgroundColor(this.paused ? Theme.warning : Theme.panelStrong)
-                .border({ width: 1, color: this.paused ? Theme.warning : Theme.line })
-                .borderRadius(2)
-                .onClick(() => this.togglePaused())
-            }.padding({ top: 12, bottom: 8 })
-          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
+          Row() {
+            Column() {
+              Text('VIEW MODE').fontSize(8).fontColor(Theme.muted).fontWeight(FontWeight.Bold)
+              Row({ space: 0 }) {
+                this.visualModeButton('立体视图', 'THREE')
+                this.visualModeButton('平面视图', 'PLANAR')
+              }.margin({ top: 7 })
+            }.alignItems(HorizontalAlign.Start)
+            Blank()
+            Scroll() {
+              Row({ space: 7 }) {
+                this.visualToggle('2D', this.planarEnabled, 'PLANAR')
+                this.visualToggle('3D', this.threeEnabled, 'THREE')
+                this.visualToggle('状态色', this.statusColorsEnabled, 'COLORS')
+                this.visualToggle('布局编辑', this.layoutEditEnabled, 'LAYOUT')
+                Button(this.paused ? '▶ 恢复实时' : 'Ⅱ 暂停画面')
+                  .type(ButtonType.Normal)
+                  .height(34)
+                  .fontSize(10)
+                  .fontColor(this.paused ? Theme.navy : Theme.onDark)
+                  .backgroundColor(this.paused ? Theme.warning : Theme.navy)
+                  .border({ width: 1, color: this.paused ? Theme.warning : Theme.navy })
+                  .borderRadius(2)
+                  .onClick(() => this.togglePaused())
+              }.padding({ top: 12, bottom: 8 })
+            }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).constraintSize({ maxWidth: 710 })
+          }.width('100%').alignItems(VerticalAlign.Bottom)
 
           if (this.threeEnabled && this.activeVisual === 'THREE') {
             Column() {
               Row() {
-                Text('THREE.JS 3D').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+                Text('THREE.JS 3D / LIVE SCENE').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
                 Blank()
                 Text(this.layoutEditEnabled ? '拖拽设备调整布局' : '旋转 · 缩放 · 点击查看').fontSize(9).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.muted)
               }.width('100%').padding({ bottom: 8 })
@@ -502,7 +519,7 @@ struct StageDetail {
                 payload: this.scenePayload(),
                 viewMode: 'THREE',
                 caption: '立体工位场景',
-                heightValue: 360,
+                heightValue: 410,
                 selectionSource: 'THREE_3D',
                 selectedDeviceCode: $selectedDeviceCode,
                 selectedTraceCode: $selectedTraceCode,
@@ -510,20 +527,20 @@ struct StageDetail {
                 onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source),
                 onSelectionCleared: (source: string): void => this.clearSceneSelection(source)
               })
-            }.width('100%').padding(12).margin({ top: 4 }).backgroundColor(Theme.panelSoft)
+            }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 12 }).margin({ top: 4 }).backgroundColor(Theme.navy).border({ width: { left: 3, top: 1, right: 1, bottom: 1 }, color: Theme.accent })
           }
 
           if (this.planarEnabled && this.activeVisual === 'PLANAR') {
             Column() {
               Row() {
-                Text('THREE.JS 2D PROCESS PLAN').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+                Text('THREE.JS 2D / PROCESS PLAN').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
                 Blank()
                 Text(this.layoutEditEnabled ? '拖拽平面符号调整布局' : '平面路径 · 物料流向 · 点击查看').fontSize(9).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.muted)
               }.width('100%').padding({ bottom: 8 })
               FactoryPlanScene({
                 payload: this.scenePayload(),
                 caption: '平面工艺图',
-                heightValue: 300,
+                heightValue: 360,
                 selectionSource: 'THREE_2D',
                 selectedDeviceCode: $selectedDeviceCode,
                 selectedTraceCode: $selectedTraceCode,
@@ -532,7 +549,7 @@ struct StageDetail {
                 onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source),
                 onSelectionCleared: (source: string): void => this.clearSceneSelection(source)
               })
-            }.width('100%').padding(12).margin({ top: 12 }).backgroundColor(Theme.panelSoft)
+            }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 12 }).margin({ top: 12 }).backgroundColor(Theme.navy).border({ width: { left: 3, top: 1, right: 1, bottom: 1 }, color: Theme.accent })
           }
 
           if (!this.threeEnabled && !this.planarEnabled) {
@@ -541,7 +558,7 @@ struct StageDetail {
               Text('实时数据仍在刷新，只是不再渲染图形。').fontSize(10).fontColor(Theme.muted).margin({ top: 8 })
             }.width('100%').height(170).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center).backgroundColor(Theme.panelSoft).margin({ top: 12 })
           }
-        }.width('100%').padding(18).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.blue }).borderRadius(3).margin({ top: 12 })
+        }.width('100%').padding({ left: 38, right: 38, top: 18, bottom: 22 }).backgroundColor(Theme.panel).border({ width: { top: 1, bottom: 1 }, color: Theme.line }).margin({ top: 12 })
 
         Scroll() {
           Row({ space: 8 }) {
@@ -550,7 +567,7 @@ struct StageDetail {
             this.metric('本站在制品', String(this.wipCountValue()), '运行或待处理')
             this.metric('设备在线', this.runtimeData().devices.filter(item => item.stageCode === this.stageCode && item.state !== 'OFFLINE').length + '/' + this.stageData().devices.length, this.bundle.source)
           }
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 12 })
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 18, left: 38, right: 38 })
 
         this.detailWorkspace()
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ bottom: 28 })
@@ -558,6 +575,102 @@ struct StageDetail {
       AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
         .margin({ top: 16, right: 16 })
     }.width('100%').height('100%')
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Scroll() {
+        Column() {
+          this.stationTopBar()
+          this.stationHeader()
+          this.stationNavigator()
+          this.stationWorkbench()
+          this.detailWorkspace()
+        }.width('100%').alignItems(HorizontalAlign.Start).padding({ bottom: 28 }).backgroundColor(Theme.page)
+      }.width('100%').height('100%').backgroundColor(Theme.page)
+      AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
+        .margin({ top: 16, right: 16 })
+    }.width('100%').height('100%')
+  }
+
+  @Builder
+  stationTopBar() {
+    Row() {
+      Button('← 产线总览').type(ButtonType.Normal).fontColor(Theme.accent).backgroundColor(Color.Transparent).fontSize(10).padding({ left: 0, right: 18 }).onClick(() => router.back())
+      Text('工位作业  /  ' + this.stageData().code).fontSize(8).fontColor(Theme.muted)
+      Blank()
+      Text('STATION ' + (this.currentStageIndex() + 1).toString().padStart(2, '0') + '  /  ' + FACTORY_STAGES.length).fontSize(8).fontColor(Theme.muted)
+    }.width('100%').padding({ left: 36, right: 170, top: 11, bottom: 11 }).backgroundColor(Theme.navy).border({ width: { bottom: 1 }, color: Theme.lineStrong })
+  }
+
+  @Builder
+  stationHeader() {
+    Row() {
+      Column() {
+        Row({ space: 8 }) {
+          Text((this.currentStageIndex() + 1).toString().padStart(2, '0')).fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+          Text('WORKSTATION  /  ' + this.stageData().code).fontSize(9).fontColor(Theme.onDarkMuted).fontWeight(FontWeight.Bold)
+        }
+        Text(this.stageData().name + ' 工位').fontSize(27).fontColor(Theme.onDark).fontWeight(FontWeight.Bold).margin({ top: 7 })
+        Text(this.stageData().description).fontSize(10).fontColor(Theme.onDarkMuted).lineHeight(15).margin({ top: 5 }).onClick(() => this.selectTextFragment('stageDescription', this.stageData().description))
+      }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      Column() {
+        Text('CURRENT STATE').fontSize(7).fontColor(Theme.onDarkMuted).fontWeight(FontWeight.Bold)
+        StateBadge({ status: this.statusValue(), label: this.statusText() }).margin({ top: 7 })
+        Text('STATE v' + this.bundle.stateVersion + '  ·  ' + this.bundle.source).fontSize(8).fontColor(Theme.onDarkMuted).margin({ top: 7 })
+      }.alignItems(HorizontalAlign.End)
+    }.width('100%').alignItems(VerticalAlign.Bottom).padding({ left: 36, right: 36, top: 19, bottom: 17 }).backgroundColor(Theme.navy).border({ width: { bottom: 2 }, color: statusColor(this.statusValue()) })
+  }
+
+  @Builder
+  stationNavigator() {
+    Row() {
+      Button('← 上一工位').type(ButtonType.Normal).fontColor(this.currentStageIndex() > 0 ? Theme.accent : Theme.muted).backgroundColor(Color.Transparent).fontSize(9).enabled(this.currentStageIndex() > 0).onClick(() => this.navigateStage(-1))
+      Blank()
+      Text('工位导航').fontSize(8).fontColor(Theme.muted)
+      Blank()
+      Button('下一工位 →').type(ButtonType.Normal).fontColor(this.currentStageIndex() < FACTORY_STAGES.length - 1 ? Theme.accent : Theme.muted).backgroundColor(Color.Transparent).fontSize(9).enabled(this.currentStageIndex() < FACTORY_STAGES.length - 1).onClick(() => this.navigateStage(1))
+    }.width('100%').padding({ left: 36, right: 36, top: 5, bottom: 5 }).backgroundColor(Theme.panelSoft).border({ width: { bottom: 1 }, color: Theme.line })
+  }
+
+  @Builder
+  stationWorkbench() {
+    Column() {
+      Row() {
+        Column() {
+          Row({ space: 8 }) {
+            Text('01').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+            Text('LIVE CELL').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+          }
+          Text('工位现场').fontSize(17).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 5 })
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        Scroll() {
+          Row({ space: 6 }) {
+            this.visualModeButton('立体', 'THREE')
+            this.visualModeButton('平面', 'PLANAR')
+            this.visualToggle('状态色', this.statusColorsEnabled, 'COLORS')
+            this.visualToggle('布局编辑', this.layoutEditEnabled, 'LAYOUT')
+          Button(this.paused ? '▶ 恢复动画' : 'Ⅱ 暂停动画').type(ButtonType.Normal).height(32).fontSize(9).fontColor(this.paused ? Theme.navy : Theme.text).backgroundColor(this.paused ? Theme.warning : Theme.panel).border({ width: 1, color: this.paused ? Theme.warning : Theme.line }).borderRadius(2).onClick(() => this.togglePaused())
+          }
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).constraintSize({ maxWidth: 720 })
+      }.width('100%').alignItems(VerticalAlign.Bottom).padding({ left: 28, right: 28, top: 16, bottom: 12 })
+
+      if (this.threeEnabled && this.activeVisual === 'THREE') {
+        Column() {
+          Row() { Text('THREE.JS  /  3D WORKCELL').fontSize(8).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Blank(); Text(this.layoutEditEnabled ? '拖拽调整布局' : '旋转 · 缩放 · 点击查看').fontSize(8).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.onDarkMuted) }.width('100%').padding({ left: 12, right: 12, bottom: 8 })
+          FactoryThreeScene({ payload: this.scenePayload(), viewMode: 'THREE', caption: '3D 工位现场', heightValue: 414, selectionSource: 'THREE_3D', selectedDeviceCode: $selectedDeviceCode, selectedTraceCode: $selectedTraceCode, onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source), onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source), onSelectionCleared: (source: string): void => this.clearSceneSelection(source) })
+        }.width('100%').backgroundColor('#071015')
+      }
+      if (this.planarEnabled && this.activeVisual === 'PLANAR') {
+        Column() {
+          Row() { Text('THREE.JS  /  2D PROCESS PLAN').fontSize(8).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Blank(); Text(this.layoutEditEnabled ? '拖拽调整平面布局' : '正交工艺图 · 点击查看').fontSize(8).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.onDarkMuted) }.width('100%').padding({ left: 12, right: 12, bottom: 8 })
+          FactoryPlanScene({ payload: this.scenePayload(), caption: '2D 工艺平面图', heightValue: 366, selectionSource: 'THREE_2D', selectedDeviceCode: $selectedDeviceCode, selectedTraceCode: $selectedTraceCode, onStageSelected: (stageCode: string, source: string): void => this.selectSceneStage(stageCode, source), onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source), onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source), onSelectionCleared: (source: string): void => this.clearSceneSelection(source) })
+        }.width('100%').backgroundColor('#071015')
+      }
+      if (!this.threeEnabled && !this.planarEnabled) {
+        Column() { Text('可视化已关闭').fontSize(16).fontColor(Theme.onDark).fontWeight(FontWeight.Bold); Text('实时数据仍在更新，打开 2D 或 3D 继续查看现场。').fontSize(9).fontColor(Theme.onDarkMuted).margin({ top: 8 }) }.width('100%').height(170).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center).backgroundColor(Theme.panel)
+      }
+    }.width('100%').backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
   }
 
   @Builder
@@ -603,7 +716,7 @@ struct StageDetail {
             .fontColor(this.qualitySummary() === '满足放行条件' ? Theme.success : this.qualitySummary() === '等待判定数据' ? Theme.warning : Theme.danger)
             .fontWeight(FontWeight.Bold)
             .margin({ left: 8 })
-        }.width('100%').padding(12).backgroundColor(this.qualitySummary() === '满足放行条件' ? Theme.successSoft : this.qualitySummary() === '等待判定数据' ? Theme.warningSoft : Theme.dangerSoft)
+            }.width('100%').padding(12).backgroundColor(this.qualitySummary() === '满足放行条件' ? Theme.successSoft : this.qualitySummary() === '等待判定数据' ? Theme.warningSoft : Theme.dangerSoft)
         ForEach(this.qualityGates(), (gate: QualityGateView) => {
           QualityGateRow({ gate: gate })
         }, (gate: QualityGateView) => gate.label)
@@ -613,8 +726,7 @@ struct StageDetail {
     .padding(18)
     .margin({ top: 12 })
     .backgroundColor(Theme.panel)
-    .border({ width: { left: 4, top: 1, right: 1, bottom: 1 }, color: Theme.accent })
-    .borderRadius(4)
+    .border({ width: { left: 3, top: 1, bottom: 1 }, color: Theme.accent })
   }
 
   @Builder
@@ -633,11 +745,12 @@ struct StageDetail {
 
   @Builder
   visualToggle(label: string, enabled: boolean, key: string) {
-    Button((enabled ? 'ON  ' : 'OFF  ') + label)
+    Button((enabled ? '●  ' : '○  ') + label)
       .type(ButtonType.Normal)
+      .height(34)
       .fontSize(10)
-      .fontColor(enabled ? '#FFFFFF' : Theme.muted)
-      .backgroundColor(enabled ? Theme.blue : Theme.panelStrong)
+      .fontColor(enabled ? Theme.blue : Theme.muted)
+      .backgroundColor(enabled ? Theme.panel : Theme.panelSoft)
       .border({ width: 1, color: enabled ? Theme.blue : Theme.line })
       .borderRadius(2)
       .onClick(() => this.toggleVisual(key))
@@ -645,13 +758,15 @@ struct StageDetail {
 
   @Builder
   visualModeButton(label: string, key: string) {
-    Button((this.activeVisual === key ? '当前  ' : '切换  ') + label)
+    Button(label)
       .type(ButtonType.Normal)
+      .width(108)
+      .height(36)
       .fontSize(10)
-      .fontColor(this.activeVisual === key ? '#FFFFFF' : Theme.blue)
+      .fontColor(this.activeVisual === key ? Theme.onDark : Theme.text)
       .backgroundColor(this.activeVisual === key ? Theme.navy : Theme.panelSoft)
       .border({ width: 1, color: this.activeVisual === key ? Theme.navy : Theme.line })
-      .borderRadius(2)
+      .borderRadius(0)
       .enabled(key === 'THREE' ? this.threeEnabled : this.planarEnabled)
       .onClick(() => this.switchVisual(key))
   }
@@ -665,19 +780,19 @@ struct StageDetail {
         description: '展示当前选中的在制品详情。'
       })
       ForEach(this.dashboardRuns().filter(item => item.traceCode === this.selectedTraceCode), (run: FactoryRun) => {
-        Row() { Text('瓶型').fontSize(10).fontColor(Theme.muted); Blank(); Text(run.bottleType || '待识别').fontSize(11).fontColor(Theme.navy).fontWeight(FontWeight.Bold) }.width('100%').padding(10)
-        Row() { Text('当前工位').fontSize(10).fontColor(Theme.muted); Blank(); Text(run.currentStage).fontSize(11).fontColor(Theme.blue).fontWeight(FontWeight.Bold) }.width('100%').padding(10).backgroundColor(Theme.panelSoft)
+        Row() { Text('瓶型').fontSize(10).fontColor(Theme.muted); Blank(); Text(run.bottleType || '待识别').fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold) }.width('100%').padding(10)
+        Row() { Text('当前工位').fontSize(10).fontColor(Theme.muted); Blank(); Text(run.currentStage).fontSize(11).fontColor(Theme.accent).fontWeight(FontWeight.Bold) }.width('100%').padding(10).backgroundColor(Theme.panelSoft)
         Row() { Text('产品状态').fontSize(10).fontColor(Theme.muted); Blank(); Text(this.statusTextForRun(run.status)).fontSize(11).fontColor(statusColor(run.status)).fontWeight(FontWeight.Bold) }.width('100%').padding(10)
         Row() { Text('更新时间').fontSize(10).fontColor(Theme.muted); Blank(); Text(this.formatTime(run.updatedAt)).fontSize(10).fontColor(Theme.text) }.width('100%').padding(10).backgroundColor(Theme.panelSoft)
       }, (run: FactoryRun) => run.traceCode)
-    }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.accent }).borderRadius(3)
+    }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 1, left: 1, bottom: 1 }, color: Theme.accent })
   }
 
   @Builder
   metric(label: string, value: string, note: string) {
     Column() {
       Text(label).fontSize(9).fontColor(Theme.muted)
-      Text(value).fontSize(18).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 5 })
+      Text(value).fontSize(18).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 5 })
       Text(note).fontSize(8).fontColor(Theme.muted).margin({ top: 3 })
     }.alignItems(HorizontalAlign.Start).width(160).height(78).padding(10).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.accent })
   }
@@ -687,8 +802,8 @@ struct StageDetail {
     Column() {
       SectionTitle({ code: 'DEVICE PROFILE', title: this.selectedDeviceCode, description: this.selectedDeviceRole() })
       Row() { Text('数据源').fontSize(10).fontColor(Theme.muted); Blank(); Text(this.deviceSource(this.selectedDeviceCode)).fontSize(11).fontColor(Theme.blue).fontWeight(FontWeight.Bold) }.width('100%').padding(10)
-      Row() { Text('关键读数').fontSize(10).fontColor(Theme.muted); Blank(); Text(this.deviceReading(this.selectedDeviceCode)).fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold) }.width('100%').padding(10).backgroundColor(Theme.panelSoft)
-    }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.accent }).borderRadius(3)
+      Row() { Text('关键读数').fontSize(10).fontColor(Theme.muted); Blank(); Text(this.deviceReading(this.selectedDeviceCode)).fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold) }.width('100%').padding(10).backgroundColor(Theme.panelSoft)
+    }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 1, left: 1, bottom: 1 }, color: Theme.accent })
   }
 
   private selectedDeviceRole(): string {
@@ -813,7 +928,7 @@ struct StageDetail {
           Text(run.defectType === undefined ? '检测结果待确认' : run.defectType).fontSize(9).fontColor(run.defectType === undefined ? Theme.muted : Theme.danger)
         }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectProductByTrace(run.traceCode, 'ARKUI'))
       }, (run: FactoryRun) => run.traceCode)
-    }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
+    }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 1, left: 1, bottom: 1 }, color: Theme.line })
   }
 
   @Builder
@@ -849,7 +964,7 @@ struct StageDetail {
           }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectAlarm(alarm))
         }, (alarm: AlarmRecord) => alarm.alarmId)
       }
-    }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
+    }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 1, left: 1, bottom: 1 }, color: Theme.line })
   }
 
   private statusTextForRun(status: string): string {

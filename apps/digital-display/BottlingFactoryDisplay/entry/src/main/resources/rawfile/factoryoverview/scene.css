@@ -1,0 +1,38 @@
+:root {
+  color: #eef5f6;
+  background: #09151b;
+  font-family: "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #scene-host {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  position: relative;
+  background: #09151b;
+  touch-action: none;
+}
+
+canvas { display: block; width: 100%; height: 100%; }
+
+.scene-status,
+.scene-guide { display: none; }
+
+.fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d7e4e7;
+  background: #10191e;
+  font-size: 12px;
+}
+
+.hidden { display: none; }

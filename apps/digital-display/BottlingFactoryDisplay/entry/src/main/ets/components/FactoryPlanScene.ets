@@ -30,14 +30,14 @@ export struct FactoryPlanScene {
     if (this.syncTimer >= 0) clearInterval(this.syncTimer)
     this.syncTimer = -1
     if (this.webReady) {
-      this.controller.runJavaScript('window.FactoryPlan && window.FactoryPlan.dispose && window.FactoryPlan.dispose()')
+      this.controller.runJavaScript('window.FactoryScene && window.FactoryScene.dispose && window.FactoryScene.dispose()')
         .catch((error: BusinessError) => console.error(`Factory 2D dispose failed: ${error.code} ${error.message}`))
     }
   }
 
   private pushPayload(): void {
     if (!this.webReady) return
-    const script: string = `window.FactoryPlan && window.FactoryPlan.update(${this.payload})`
+    const script: string = `window.FactoryScene && window.FactoryScene.update(Object.assign({}, ${this.payload}, { viewMode: 'PLANAR' }))`
     this.controller.runJavaScript(script)
       .catch((error: BusinessError) => console.error(`Factory 2D sync failed: ${error.code} ${error.message}`))
   }
@@ -48,7 +48,7 @@ export struct FactoryPlanScene {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      Web({ src: $rawfile('factory2d/index.html'), controller: this.controller })
+      Web({ src: $rawfile('factory3d/index.html'), controller: this.controller })
         .javaScriptAccess(true)
         .domStorageAccess(true)
         .fileAccess(true)
