@@ -6,7 +6,7 @@ export interface AiCenterConfigValues {
 
 export const AiCenterConfig: AiCenterConfigValues = {
   // Independent AI center, separate from the Spring Boot production backend.
-  API_BASE: 'http://192.168.106.20:8091/api',
-  WS_BASE: 'ws://192.168.106.20:8091/api/assistant/events',
+  API_BASE: 'http://192.168.0.104:8091/api',
+  WS_BASE: 'ws://192.168.0.104:8091/api/assistant/events',
   requestTimeoutMs: 12000
 }
