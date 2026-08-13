@@ -1,0 +1,10 @@
+{
+  "modelVersion": "6.1.1",
+  "name": "@bottling/harmony-assistant",
+  "version": "1.0.5",
+  "description": "Shared contextual AI assistant for bottling factory HarmonyOS applications.",
+  "main": "Index.ets",
+  "author": "industrial-factory-team",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

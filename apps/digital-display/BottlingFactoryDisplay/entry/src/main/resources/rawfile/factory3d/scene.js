@@ -63,6 +63,10 @@
   var cameraOrbit = { yaw: -0.65, pitch: 0.62, distance: 19 };
   var isPointerDown = false;
   var resizeObserver;
+  var animationFrameId = 0;
+  var running = true;
+  var lastFrameTime = 0;
+  var motionPhase = 0;
   var testProbe = {
     ready: false,
     mode: 'THREE',
@@ -140,7 +144,7 @@
       resizeObserver = new ResizeObserver(resize);
       resizeObserver.observe(host);
       updateProbe();
-      requestAnimationFrame(renderLoop);
+      animationFrameId = requestAnimationFrame(renderLoop);
     } catch (error) {
       fallback.classList.remove('hidden');
       sourceLabel.textContent = 'WEBGL UNAVAILABLE';
@@ -465,6 +469,11 @@
     label.userData.deviceOwner = group;
     label.position.set(0, 0.42, 1.02);
     group.add(label);
+    var stateLabel = createLabelSprite(device.state || 'STANDBY', '#476276');
+    stateLabel.scale.set(1.0, 0.25, 1);
+    stateLabel.userData.deviceOwner = group;
+    stateLabel.position.set(0, 0.42, 1.43);
+    group.add(stateLabel);
 
     group.userData.deviceCode = device.code;
     group.userData.selectType = 'device';
@@ -803,12 +812,10 @@
     window.__factoryTest__ = testProbe;
   }
 
-  function positionProducts(elapsed) {
+  function positionProducts(phase) {
     if (!productRoot) return;
-    var baseProgress = Number(state.progress || 0) / 100;
-    if (!state.paused) baseProgress += elapsed * Math.max(0.02, state.speed) * 0.035;
     productRoot.children.forEach(function (product, index) {
-      var t = (baseProgress + index * 0.19) % 1;
+      var t = (phase + index * 0.19) % 1;
       if (state.stageCode === 'AGV_TRANSPORT') {
         product.position.set(-6.4 + t * 12.8, 0, 0.1 + index * 0.08);
       } else if (state.stageCode === 'WAREHOUSE_INBOUND') {
@@ -847,13 +854,20 @@
     return 'STANDBY';
   }
 
-  function renderLoop() {
-    requestAnimationFrame(renderLoop);
+  function renderLoop(timestamp) {
+    if (!running) return;
+    animationFrameId = requestAnimationFrame(renderLoop);
     if (!renderer || !scene || !camera) return;
     var delta = Math.min(clock.getDelta(), 0.05);
     var elapsed = clock.elapsedTime;
+    var deltaSeconds = lastFrameTime > 0 ? Math.min(0.1, (timestamp - lastFrameTime) / 1000) : 0;
+    lastFrameTime = timestamp;
+    if (!state.paused) {
+      var speedRate = Math.max(0.012, Math.min(0.12, Math.abs(Number(state.speed || 0.12)) * 0.08));
+      motionPhase = (motionPhase + deltaSeconds * speedRate) % 1;
+    }
     animateEquipment(elapsed, delta);
-    positionProducts(elapsed);
+    positionProducts(motionPhase);
     renderer.render(scene, camera);
     updateProbe();
   }
@@ -971,6 +985,7 @@
     var picked = pickObject(event);
     if (!picked) {
       selectionLabel.classList.add('hidden');
+      window.location.href = 'factory://clear';
       return;
     }
     selectionLabel.textContent = picked.userData.label || 'SELECTED';
@@ -1025,7 +1040,16 @@
         var oldProductSignature = JSON.stringify(state.products.map(function (item) {
           return item.traceCode + ':' + item.status;
         }));
+        var deviceSignature = JSON.stringify((next.devices || []).map(function (item) {
+          return item.code + ':' + item.state;
+        }));
+        var oldDeviceSignature = JSON.stringify(state.devices.map(function (item) {
+          return item.code + ':' + item.state;
+        }));
         Object.keys(next).forEach(function (key) { state[key] = next[key]; });
+        if (Number.isFinite(Number(next.progress))) {
+          motionPhase = ((Number(next.progress) % 100) + 100) % 100 / 100;
+        }
         if (next.errorMessage !== undefined) state.lastError = next.errorMessage;
         if (modeChanged) {
           createCameraForMode();
@@ -1035,6 +1059,8 @@
         } else if (stageChanged) {
           rebuildStage();
           resetCamera();
+        } else if (deviceSignature !== oldDeviceSignature) {
+          rebuildStage();
         } else {
           if (productSignature !== oldProductSignature || statusColorsChanged) rebuildProducts();
           applyRuntimeState();
@@ -1066,9 +1092,14 @@
     },
     resetCamera: resetCamera,
     dispose: function () {
+      running = false;
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
       if (resizeObserver) resizeObserver.disconnect();
       clearObject(stageRoot);
-      if (renderer) renderer.dispose();
+      if (renderer) {
+        renderer.dispose();
+        if (renderer.forceContextLoss) renderer.forceContextLoss();
+      }
       state.lastError = '';
       testProbe.ready = false;
       updateProbe();

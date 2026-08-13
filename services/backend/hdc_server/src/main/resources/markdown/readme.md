@@ -9,6 +9,44 @@
 >  
 > 用户名/密码：archermind/archermind
 
+## 开发/演示默认账号
+
+后端启动时默认启用 `factory.auth.demo-seed-enabled=true`，会幂等创建或刷新以下演示账号。默认密码只允许用于开发、联调和答辩演示；生产部署前必须关闭 demo seed 或修改所有默认密码。
+
+### 管理端
+
+| 用户名 | 默认密码 | 角色 | sourceApp | 绑定工位 |
+| --- | --- | --- | --- | --- |
+| admin | admin123 | ADMIN | ADMIN | 无 |
+| engineer | engineer123 | ENGINEER | ADMIN | 无 |
+
+### 工位端
+
+工位端账号用于“看本站、调本站、控本站”。登录成功后，`/auth/login` 的 `data.user.stageCode` 会返回该账号绑定工位；`/auth/introspect` 在 `sourceApp=WORKSTATION` 时也会把范围裁剪到该工位。
+
+| 用户名 | 默认密码 | 角色 | sourceApp | 绑定 stageCode |
+| --- | --- | --- | --- | --- |
+| station_pretreatment | station123 | OPERATOR | WORKSTATION | PRETREATMENT |
+| station_gas | station123 | OPERATOR | WORKSTATION | GAS_INSPECTION |
+| station_appearance | station123 | OPERATOR | WORKSTATION | APPEARANCE_INSPECTION |
+| station_beverage | station123 | OPERATOR | WORKSTATION | BEVERAGE_READY |
+| station_filling | station123 | OPERATOR | WORKSTATION | FILLING |
+| station_secondary | station123 | OPERATOR | WORKSTATION | SECONDARY_INSPECTION |
+| station_packing | station123 | OPERATOR | WORKSTATION | PACKING |
+| station_agv | station123 | OPERATOR | WORKSTATION | AGV_TRANSPORT |
+| station_warehouse | station123 | OPERATOR | WORKSTATION | WAREHOUSE_INBOUND |
+
+### 登录错误码
+
+| code | 含义 | 前端建议展示 |
+| --- | --- | --- |
+| 4101 | 账号不存在 | 账号不存在，请检查用户名 |
+| 4102 | 密码错误 | 密码错误，请重新输入 |
+| 4103 | 账号禁用 | 账号已停用，请联系管理员 |
+| 4104 | 数据库不可用 | 后端数据库不可用，请检查数据源配置 |
+| 4105 | 后端认证配置异常 | 后端认证配置异常，请检查 seed、密码哈希或工位绑定 |
+| 4106 | 账号访问范围不匹配 | 工位账号不能访问未绑定工位 |
+
 
 ## 1.整体架构
     说明：根据HDC2023项目整理、升级，去除数字孪生相关功能

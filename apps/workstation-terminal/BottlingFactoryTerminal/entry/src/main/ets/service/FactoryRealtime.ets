@@ -1,5 +1,6 @@
 import { webSocket } from '@kit.NetworkKit'
 import { BusinessError } from '@kit.BasicServicesKit'
+import { util } from '@kit.ArkTS'
 import { ApiConfig } from './ApiConfig'
 
 export type RealtimeCallback = (payload: string) => void
@@ -26,7 +27,12 @@ export class FactoryRealtime {
     this.socket = socket
     socket.on('open', () => this.reportStatus(true))
     socket.on('message', (error: BusinessError, value: string | ArrayBuffer) => {
-      if (!error && typeof value === 'string' && value !== 'pong' && this.onEvent !== undefined) this.onEvent(value)
+      if (!error && typeof value === 'string') {
+        if (value !== 'pong' && this.onEvent !== undefined) this.onEvent(value)
+      } else if (!error && value instanceof ArrayBuffer) {
+        const payload: string = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(value))
+        if (payload !== 'pong' && this.onEvent !== undefined) this.onEvent(payload)
+      }
     })
     socket.on('error', () => this.reportStatus(false))
     socket.on('close', () => {

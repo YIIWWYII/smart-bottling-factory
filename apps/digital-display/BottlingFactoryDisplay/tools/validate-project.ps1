@@ -38,6 +38,7 @@ foreach ($file in $etsFiles) {
 }
 
 $threeRoot = Join-Path $root 'entry\src\main\resources\rawfile\factory3d'
+$planRoot = Join-Path $root 'entry\src\main\resources\rawfile\factory2d'
 $threeFiles = @(
     'index.html',
     'scene.css',
@@ -50,12 +51,27 @@ $threeFiles | ForEach-Object {
     if (-not (Test-Path -LiteralPath $path)) { $errors.Add("Missing Three.js resource: $_") }
 }
 
+@('index.html', 'scene.css', 'scene.js') | ForEach-Object {
+    $path = Join-Path $planRoot $_
+    if (-not (Test-Path -LiteralPath $path)) { $errors.Add("Missing semantic 2D resource: $_") }
+}
+
 $threeComponent = Join-Path $root 'entry\src\main\ets\components\FactoryThreeScene.ets'
 if (Test-Path -LiteralPath $threeComponent) {
     $componentText = Get-Content -Raw -Encoding UTF8 $threeComponent
     @("from '@kit.ArkWeb'", "`$rawfile('factory3d/index.html')", 'runJavaScript', 'factory://device/', 'factory://product/') | ForEach-Object {
         if (-not $componentText.Contains($_)) { $errors.Add("Missing ArkWeb bridge contract: $_") }
     }
+}
+
+$planComponent = Join-Path $root 'entry\src\main\ets\components\FactoryPlanScene.ets'
+if (Test-Path -LiteralPath $planComponent) {
+    $componentText = Get-Content -Raw -Encoding UTF8 $planComponent
+    @("from '@kit.ArkWeb'", "`$rawfile('factory2d/index.html')", 'runJavaScript', 'factory://stage/', 'factory://device/', 'factory://product/', 'factory://clear') | ForEach-Object {
+        if (-not $componentText.Contains($_)) { $errors.Add("Missing semantic 2D ArkWeb bridge contract: $_") }
+    }
+} else {
+    $errors.Add('Missing semantic 2D ArkWeb component: FactoryPlanScene.ets')
 }
 
 $sceneFile = Join-Path $threeRoot 'scene.js'
@@ -65,6 +81,15 @@ if (Test-Path -LiteralPath $sceneFile) {
         if (-not $sceneText.Contains($_)) { $errors.Add("Missing Three.js scene contract: $_") }
     }
     if ($sceneText -match 'https?://|cdn\.') { $errors.Add('Three.js scene contains an external runtime dependency') }
+}
+
+$planSceneFile = Join-Path $planRoot 'scene.js'
+if (Test-Path -LiteralPath $planSceneFile) {
+    $planSceneText = Get-Content -Raw -Encoding UTF8 $planSceneFile
+    @('THREE.OrthographicCamera', 'window.FactoryPlan', 'semantic2d: true', 'cancelAnimationFrame', 'factory2d.layout.') | ForEach-Object {
+        if (-not $planSceneText.Contains($_)) { $errors.Add("Missing semantic 2D scene contract: $_") }
+    }
+    if ($planSceneText -match 'https?://|cdn\.') { $errors.Add('Semantic 2D scene contains an external runtime dependency') }
 }
 
 $serviceText = ($etsFiles | Where-Object { $_.DirectoryName -like '*\service' } | ForEach-Object { Get-Content -Raw -Encoding UTF8 $_.FullName }) -join "`n"
@@ -82,5 +107,5 @@ Write-Host '[PASS] JSON/JSON5 files parse' -ForegroundColor Green
 Write-Host "[PASS] $($pages.Count) pages exist and are registered" -ForegroundColor Green
 Write-Host "[PASS] $($etsFiles.Count) ArkTS files pass import and brace checks" -ForegroundColor Green
 Write-Host '[PASS] no Vue runtime dependency found in ArkTS business code' -ForegroundColor Green
-Write-Host '[PASS] local ArkWeb + Three.js scene and bridge contracts are present' -ForegroundColor Green
+Write-Host '[PASS] independent semantic 2D and 3D ArkWeb + Three.js scene contracts are present' -ForegroundColor Green
 Write-Host '[PASS] core backend API contracts are covered' -ForegroundColor Green

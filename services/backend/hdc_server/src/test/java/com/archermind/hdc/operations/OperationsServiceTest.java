@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -57,7 +58,7 @@ class OperationsServiceTest {
     }
 
     @Test
-    void validatedAiRecipeCanCreatePendingCommand() {
+    void legacyAiDecisionAutoApplyDoesNotCreateCommand() {
         AiDecisionRequest request = new AiDecisionRequest();
         request.setTraceCode("BOT-OPS-002");
         request.setBottleType("PLA-500");
@@ -69,8 +70,8 @@ class OperationsServiceTest {
 
         assertEquals("PASSED", response.getValidationStatus());
         assertEquals("APPLY_RECIPE", response.getDecision());
-        assertNotNull(response.getCommandId());
-        assertEquals("PENDING", service.commands("PENDING").get(0).getStatus());
+        assertNull(response.getCommandId());
+        assertEquals(0, service.commands("PENDING").size());
     }
 
     @Test

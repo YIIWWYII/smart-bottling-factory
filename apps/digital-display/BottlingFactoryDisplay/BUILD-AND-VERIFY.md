@@ -1,74 +1,43 @@
-# 鸿蒙工程构建与验证
+﻿# 鏁板瓧灞曟澘鏋勫缓涓庨獙璇?
+## 鐜
 
-## 开发机准备
-
-所有开发工具和缓存放在 E 盘，例如：
-
-```text
-E:\dev\DevEco-Studio
-E:\dev\HarmonyOS-SDK
-E:\dev\HarmonyOS-Projects
-E:\dev\HarmonyOS-Cache
-```
-
-安装 DevEco Studio 时，如果安装器默认指向 C 盘，先取消默认 SDK/缓存路径，在 DevEco 的 SDK 配置中改到 E 盘后再下载。
-
-## 打开与同步
-
-1. 打开 DevEco Studio，选择 `Open`。
-2. 打开 `BottlingFactoryNative`，不要打开旧的 `.runtime/harmony-workstation`。
-3. 等待 Sync 完成，确认 `entry` 模块被识别。
-4. 选择与当前 SDK 匹配的 API 版本；如果 IDE 要求补充 `compatibleSdkVersion`，以 IDE 推荐版本为准写入 `build-profile.json5`。
-5. 运行工程根目录的 `tools\validate-project.ps1`。
-
-## 后端地址
-
-在 `entry/src/main/ets/service/ApiConfig.ets` 中修改：
-
-```ts
-API_BASE: 'http://电脑局域网IP:8088/hdc/api'
-WS_BASE: 'ws://电脑局域网IP:8088/hdc/api/dataScreen/1'
-```
-
-手机、平板或工位屏不能使用 `localhost`，必须使用运行 Spring Boot 电脑的局域网 IP。电脑防火墙要允许 8088 入站访问。
-
-## 运行顺序
-
-1. 运行现有 Spring Boot 后端，确认 `GET http://127.0.0.1:8088/hdc/api/factory/health` 返回成功。
-2. 启动 HarmonyOS 模拟器或连接已开启开发者模式的真机。
-3. 在 DevEco 中选择 `entry` 和设备，点击 Run。
-4. 登录页选择真实登录或“进入本地演示”。
-5. 依次检查监控工作台、工位工作台和管理工作台。
-
-## Three.js 离线资源
-
-三维场景不需要执行 `npm install`，固定依赖已经放在：
+鎵€鏈夊伐鍏枫€丼DK銆佹ā鎷熷櫒銆佺紦瀛樸€佹瀯寤轰骇鐗╁拰鏃ュ織鍧囨斁鍦?`D:\HarmonyOS-Dev`銆傚伐绋嬫簮鐮佷綅浜庯細
 
 ```text
-entry/src/main/resources/rawfile/factory3d/vendor/three.min.js
-entry/src/main/resources/rawfile/factory3d/vendor/THREE-LICENSE.txt
+D:\HarmonyOS-Dev\Workspaces\bottling-display\apps\digital-display\BottlingFactoryDisplay
 ```
 
-不要把 Three.js 改成 CDN 地址。真机测试前确认系统未开启坚盾守护模式，否则 ArkWeb 会禁用 WebGL/WebGL2；遇到不支持的设备时，关闭“三维”并使用二维工艺图。
+搴旂敤閫氳繃 `entry/oh-package.json5` 渚濊禆鏈湴 `../../../../packages/harmony-assistant/harmonyassistant`锛孫HPM 鍖呭悕蹇呴』涓?`@bottling/harmony-assistant`锛岀増鏈繀椤讳负 `1.0.2`銆?
+## 鏋勫缓
 
-## 验收表
+```powershell
+& 'D:\HarmonyOS-Dev\npm-global\devecocli.cmd' --version
+& 'D:\HarmonyOS-Dev\npm-global\devecocli.cmd' build --modules entry --build-mode debug
+```
 
-| 检查项 | 预期结果 |
+鏋勫缓鍓嶈繍琛屽伐绋嬮潤鎬佹鏌ワ細
+
+```powershell
+& '.\tools\validate-project.ps1'
+```
+
+鎴愬姛鏍囧噯鏄?CLI 杈撳嚭 `BUILD SUCCESSFUL`锛屼笖 `entry\build\default\outputs\default\` 涓嬬敓鎴?`.hap`锛屼笉鑳藉彧鍑?ArkTS 绫诲瀷妫€鏌ュ垽鏂畬鎴愩€?
+## 鏈嶅姟鍦板潃
+
+`entry/src/main/ets/service/ApiConfig.ets` 閰嶇疆 Spring Boot 涓?AI 涓灑鍦板潃銆傛ā鎷熷櫒鎴栫湡鏈轰笉鑳戒娇鐢?`localhost`锛涚數鑴戦槻鐏蹇呴』鍏佽瀵瑰簲绔彛鍏ョ珯銆傚悗绔笉鍙敤鏃堕〉闈㈠簲鏄剧ず鏄庣‘閿欒鍜?`LOCAL DEMO`锛孉I 涓灑涓嶅彲鐢ㄦ椂鍏变韩鍔╂墜搴旀樉绀烘湇鍔′笉鍙敤锛屼絾涓嶈兘闃诲灞曟澘椤甸潰銆?
+## 鏈€浣庨獙鏀?
+| 妫€鏌ラ」 | 棰勬湡缁撴灉 |
 | --- | --- |
-| 登录 | 真实后端返回 token，角色进入工作台 |
-| 重启应用 | Preferences 恢复 token 和角色 |
-| 后端断开 | 页面显示 `LOCAL DEMO`，不崩溃、不误报真实设备在线 |
-| WebSocket 断开 | 状态显示重连中，恢复后重新拉取快照 |
-| 工位切换 | 九个工位都能进入详情 |
-| 三维场景 | 九个工位显示不同设备组合，旋转、缩放、设备/产品点选正常 |
-| 数据联动 | 设备状态颜色、产品位置、速度和暂停/恢复与同一份运行快照一致 |
-| 性能开关 | 二维、三维和状态颜色可独立切换，关闭三维后 Web 组件被移除 |
-| 布局编辑 | 开启后可拖拽三维设备；关闭编辑后恢复旋转视角，重开页面保留位置 |
-| 质量门 | VOC、温度、AGV 和仓储安全条件显示 PASS/WAIT/FAIL |
-| 异常处置 | 解决请求使用 `action/targetStage/note`，由后端最终判定 |
-| 角色 | VIEWER 不显示可执行的管理写操作，ADMIN 可进入用户管理 |
-| 屏幕 | phone、tablet、横屏大屏可以滚动且无核心内容遮挡 |
+| 鍚姩 | 鏃犻渶鐧诲綍锛岀洿鎺ヨ繘鍏ュ叏灞€鎬昏 |
+| 宸ュ簭瀵艰埅 | 涔濆伐搴忓潎鍙粠鎬昏杩涘叆璇︽儏锛岄〉闈㈠彲涓婁笅婊氬姩 |
+| 2D | 鍔犺浇 `factory2d/index.html`锛屾樉绀哄钩闈㈣澶囩鍙枫€佸伐鑹鸿矾寰勫拰绉诲姩鐗╂枡锛屼笉鏄?3D 淇瑙?|
+| 3D | 鍔犺浇 `factory3d/index.html`锛屼節宸ュ簭璁惧缁勫悎鍜屽姩浣滀笉鍚?|
+| 鍚屽揩鐓ц仈鍔?| 涓よ鍥剧殑 `stateVersion`銆佽澶?浜у搧銆侀€熷害銆佽繘搴︺€佹潵婧愪竴鑷?|
+| 鏆傚仠/鎭㈠ | 鏆傚仠鍐荤粨褰撳墠甯э紱鎭㈠鍚庡簲鐢ㄦ渶鏂板揩鐓у苟缁х画杩愬姩 |
+| 鎬ц兘寮€鍏?| 2D/3D 鍙嫭绔嬪叧闂紱鍏抽棴鍚庡彇娑堝姩鐢诲抚骞堕噴鏀?WebGL |
+| 鐘舵€侀鑹?| 鍙叧闂鑹叉槧灏勶紝璁惧鐘舵€佹枃瀛椾粛鏄剧ず |
+| 甯冨眬缂栬緫 | 璁惧鍙嫋鎷斤紱鎸夊伐搴忓拰瑙嗗浘淇濆瓨锛岄噸寮€鍚庢仮澶?|
+| 閫夋嫨鑱斿姩 | 宸ヤ綅銆佽澶囥€佷骇鍝佷娇鐢ㄧǔ瀹氫笟鍔?ID 鍙戝竷鍏变韩鍔╂墜閫夋嫨锛涚┖鐧界偣鍑诲彂閫?`CLEAR` |
+| 鏈嶅姟寮傚父 | 鍚庣/AI 涓嶅彲鐢ㄦ彁绀烘竻妤氾紝椤甸潰涓嶅穿婧冦€佷笉鏄剧ず鍋囨垚鍔?|
 
-## 当前构建限制
-
-本 Windows 工作区没有发现 DevEco Studio、HarmonyOS SDK、`hvigorw` 或 `hdc`，因此本轮可完成工程静态验证、Three.js 浏览器渲染验证和现有后端联调检查，但不能声称已经生成 HAP。拿到鸿蒙开发机后，必须完成一次真实 Sync、Debug Build、Preview 和真机安装，并重点测试 ArkWeb WebGL、内存和长时间运行温度。
+Three.js 鍙厛鍦ㄦ祻瑙堝櫒瀵?rawfile 椤甸潰鍋?canvas銆佺偣鍑汇€佹嫋鎷藉拰鎺㈤拡鍥炲綊锛屼絾鏈€缁堝繀椤诲湪 HarmonyOS 妯℃嫙鍣ㄤ腑纭 ArkWeb銆佹湰鍦拌祫婧愩€佹ˉ鎺ュ拰椤甸潰鍒囨崲銆?

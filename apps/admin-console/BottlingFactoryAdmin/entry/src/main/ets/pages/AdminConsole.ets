@@ -1,14 +1,32 @@
 import { http } from '@kit.NetworkKit'
 import { router, promptAction } from '@kit.ArkUI'
+import {
+  AssistantController,
+  AssistantDock,
+  AssistantEntityRef,
+  AssistantEntityType,
+  AssistantNavigationResult
+} from '@bottling/harmony-assistant'
 import { Theme, statusColor } from '../common/Theme'
 import { SectionTitle, StateBadge } from '../components/IndustrialComponents'
+import { AiDecisionAuditPanel } from '../components/AiDecisionAudit'
+import { KnowledgeGovernance } from '../components/KnowledgeGovernance'
 import { FACTORY_STAGES, findStage } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { apiClient } from '../service/ApiClient'
+import { aiCenterClient } from '../service/AiCenterClient'
 import { SessionStore } from '../service/SessionStore'
 import { ApiConfig } from '../service/ApiConfig'
+import { AiCenterConfig } from '../service/AiCenterConfig'
+import {
+  adminAssistantSelectionBus,
+  assistantField,
+  createAdminSelection
+} from '../service/AdminAssistantSelection'
+import { AdminAssistantHostAdapter } from '../service/AdminAssistantHostAdapter'
 import {
   PERMISSION_INCIDENT_DISPOSE,
+  PERMISSION_SYSTEM_MANAGE,
   PERMISSION_THRESHOLD_MANAGE,
   PERMISSION_USER_MANAGE,
   canAccessAdminPage,
@@ -32,6 +50,12 @@ import {
   SystemPolicy,
   WarehouseZone
 } from '../model/FactoryModels'
+import {
+  AiConnectionTestRequest,
+  AiConnectionTestResult,
+  AiModelConfig,
+  AiModelConfigUpdate
+} from '../model/AiCenterModels'
 
 interface MenuItem {
   code: string
@@ -53,6 +77,8 @@ const MENU: Array<MenuItem> = [
   { code: 'MATERIALS', label: '产品与物料', description: '追踪、质量事件和箱码', minRole: 'VIEWER' },
   { code: 'LOGISTICS', label: '物流仓储', description: 'AGV、库位、库存和安全', minRole: 'VIEWER' },
   { code: 'AI_AUDIT', label: 'AI 决策审计', description: 'RAG、校验、建议和结果', minRole: 'VIEWER' },
+  { code: 'AI_CONFIG', label: 'AI 管理', description: '模型、Key、超时、RAG 和连接测试', minRole: 'VIEWER' },
+  { code: 'KNOWLEDGE', label: '知识资料', description: '上传、解析、审核、撤销和索引', minRole: 'VIEWER' },
   { code: 'USERS', label: '用户权限', description: '账号、角色和状态', minRole: 'ADMIN' },
   { code: 'SETTINGS', label: '系统配置', description: '阈值和策略版本', minRole: 'VIEWER' },
   { code: 'AUDIT', label: '操作审计', description: '用户操作和后端结果', minRole: 'VIEWER' }
@@ -88,8 +114,31 @@ struct AdminConsole {
   @State selectedDetail: string = '请选择一条记录查看详情。'
   @State message: string = ''
   @State loading: boolean = false
+  @State aiConfigLoading: boolean = false
+  @State aiConfigMessage: string = ''
+  @State aiConfigAvailable: boolean = false
+  @State aiProvider: string = ''
+  @State aiModelName: string = ''
+  @State aiBaseUrl: string = ''
+  @State aiApiKeyInput: string = ''
+  @State aiMaskedApiKey: string = ''
+  @State aiTimeoutMs: string = '12000'
+  @State aiRetryCount: string = '1'
+  @State aiStreamEnabled: boolean = true
+  @State aiMaxTokens: string = '2048'
+  @State aiTemperature: string = '0.2'
+  @State aiRagEnabled: boolean = true
+  @State aiVectorStore: string = ''
+  @State aiEmbeddingModel: string = ''
+  @State aiKnowledgeVersion: string = ''
+  @State aiConfigUpdatedAt: string = ''
+  @State aiTestQuestion: string = '当前 PLA 瓶 VOC 达标后是否可以进入瑕疵检测？'
+  @State aiTestResult: string = '尚未测试。'
+  @State aiTestStatus: string = 'WAIT'
   private timer: number = -1
   private readonly pageSize: number = 5
+  private readonly assistantAdapter: AdminAssistantHostAdapter = new AdminAssistantHostAdapter()
+  @State assistantController: AssistantController = new AssistantController(this.assistantAdapter)
   private listener: () => void = () => {
     this.bundle = FactoryRepository.bundle
   }
@@ -99,6 +148,9 @@ struct AdminConsole {
       router.replaceUrl({ url: 'pages/Login' })
       return
     }
+    this.assistantAdapter.setNavigator((entity: AssistantEntityRef) => this.navigateAssistantEntity(entity))
+    this.assistantAdapter.setHostContext(this.assistantPageRoute(), this.currentStateVersion(), this.bundle.updatedAt)
+    this.assistantAdapter.setVisibility(SessionStore.isDemo ? 'HIDDEN' : 'VISIBLE')
     FactoryRepository.subscribe(this.listener)
     this.loading = true
     void this.refreshAll()
@@ -110,11 +162,13 @@ struct AdminConsole {
     FactoryRepository.unsubscribe(this.listener)
     FactoryRepository.closeRealtime()
     if (this.timer >= 0) clearInterval(this.timer)
+    this.assistantAdapter.setVisibility('HIDDEN')
   }
 
   private async refreshAll(): Promise<void> {
     await FactoryRepository.refresh()
     this.bundle = FactoryRepository.bundle
+    this.assistantAdapter.setHostContext(this.assistantPageRoute(), this.currentStateVersion(), this.bundle.updatedAt)
     if (!SessionStore.isAuthenticated) {
       router.replaceUrl({ url: 'pages/Login' })
       return
@@ -125,6 +179,7 @@ struct AdminConsole {
     } else {
       this.users = []
     }
+    if (this.section === 'AI_CONFIG') await this.loadAiModelConfig()
     if (this.section === 'AUDIT') await this.loadAuditRecords()
     this.loading = false
   }
@@ -139,6 +194,11 @@ struct AdminConsole {
   }
 
   private async loadAuditRecords(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.auditRecords = []
+      this.auditError = '本地演示模式不访问后端操作审计接口。'
+      return
+    }
     try {
       this.auditRecords = await apiClient.request<Array<AdminAuditRecord>>('/audit/operations')
       this.auditError = ''
@@ -162,6 +222,157 @@ struct AdminConsole {
     }
   }
 
+  private async loadAiModelConfig(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.aiConfigAvailable = false
+      this.aiConfigMessage = '本地演示模式不访问 AI 中枢管理接口。'
+      return
+    }
+    this.aiConfigLoading = true
+    this.aiConfigMessage = ''
+    try {
+      const config: AiModelConfig = await aiCenterClient.getModelConfig()
+      this.applyAiModelConfig(config)
+      this.aiConfigAvailable = true
+    } catch (error) {
+      this.aiConfigAvailable = false
+      this.aiConfigMessage = 'AI 配置接口不可用：' + (error instanceof Error ? error.message : 'AI 中枢请求失败') + '。页面不会用本地常量伪造已保存配置。'
+      if (this.aiBaseUrl.length === 0) this.aiBaseUrl = AiCenterConfig.API_BASE
+      if (this.aiTimeoutMs.length === 0) this.aiTimeoutMs = AiCenterConfig.requestTimeoutMs.toString()
+    } finally {
+      this.aiConfigLoading = false
+    }
+  }
+
+  private applyAiModelConfig(config: AiModelConfig): void {
+    this.aiProvider = config.provider
+    this.aiModelName = config.modelName
+    this.aiBaseUrl = config.baseUrl
+    this.aiMaskedApiKey = config.maskedApiKey
+    this.aiApiKeyInput = ''
+    this.aiTimeoutMs = config.requestTimeoutMs.toString()
+    this.aiRetryCount = config.retryCount.toString()
+    this.aiStreamEnabled = config.streamEnabled
+    this.aiMaxTokens = config.maxTokens.toString()
+    this.aiTemperature = config.temperature.toString()
+    this.aiRagEnabled = config.ragEnabled
+    this.aiVectorStore = config.vectorStore
+    this.aiEmbeddingModel = config.embeddingModel
+    this.aiKnowledgeVersion = config.knowledgeVersion
+    this.aiConfigUpdatedAt = config.updatedAt + (config.updatedBy.length > 0 ? ' · ' + config.updatedBy : '')
+  }
+
+  private canManageAiConfig(): boolean {
+    return this.canWrite(PERMISSION_SYSTEM_MANAGE)
+  }
+
+  private parsePositiveInt(value: string, label: string): number {
+    const parsed: number = Number.parseInt(value.trim())
+    if (parsed.toString() === 'NaN' || parsed <= 0) {
+      throw new Error(label + '必须是大于 0 的整数')
+    }
+    return parsed
+  }
+
+  private parseNonNegativeInt(value: string, label: string): number {
+    const parsed: number = Number.parseInt(value.trim())
+    if (parsed.toString() === 'NaN' || parsed < 0) {
+      throw new Error(label + '必须是大于等于 0 的整数')
+    }
+    return parsed
+  }
+
+  private parseTemperature(value: string): number {
+    const parsed: number = Number.parseFloat(value.trim())
+    if (parsed.toString() === 'NaN' || parsed < 0 || parsed > 2) {
+      throw new Error('温度 temperature 必须在 0 到 2 之间')
+    }
+    return parsed
+  }
+
+  private buildAiConfigPayload(): AiModelConfigUpdate {
+    if (this.aiProvider.trim().length === 0 || this.aiModelName.trim().length === 0 || this.aiBaseUrl.trim().length === 0) {
+      throw new Error('供应商、模型名称和 baseUrl 必填')
+    }
+    const payload: AiModelConfigUpdate = {
+      provider: this.aiProvider.trim(),
+      modelName: this.aiModelName.trim(),
+      baseUrl: this.aiBaseUrl.trim(),
+      requestTimeoutMs: this.parsePositiveInt(this.aiTimeoutMs, '请求超时'),
+      retryCount: this.parseNonNegativeInt(this.aiRetryCount, '重试次数'),
+      streamEnabled: this.aiStreamEnabled,
+      maxTokens: this.parsePositiveInt(this.aiMaxTokens, '最大 token'),
+      temperature: this.parseTemperature(this.aiTemperature),
+      ragEnabled: this.aiRagEnabled,
+      vectorStore: this.aiVectorStore.trim(),
+      embeddingModel: this.aiEmbeddingModel.trim()
+    }
+    if (this.aiApiKeyInput.trim().length > 0) {
+      payload.apiKey = this.aiApiKeyInput.trim()
+    }
+    return payload
+  }
+
+  private async saveAiModelConfig(): Promise<void> {
+    if (!this.canManageAiConfig()) {
+      this.aiConfigMessage = this.writeDisabledReason(PERMISSION_SYSTEM_MANAGE)
+      this.appendClientActivity('保存 AI 模型配置', 'AI_CONFIG', 'DENIED', this.aiConfigMessage)
+      return
+    }
+    this.aiConfigLoading = true
+    try {
+      const payload: AiModelConfigUpdate = this.buildAiConfigPayload()
+      const result: AiModelConfig = await aiCenterClient.updateModelConfig(payload)
+      this.applyAiModelConfig(result)
+      this.aiConfigAvailable = true
+      this.aiConfigMessage = 'AI 中枢已返回配置事实状态：' + result.status + '，更新时间：' + result.updatedAt
+      this.appendClientActivity('保存 AI 模型配置', result.configId || 'AI_CONFIG', 'ACCEPTED', this.aiConfigMessage)
+      promptAction.showToast({ message: 'AI 配置已提交到 AI 中枢' })
+    } catch (error) {
+      const msg: string = error instanceof Error ? error.message : '保存 AI 配置失败'
+      this.aiConfigMessage = '保存失败：' + msg
+      this.appendClientActivity('保存 AI 模型配置', 'AI_CONFIG', 'FAILED', msg)
+    } finally {
+      this.aiConfigLoading = false
+    }
+  }
+
+  private async testAiConnection(): Promise<void> {
+    if (!this.canManageAiConfig()) {
+      this.aiTestStatus = 'DENIED'
+      this.aiTestResult = this.writeDisabledReason(PERMISSION_SYSTEM_MANAGE)
+      this.appendClientActivity('测试 AI 连接', 'AI_CONFIG', 'DENIED', this.aiTestResult)
+      return
+    }
+    const question: string = this.aiTestQuestion.trim().length > 0 ? this.aiTestQuestion.trim() : '请回答当前 AI 中枢是否可用。'
+    const payload: AiConnectionTestRequest = {
+      question: question,
+      includeRag: this.aiRagEnabled
+    }
+    this.aiConfigLoading = true
+    this.aiTestStatus = 'WAIT'
+    this.aiTestResult = '正在请求 AI 中枢测试接口...'
+    try {
+      const result: AiConnectionTestResult = await aiCenterClient.testConnection(payload)
+      this.aiTestStatus = result.success ? 'PASS' : 'FAILED'
+      this.aiTestResult = result.status + ' · ' + result.message +
+        '\n模型：' + result.provider + ' / ' + result.modelName +
+        '\n延迟：' + result.latencyMs.toString() + ' ms' +
+        '\nRAG：' + (result.ragReady ? 'READY' : 'NOT_READY') +
+        '\n知识版本：' + (result.knowledgeVersion || '--') +
+        '\n错误类型：' + (result.errorType || '--') +
+        '\n时间：' + result.occurredAt
+      this.appendClientActivity('测试 AI 连接', 'AI_CONFIG', result.success ? 'ACCEPTED' : 'FAILED', result.message)
+    } catch (error) {
+      const msg: string = error instanceof Error ? error.message : 'AI 中枢测试接口不可用'
+      this.aiTestStatus = 'FAILED'
+      this.aiTestResult = '测试失败：' + msg + '\n可能原因：鉴权失败、网络超时、模型不可用、速率限制、RAG 未就绪或接口尚未实现。'
+      this.appendClientActivity('测试 AI 连接', 'AI_CONFIG', 'FAILED', msg)
+    } finally {
+      this.aiConfigLoading = false
+    }
+  }
+
   private currentRole(): string {
     return SessionStore.user === undefined ? '' : SessionStore.user.role
   }
@@ -175,7 +386,10 @@ struct AdminConsole {
   }
 
   private selectSection(code: string): void {
+    adminAssistantSelectionBus.publish(undefined)
     this.section = code
+    adminAssistantSelectionBus.setPageRoute(this.assistantPageRoute())
+    this.assistantAdapter.setHostContext(this.assistantPageRoute(), this.currentStateVersion(), this.bundle.updatedAt)
     this.query = ''
     this.filter = 'ALL'
     this.pageIndex = 0
@@ -183,6 +397,7 @@ struct AdminConsole {
     this.message = ''
     if (code === 'USERS' && SessionStore.isAdmin) void this.loadUsers()
     if (code === 'INCIDENTS') void this.loadIncidents()
+    if (code === 'AI_CONFIG') void this.loadAiModelConfig()
     if (code === 'AUDIT') void this.loadAuditRecords()
   }
 
@@ -330,35 +545,43 @@ struct AdminConsole {
   }
 
   build() {
-    Row() {
-      this.sidebar()
-      Column() {
-        this.topbar()
-        Scroll() {
-          Column() {
-            this.connectionBanner()
-            if (!this.canUsePage(this.currentMenu().code)) {
-              this.noAccessView()
-            } else {
-              this.adminToolbar()
-              this.loadingState()
-              if (this.section === 'DASHBOARD') this.dashboardView()
-              if (this.section === 'PRODUCTION') this.productionView()
-              if (this.section === 'INCIDENTS') this.incidentView()
-              if (this.section === 'DEVICES') this.deviceView()
-              if (this.section === 'MATERIALS') this.materialView()
-              if (this.section === 'LOGISTICS') this.logisticsView()
-              if (this.section === 'AI_AUDIT') this.aiAuditView()
-              if (this.section === 'USERS') this.userView()
-              if (this.section === 'SETTINGS') this.settingsView()
-              if (this.section === 'AUDIT') this.auditView()
-            }
-            if (this.message.length > 0) {
-              Text(this.message).fontSize(11).fontColor(Theme.danger).padding(12).width('100%').backgroundColor('#FFF1F2').margin({ top: 12 })
-            }
-          }.width('100%').alignItems(HorizontalAlign.Start).padding(20)
-        }.width('100%').layoutWeight(1).backgroundColor(Theme.page)
-      }.layoutWeight(1).height('100%')
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Row() {
+        this.sidebar()
+        Column() {
+          this.topbar()
+          Scroll() {
+            Column() {
+              this.connectionBanner()
+              if (!this.canUsePage(this.currentMenu().code)) {
+                this.noAccessView()
+              } else {
+                this.adminToolbar()
+                this.loadingState()
+                if (this.section === 'DASHBOARD') this.dashboardView()
+                if (this.section === 'PRODUCTION') this.productionView()
+                if (this.section === 'INCIDENTS') this.incidentView()
+                if (this.section === 'DEVICES') this.deviceView()
+                if (this.section === 'MATERIALS') this.materialView()
+                if (this.section === 'LOGISTICS') this.logisticsView()
+                if (this.section === 'AI_AUDIT') this.aiAuditView()
+                if (this.section === 'AI_CONFIG') this.aiConfigView()
+                if (this.section === 'KNOWLEDGE') this.knowledgeView()
+                if (this.section === 'USERS') this.userView()
+                if (this.section === 'SETTINGS') this.settingsView()
+                if (this.section === 'AUDIT') this.auditView()
+              }
+              if (this.message.length > 0) {
+                Text(this.message).fontSize(11).fontColor(Theme.danger).padding(12).width('100%').backgroundColor('#FFF1F2').margin({ top: 12 })
+              }
+            }.width('100%').alignItems(HorizontalAlign.Start).padding(20)
+          }.width('100%').layoutWeight(1).backgroundColor(Theme.page)
+        }.layoutWeight(1).height('100%')
+      }.width('100%').height('100%').backgroundColor(Theme.page)
+      if (!SessionStore.isDemo) {
+        AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
+          .margin({ top: 18, right: 18 })
+      }
     }.width('100%').height('100%').backgroundColor(Theme.page)
   }
 
@@ -463,7 +686,8 @@ struct AdminConsole {
     if (this.section === 'INCIDENTS') return ['ALL', 'OPEN', 'RESOLVED']
     if (this.section === 'DEVICES') return ['ALL', 'RUNNING', 'STANDBY', 'ALARM', 'OFFLINE', 'MAINTENANCE']
     if (this.section === 'LOGISTICS') return ['ALL', 'PENDING', 'RUNNING', 'ACKNOWLEDGED', 'FAILED', 'TIMEOUT']
-    if (this.section === 'AI_AUDIT') return ['ALL', 'PASSED', 'FAILED', 'PENDING']
+    if (this.section === 'AI_AUDIT') return ['ALL', 'PROPOSED', 'APPROVAL_REQUIRED', 'COMMAND_PENDING', 'APPLIED', 'FAILED', 'STALE']
+    if (this.section === 'KNOWLEDGE') return ['ALL', 'PROCESSING', 'PENDING_REVIEW', 'APPROVED', 'INGESTING', 'INDEXED', 'REJECTED', 'FAILED', 'REVOKED']
     if (this.section === 'USERS') return ['ALL', 'ACTIVE', 'DISABLED']
     if (this.section === 'AUDIT') return ['ALL', 'ACCEPTED', 'FAILED', 'DENIED', 'PENDING']
     return ['ALL']
@@ -575,7 +799,7 @@ struct AdminConsole {
             Text(this.stageName(run.currentStage)).fontSize(10).fontColor(Theme.text).width(130)
             StateBadge({ status: run.status, label: run.status })
             Text(run.boxCode || '未装箱').fontSize(10).fontColor(Theme.muted).layoutWeight(1)
-            Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectedDetail = this.runDetail(run))
+            Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectProduct(run))
           }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
         }, (run: FactoryRun) => run.traceCode)
         this.pager(this.filteredRuns().length)
@@ -616,6 +840,7 @@ struct AdminConsole {
               Text(alarm.deviceCode + ' · ' + alarm.message).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             StateBadge({ status: alarm.status, label: alarm.status })
+            Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectAlarm(alarm))
             Button('确认报警').enabled(this.canWrite(PERMISSION_INCIDENT_DISPOSE)).fontColor('#FFFFFF').backgroundColor(this.canWrite(PERMISSION_INCIDENT_DISPOSE) ? Theme.blue : Theme.neutral).onClick(() => this.confirmAction('确认报警', '确认只代表管理人员已知晓，后端仍记录操作者并校验权限。', () => void this.acknowledgeAlarm(alarm)))
           }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
         }, (alarm: AlarmRecord) => alarm.alarmId)
@@ -641,7 +866,7 @@ struct AdminConsole {
             StateBadge({ status: device.state, label: device.state })
             Text(device.source + (device.fallback ? ' · fallback' : '')).fontSize(10).fontColor(Theme.muted).width(150)
             Text('速度 ' + (device.speedMps === undefined ? '--' : device.speedMps.toString()) + ' m/s').fontSize(10).fontColor(Theme.text).layoutWeight(1)
-            Button('档案').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectedDetail = this.deviceDetail(device))
+            Button('档案').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectDevice(device))
           }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
         }, (device: RuntimeDevice) => device.deviceCode)
         this.pager(this.filteredDevices().length)
@@ -663,7 +888,7 @@ struct AdminConsole {
             Text(run.bottleType || '待识别').fontSize(10).fontColor(Theme.text).width(95)
             Text(run.defectType || '无质量事件').fontSize(10).fontColor(run.defectType === undefined ? Theme.muted : Theme.danger).layoutWeight(1)
             Text(run.boxCode || '--').fontSize(10).fontColor(Theme.muted).width(120)
-            Button('追溯').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectedDetail = this.runDetail(run))
+            Button('追溯').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectProduct(run))
           }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
         }, (run: FactoryRun) => run.traceCode)
         this.pager(this.filteredRuns().length)
@@ -721,26 +946,121 @@ struct AdminConsole {
 
   @Builder
   aiAuditView() {
-    Column() {
-      SectionTitle({ code: 'AI DECISION AUDIT', title: 'AI 决策审计', description: '查看 RAG 来源版本、数据库校验、建议、审批、命令和结果。' })
-      if (this.filteredAiAudits().length === 0) {
-        this.emptyState('没有匹配的 AI 决策记录。')
-      } else {
-        ForEach(this.filteredAiAudits().slice(this.pageStart(), this.pageEnd(this.filteredAiAudits().length)), (audit: AiAudit) => {
-          Row() {
-            Column() {
-              Text(audit.auditId + ' · ' + audit.traceCode).fontSize(11).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-              Text(audit.knowledgeVersion + ' · ' + audit.bottleType).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
-            }.alignItems(HorizontalAlign.Start).width(230)
-            StateBadge({ status: audit.validationStatus, label: audit.validationStatus })
-            Text(audit.decision).fontSize(10).fontColor(Theme.text).layoutWeight(1)
-            Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectedDetail = this.aiDetail(audit))
-          }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
-        }, (audit: AiAudit) => audit.auditId)
-        this.pager(this.filteredAiAudits().length)
+    AiDecisionAuditPanel({ query: this.query, filter: this.filter, stateVersion: this.currentStateVersion() })
+  }
+
+  @Builder
+  aiConfigView() {
+    Column({ space: 14 }) {
+      SectionTitle({ code: 'AI MANAGEMENT', title: 'AI 模型与 RAG 配置', description: '管理供应商、模型、Key、超时、流式、RAG 和连接测试；不属于共享助手会话。' })
+      this.aiConfigState()
+      this.aiModelForm()
+      this.aiConnectionTestPanel()
+      this.aiRagStatusPanel()
+      if (this.aiConfigMessage.length > 0) {
+        Text(this.aiConfigMessage).fontSize(10).fontColor(this.aiConfigAvailable ? Theme.warning : Theme.danger).width('100%').padding(10).backgroundColor(this.aiConfigAvailable ? '#FFF7E6' : '#FFF1F2')
       }
-      this.detailPanel()
-    }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
+    }.width('100%').alignItems(HorizontalAlign.Start).padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
+  }
+
+  @Builder
+  aiConfigState() {
+    Row({ space: 10 }) {
+      StateBadge({ status: this.aiConfigAvailable ? 'PASS' : 'FAILED', label: this.aiConfigAvailable ? '配置已加载' : '接口未就绪' })
+      Text('AI 中枢：' + AiCenterConfig.API_BASE).fontSize(9).fontColor(Theme.muted).layoutWeight(1)
+      Button('刷新配置').height(34).backgroundColor(Theme.blue).fontColor('#FFFFFF').onClick(() => void this.loadAiModelConfig())
+      Button('选择配置').height(34).fontColor(Theme.blue).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line }).onClick(() => this.selectAiConfig())
+    }.width('100%')
+    if (this.aiConfigLoading) {
+      Row({ space: 8 }) {
+        LoadingProgress().width(18).height(18).color(Theme.blue)
+        Text('正在访问 AI 中枢配置接口...').fontSize(10).fontColor(Theme.muted)
+      }.width('100%').padding(8).backgroundColor(Theme.panelSoft)
+    }
+  }
+
+  @Builder
+  aiModelForm() {
+    Column({ space: 10 }) {
+      Text('模型配置').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Row({ space: 8 }) {
+        TextInput({ text: this.aiProvider, placeholder: '供应商，例如 OpenAI / DeepSeek / 本地模型' }).layoutWeight(1).onChange((value: string) => this.aiProvider = value)
+        TextInput({ text: this.aiModelName, placeholder: '模型名称，例如 gpt-4.1 / deepseek-chat' }).layoutWeight(1).onChange((value: string) => this.aiModelName = value)
+        TextInput({ text: this.aiBaseUrl, placeholder: 'baseUrl，例如 https://api.xxx.com/v1' }).layoutWeight(1).onChange((value: string) => this.aiBaseUrl = value)
+      }.width('100%')
+      Row({ space: 8 }) {
+        Column() {
+          Text('当前 Key：' + (this.aiMaskedApiKey.length > 0 ? this.aiMaskedApiKey : '未设置或接口未返回')).fontSize(10).fontColor(Theme.muted)
+          TextInput({ text: this.aiApiKeyInput, placeholder: '填写新 API Key 才会更新；留空表示不变' })
+            .type(InputType.Password)
+            .width('100%')
+            .onChange((value: string) => this.aiApiKeyInput = value)
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        TextInput({ text: this.aiTimeoutMs, placeholder: '请求超时 ms' }).width(130).onChange((value: string) => this.aiTimeoutMs = value)
+        TextInput({ text: this.aiRetryCount, placeholder: '重试次数' }).width(110).onChange((value: string) => this.aiRetryCount = value)
+      }.width('100%').alignItems(VerticalAlign.Bottom)
+      Row({ space: 8 }) {
+        TextInput({ text: this.aiMaxTokens, placeholder: '最大 token' }).width(130).onChange((value: string) => this.aiMaxTokens = value)
+        TextInput({ text: this.aiTemperature, placeholder: '温度 0-2' }).width(130).onChange((value: string) => this.aiTemperature = value)
+        Button('流式：' + (this.aiStreamEnabled ? '开启' : '关闭')).fontColor('#FFFFFF').backgroundColor(this.aiStreamEnabled ? Theme.success : Theme.neutral).onClick(() => this.aiStreamEnabled = !this.aiStreamEnabled)
+        Button('RAG：' + (this.aiRagEnabled ? '开启' : '关闭')).fontColor('#FFFFFF').backgroundColor(this.aiRagEnabled ? Theme.success : Theme.neutral).onClick(() => this.aiRagEnabled = !this.aiRagEnabled)
+        Text(this.aiConfigUpdatedAt.length > 0 ? '最近更新：' + this.aiConfigUpdatedAt : '等待 AI 中枢返回配置版本').fontSize(9).fontColor(Theme.muted).layoutWeight(1)
+      }.width('100%')
+      Row({ space: 8 }) {
+        TextInput({ text: this.aiVectorStore, placeholder: '向量库，例如 Milvus / pgvector / Chroma' }).layoutWeight(1).onChange((value: string) => this.aiVectorStore = value)
+        TextInput({ text: this.aiEmbeddingModel, placeholder: 'Embedding 模型' }).layoutWeight(1).onChange((value: string) => this.aiEmbeddingModel = value)
+        TextInput({ text: this.aiKnowledgeVersion, placeholder: '当前知识版本（只读展示）' }).layoutWeight(1).enabled(false)
+      }.width('100%')
+      Row({ space: 10 }) {
+        Button('保存 AI 配置')
+          .enabled(this.canManageAiConfig() && !this.aiConfigLoading)
+          .fontColor('#FFFFFF')
+          .backgroundColor(this.canManageAiConfig() ? Theme.blue : Theme.neutral)
+          .onClick(() => this.confirmAction('确认保存 AI 配置', '配置将提交到 AI 中枢/后端配置 API；API Key 不会明文回显，留空表示沿用现有 Key。', () => void this.saveAiModelConfig()))
+        Text(this.canManageAiConfig() ? '具备 SYSTEM_MANAGE 权限' : '保存需要 ADMIN、非演示账号且后端在线。').fontSize(10).fontColor(this.canManageAiConfig() ? Theme.success : Theme.warning)
+      }.width('100%')
+    }.width('100%').padding(12).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  aiConnectionTestPanel() {
+    Column({ space: 8 }) {
+      Text('测试连接 / 测试问答').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      TextArea({ text: this.aiTestQuestion, placeholder: '输入一条用于诊断的测试问题' }).height(68).width('100%').onChange((value: string) => this.aiTestQuestion = value)
+      Row({ space: 10 }) {
+        Button('测试连接').enabled(this.canManageAiConfig() && !this.aiConfigLoading).fontColor('#FFFFFF').backgroundColor(this.canManageAiConfig() ? Theme.blue : Theme.neutral).onClick(() => void this.testAiConnection())
+        StateBadge({ status: this.aiTestStatus, label: this.aiTestStatus })
+        Text('失败会明确区分鉴权、超时、模型不可用、速率限制、RAG 未就绪或接口未实现。').fontSize(10).fontColor(Theme.muted).layoutWeight(1)
+      }.width('100%')
+      Text(this.aiTestResult).fontSize(10).fontColor(this.aiTestStatus === 'PASS' ? Theme.success : this.aiTestStatus === 'WAIT' ? Theme.muted : Theme.danger).width('100%').padding(10).backgroundColor('#FFFFFF').border({ width: 1, color: Theme.line })
+    }.width('100%').padding(12).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  aiRagStatusPanel() {
+    Column({ space: 8 }) {
+      Text('文档 / RAG 运维状态').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Row() {
+        Text('RAG 开关').fontSize(10).fontColor(Theme.muted).width(120)
+        StateBadge({ status: this.aiRagEnabled ? 'PASS' : 'WAIT', label: this.aiRagEnabled ? 'ENABLED' : 'DISABLED' })
+        Text('向量库：' + (this.aiVectorStore.length > 0 ? this.aiVectorStore : '--')).fontSize(10).fontColor(Theme.text).layoutWeight(1).margin({ left: 12 })
+      }.width('100%').padding(9).border({ width: { bottom: 1 }, color: Theme.line })
+      Row() {
+        Text('Embedding').fontSize(10).fontColor(Theme.muted).width(120)
+        Text(this.aiEmbeddingModel.length > 0 ? this.aiEmbeddingModel : '--').fontSize(10).fontColor(Theme.text).layoutWeight(1)
+      }.width('100%').padding(9).border({ width: { bottom: 1 }, color: Theme.line })
+      Row() {
+        Text('知识版本').fontSize(10).fontColor(Theme.muted).width(120)
+        Text(this.aiKnowledgeVersion.length > 0 ? this.aiKnowledgeVersion : '等待 AI 中枢返回已发布版本').fontSize(10).fontColor(Theme.text).layoutWeight(1)
+      }.width('100%').padding(9).border({ width: { bottom: 1 }, color: Theme.line })
+      Text('资料上传、解析预览、审核、拒绝、撤销、索引进度和失败原因在“知识资料”页面处理；只有 INDEXED 且未 REVOKED 的版本才允许参与 RAG。').fontSize(10).fontColor(Theme.muted).width('100%')
+      Button('进入知识资料管理').fontColor('#FFFFFF').backgroundColor(Theme.blue).onClick(() => this.selectSection('KNOWLEDGE'))
+    }.width('100%').padding(12).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  knowledgeView() {
+    KnowledgeGovernance({ query: this.query, filter: this.filter, stateVersion: this.currentStateVersion() })
   }
 
   @Builder
@@ -782,6 +1102,7 @@ struct AdminConsole {
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           Text(policy.value + ' ' + policy.unit).fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).width(100)
           StateBadge({ status: policy.status === 'ACTIVE' ? 'PASS' : 'WAIT', label: policy.status })
+          Button('查看').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectPolicy(policy))
         }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
       }, (policy: SystemPolicy) => policy.policyCode)
       Text('后端地址：' + ApiConfig.API_BASE).fontSize(10).fontColor(Theme.muted).margin({ top: 14 })
@@ -811,7 +1132,7 @@ struct AdminConsole {
             Text(record.actor).fontSize(10).fontColor(Theme.blue).width(140)
             Text(record.target).fontSize(10).fontColor(Theme.muted).layoutWeight(1)
             StateBadge({ status: record.result, label: record.result })
-            Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectedDetail = this.auditDetail(record))
+            Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectAuditRecord(record))
           }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
         }, (record: AdminAuditRecord) => record.auditId)
         this.pager(this.filteredAuditRecords().length)
@@ -825,7 +1146,7 @@ struct AdminConsole {
             Text(record.action).fontSize(10).fontColor(Theme.text).width(160)
             Text(record.target).fontSize(10).fontColor(Theme.muted).layoutWeight(1)
             StateBadge({ status: record.result, label: record.result })
-            Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectedDetail = this.auditDetail(record))
+            Button('详情').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectAuditRecord(record))
           }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
         }, (record: AdminAuditRecord) => record.auditId)
       }
@@ -904,6 +1225,228 @@ struct AdminConsole {
       if (stage.stageCode === code) state = stage.state
     })
     return state
+  }
+
+  private currentStateVersion(): number {
+    return this.bundle.runtime.stateVersion === undefined ? 0 : this.bundle.runtime.stateVersion
+  }
+
+  private assistantPageRoute(): string {
+    return 'AdminConsole/' + this.section
+  }
+
+  private navigateAssistantEntity(entity: AssistantEntityRef): AssistantNavigationResult {
+    const entityType: string = entity.entityType
+    const entityId: string = entity.entityId
+    if (entityType === AssistantEntityType.DEVICE) {
+      let target: RuntimeDevice | undefined = undefined
+      this.bundle.runtime.devices.forEach((device: RuntimeDevice) => {
+        if (device.deviceCode === entityId) target = device
+      })
+      this.selectSection('DEVICES')
+      if (target !== undefined) {
+        this.selectDevice(target)
+        return { handled: true }
+      }
+      this.message = '助手引用的设备不存在或当前角色不可见：' + entityId
+      return { handled: false, reason: this.message }
+    }
+    if (entityType === AssistantEntityType.PRODUCT) {
+      let target: FactoryRun | undefined = undefined
+      this.bundle.dashboard.runs.forEach((run: FactoryRun) => {
+        if (run.traceCode === entityId) target = run
+      })
+      this.selectSection('MATERIALS')
+      if (target !== undefined) {
+        this.selectProduct(target)
+        return { handled: true }
+      }
+      this.message = '助手引用的产品追踪号不存在或当前角色不可见：' + entityId
+      return { handled: false, reason: this.message }
+    }
+    if (entityType === AssistantEntityType.ALARM) {
+      let target: AlarmRecord | undefined = undefined
+      this.bundle.operations.alarms.forEach((alarm: AlarmRecord) => {
+        if (alarm.alarmId === entityId) target = alarm
+      })
+      this.selectSection('INCIDENTS')
+      if (target !== undefined) {
+        this.selectAlarm(target)
+        return { handled: true }
+      }
+      this.message = '助手引用的报警不存在或当前角色不可见：' + entityId
+      return { handled: false, reason: this.message }
+    }
+    if (entityType === AssistantEntityType.CONFIG) {
+      if (entityId === 'AI_MODEL_CONFIG') {
+        this.selectSection('AI_CONFIG')
+        this.selectAiConfig()
+        return { handled: true }
+      }
+      let target: SystemPolicy | undefined = undefined
+      SYSTEM_POLICIES.forEach((policy: SystemPolicy) => {
+        if (policy.policyCode === entityId) target = policy
+      })
+      this.selectSection('SETTINGS')
+      if (target !== undefined) {
+        this.selectPolicy(target)
+        return { handled: true }
+      }
+      this.message = '助手引用的配置不存在或当前角色不可见：' + entityId
+      return { handled: false, reason: this.message }
+    }
+    if (entityType === AssistantEntityType.AUDIT) {
+      let auditRecord: AdminAuditRecord | undefined = undefined
+      this.auditRecords.concat(this.clientActivity).forEach((record: AdminAuditRecord) => {
+        if (record.auditId === entityId) auditRecord = record
+      })
+      if (auditRecord !== undefined) {
+        this.selectSection('AUDIT')
+        this.selectAuditRecord(auditRecord)
+        return { handled: true }
+      }
+      let aiAudit: AiAudit | undefined = undefined
+      this.bundle.operations.aiAudits.forEach((audit: AiAudit) => {
+        if (audit.auditId === entityId) aiAudit = audit
+      })
+      this.selectSection('AI_AUDIT')
+      if (aiAudit !== undefined) {
+        this.selectedDetail = this.aiDetail(aiAudit)
+        return { handled: true }
+      }
+      this.message = '助手引用的审计记录不存在或当前角色不可见：' + entityId
+      return { handled: false, reason: this.message }
+    }
+    if (entityType === AssistantEntityType.KNOWLEDGE_DOCUMENT) {
+      this.selectSection('KNOWLEDGE')
+      this.selectedDetail = '知识资料：' + entityId + '\n已定位到知识资料页面。资料预览和审核仍必须在后台业务页面中执行，助手不能替代审批。'
+      return { handled: true }
+    }
+    this.message = '当前后台暂不支持定位该助手引用：' + entityId
+    return { handled: false, reason: this.message }
+  }
+
+  private selectProduct(run: FactoryRun): void {
+    this.selectedDetail = this.runDetail(run)
+    const selection = createAdminSelection(
+      'PRODUCT',
+      run.traceCode,
+      run.traceCode + ' · ' + (run.bottleType || run.status),
+      'AdminConsole/MATERIALS',
+      this.currentStateVersion(),
+      [
+        assistantField('traceCode', run.traceCode),
+        assistantField('stageCode', run.currentStage),
+        assistantField('status', run.status),
+        assistantField('updatedAt', run.updatedAt || ''),
+        assistantField('source', this.dataSourceLabel())
+      ]
+    )
+    adminAssistantSelectionBus.publish(selection)
+  }
+
+  private selectDevice(device: RuntimeDevice): void {
+    this.selectedDetail = this.deviceDetail(device)
+    const selection = createAdminSelection(
+      'DEVICE',
+      device.deviceCode,
+      device.deviceCode + ' · ' + device.state,
+      'AdminConsole/DEVICES',
+      this.currentStateVersion(),
+      [
+        assistantField('deviceCode', device.deviceCode),
+        assistantField('stageCode', device.stageCode),
+        assistantField('status', device.state),
+        assistantField('source', device.source),
+        assistantField('occurredAt', device.occurredAt || '')
+      ]
+    )
+    adminAssistantSelectionBus.publish(selection)
+  }
+
+  private selectAlarm(alarm: AlarmRecord): void {
+    this.selectedDetail = '报警：' + alarm.alarmId + '\n类型：' + alarm.alarmType + '\n设备：' + alarm.deviceCode + '\n工序：' + (alarm.stage || '--') + '\n追踪号：' + (alarm.traceCode || '--') + '\n状态：' + alarm.status + '\n数值：' + (alarm.value === undefined ? '--' : alarm.value.toString() + ' ' + (alarm.unit || '')) + '\n阈值：' + (alarm.limitValue === undefined ? '--' : alarm.limitValue.toString()) + '\n说明：' + alarm.message + '\n时间：' + (alarm.occurredAt || '--')
+    const selection = createAdminSelection(
+      'ALARM',
+      alarm.alarmId,
+      alarm.alarmId + ' · ' + alarm.status,
+      'AdminConsole/INCIDENTS',
+      this.currentStateVersion(),
+      [
+        assistantField('deviceCode', alarm.deviceCode),
+        assistantField('stageCode', alarm.stage || ''),
+        assistantField('traceCode', alarm.traceCode || ''),
+        assistantField('status', alarm.status),
+        assistantField('occurredAt', alarm.occurredAt || '')
+      ]
+    )
+    adminAssistantSelectionBus.publish(selection)
+  }
+
+  private selectPolicy(policy: SystemPolicy): void {
+    this.selectedDetail = '配置：' + policy.policyCode + '\n名称：' + policy.name + '\n当前值：' + policy.value + ' ' + policy.unit + '\n版本：' + policy.version + '\n状态：' + policy.status + '\n更新时间：' + policy.updatedAt
+    const selection = createAdminSelection(
+      'CONFIGURATION',
+      policy.policyCode,
+      policy.name + ' · ' + policy.version,
+      'AdminConsole/SETTINGS',
+      this.currentStateVersion(),
+      [
+        assistantField('status', policy.status),
+        assistantField('version', policy.version),
+        assistantField('updatedAt', policy.updatedAt),
+        assistantField('title', policy.name)
+      ]
+    )
+    adminAssistantSelectionBus.publish(selection)
+  }
+
+  private selectAiConfig(): void {
+    this.selectedDetail = 'AI 配置：AI_MODEL_CONFIG\n供应商：' + (this.aiProvider || '--') +
+      '\n模型：' + (this.aiModelName || '--') +
+      '\nbaseUrl：' + (this.aiBaseUrl || '--') +
+      '\nAPI Key：' + (this.aiMaskedApiKey || '未设置或接口未返回') +
+      '\n超时：' + this.aiTimeoutMs + ' ms' +
+      '\n重试：' + this.aiRetryCount +
+      '\n流式：' + (this.aiStreamEnabled ? '开启' : '关闭') +
+      '\nRAG：' + (this.aiRagEnabled ? '开启' : '关闭') +
+      '\n向量库：' + (this.aiVectorStore || '--') +
+      '\n知识版本：' + (this.aiKnowledgeVersion || '--') +
+      '\n说明：助手只能引用该配置状态，不能通过引用导航修改配置。'
+    const selection = createAdminSelection(
+      'CONFIGURATION',
+      'AI_MODEL_CONFIG',
+      'AI 模型配置 · ' + (this.aiModelName || '未加载'),
+      'AdminConsole/AI_CONFIG',
+      this.currentStateVersion(),
+      [
+        assistantField('provider', this.aiProvider),
+        assistantField('modelName', this.aiModelName),
+        assistantField('baseUrl', this.aiBaseUrl),
+        assistantField('status', this.aiConfigAvailable ? 'LOADED' : 'UNAVAILABLE'),
+        assistantField('knowledgeVersion', this.aiKnowledgeVersion),
+        assistantField('updatedAt', this.aiConfigUpdatedAt)
+      ]
+    )
+    adminAssistantSelectionBus.publish(selection)
+  }
+
+  private selectAuditRecord(record: AdminAuditRecord): void {
+    this.selectedDetail = this.auditDetail(record)
+    const selection = createAdminSelection(
+      'AUDIT_RECORD',
+      record.auditId,
+      record.action + ' · ' + record.result,
+      'AdminConsole/AUDIT',
+      this.currentStateVersion(),
+      [
+        assistantField('result', record.result),
+        assistantField('occurredAt', record.occurredAt),
+        assistantField('title', record.action),
+        assistantField('status', record.result)
+      ]
+    )
+    adminAssistantSelectionBus.publish(selection)
   }
 
   private stageName(code: string): string {

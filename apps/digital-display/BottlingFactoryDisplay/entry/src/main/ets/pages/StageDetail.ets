@@ -2,10 +2,18 @@ import { router } from '@kit.ArkUI'
 import { Theme, statusColor } from '../common/Theme'
 import { DeviceStateRow, QualityGateRow, SectionTitle, StateBadge } from '../components/IndustrialComponents'
 import { FactoryThreeScene } from '../components/FactoryThreeScene'
+import { FactoryPlanScene } from '../components/FactoryPlanScene'
 import { FACTORY_STAGES, findStage } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { createMockBundle } from '../service/MockFactoryData'
 import { ApiConfig } from '../service/ApiConfig'
+import {
+  AssistantController,
+  AssistantDock,
+  AssistantEntityType,
+  AssistantSelectionSource
+} from '@bottling/harmony-assistant'
+import { displayAssistantHost } from '../assistant/DisplayAssistantHostAdapter'
 import {
   AlarmRecord,
   DeviceDefinition,
@@ -69,12 +77,14 @@ struct StageDetail {
   @State paused: boolean = false
   @State motion: number = 20
   @State revision: number = 0
+  @State assistantController: AssistantController = new AssistantController(displayAssistantHost)
 
   private fallbackBundle: FactoryBundle = createMockBundle()
   private refreshTimer: number = -1
   private motionTimer: number = -1
   private listener: () => void = () => {
     this.bundle = FactoryRepository.bundle
+    displayAssistantHost.updatePage(this.pageRoute(), this.bundle, this.stageCode)
     this.revision += 1
   }
 
@@ -117,6 +127,8 @@ struct StageDetail {
   aboutToAppear(): void {
     const params = router.getParams() as StageParams
     if (params !== undefined && params.stageCode !== undefined) this.stageCode = params.stageCode
+    displayAssistantHost.updatePage(this.pageRoute(), this.bundle, this.stageCode)
+    displayAssistantHost.publishVisibility('VISIBLE')
     FactoryRepository.subscribe(this.listener)
     void FactoryRepository.refresh()
     FactoryRepository.connectRealtime()
@@ -127,6 +139,8 @@ struct StageDetail {
   }
 
   aboutToDisappear(): void {
+    displayAssistantHost.clearSelection('ARKUI')
+    displayAssistantHost.publishVisibility('HIDDEN')
     FactoryRepository.unsubscribe(this.listener)
     FactoryRepository.closeRealtime()
     if (this.refreshTimer >= 0) clearInterval(this.refreshTimer)
@@ -156,6 +170,10 @@ struct StageDetail {
   private dashboardRuns(): Array<FactoryRun> {
     const dashboard = this.dashboardData()
     return dashboard.runs === undefined ? [] : dashboard.runs
+  }
+
+  private pageRoute(): string {
+    return 'pages/StageDetail?stageCode=' + this.stageCode
   }
 
   private findRuntimeStage(code: string): RuntimeStage {
@@ -418,8 +436,9 @@ struct StageDetail {
   }
 
   build() {
-    Scroll() {
-      Column() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Scroll() {
+        Column() {
         Row() {
           Button('← 总览').type(ButtonType.Normal).fontColor('#FFFFFF').backgroundColor(Color.Transparent).onClick(() => router.back())
           Blank()
@@ -430,7 +449,12 @@ struct StageDetail {
           Column() {
             Text(this.stageData().code).fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
             Text(this.stageData().name + ' 工位').fontSize(30).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7 })
-            Text(this.stageData().description).fontSize(12).fontColor(Theme.muted).lineHeight(18).margin({ top: 6 })
+            Text(this.stageData().description)
+              .fontSize(12)
+              .fontColor(Theme.muted)
+              .lineHeight(18)
+              .margin({ top: 6 })
+              .onClick(() => this.selectTextFragment('stageDescription', this.stageData().description))
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           StateBadge({ status: this.statusValue(), label: this.statusText() })
         }.width('100%').alignItems(VerticalAlign.Bottom).padding(18).border({ width: { bottom: 3 }, color: Theme.blue })
@@ -478,8 +502,12 @@ struct StageDetail {
                 viewMode: 'THREE',
                 caption: '立体工位场景',
                 heightValue: 360,
+                selectionSource: 'THREE_3D',
                 selectedDeviceCode: $selectedDeviceCode,
-                selectedTraceCode: $selectedTraceCode
+                selectedTraceCode: $selectedTraceCode,
+                onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source),
+                onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source),
+                onSelectionCleared: (source: string): void => this.clearSceneSelection(source)
               })
             }.width('100%').padding(12).margin({ top: 4 }).backgroundColor(Theme.panelSoft)
           }
@@ -487,17 +515,21 @@ struct StageDetail {
           if (this.planarEnabled && this.activeVisual === 'PLANAR') {
             Column() {
               Row() {
-                Text('THREE.JS 2D PLAN').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+                Text('THREE.JS 2D PROCESS PLAN').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
                 Blank()
                 Text(this.layoutEditEnabled ? '拖拽平面符号调整布局' : '平面路径 · 物料流向 · 点击查看').fontSize(9).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.muted)
               }.width('100%').padding({ bottom: 8 })
-              FactoryThreeScene({
+              FactoryPlanScene({
                 payload: this.scenePayload(),
-                viewMode: 'PLANAR',
                 caption: '平面工艺图',
                 heightValue: 300,
+                selectionSource: 'THREE_2D',
                 selectedDeviceCode: $selectedDeviceCode,
-                selectedTraceCode: $selectedTraceCode
+                selectedTraceCode: $selectedTraceCode,
+                onStageSelected: (stageCode: string, source: string): void => this.selectSceneStage(stageCode, source),
+                onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source),
+                onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source),
+                onSelectionCleared: (source: string): void => this.clearSceneSelection(source)
               })
             }.width('100%').padding(12).margin({ top: 12 }).backgroundColor(Theme.panelSoft)
           }
@@ -535,7 +567,7 @@ struct StageDetail {
                 reading: this.deviceReading(device.code)
               })
               Blank()
-            }.width('100%').onClick(() => this.selectedDeviceCode = device.code)
+            }.width('100%').onClick(() => this.selectDeviceByCode(device.code, 'ARKUI'))
           }, (device: DeviceDefinition) => device.code)
         }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
 
@@ -558,9 +590,12 @@ struct StageDetail {
         }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
 
         this.materialPanel()
-        this.tracePanel()
-      }.width('100%').alignItems(HorizontalAlign.Start).padding({ bottom: 28 })
-    }.width('100%').height('100%').backgroundColor(Theme.page)
+          this.tracePanel()
+        }.width('100%').alignItems(HorizontalAlign.Start).padding({ bottom: 28 })
+      }.width('100%').height('100%').backgroundColor(Theme.page)
+      AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
+        .margin({ top: 16, right: 16 })
+    }.width('100%').height('100%')
   }
 
   @Builder
@@ -631,6 +666,102 @@ struct StageDetail {
     return role
   }
 
+  private selectDeviceByCode(deviceCode: string, source: AssistantSelectionSource): void {
+    this.selectedDeviceCode = deviceCode
+    displayAssistantHost.updateFocusedEntity(deviceCode, '')
+    displayAssistantHost.publishSelection(AssistantEntityType.DEVICE, deviceCode, this.deviceTitle(deviceCode), source, [
+      { code: 'stageCode', label: '工位', displayValue: this.stageData().name },
+      { code: 'state', label: '状态', displayValue: this.deviceRuntime(deviceCode) },
+      { code: 'source', label: '来源', displayValue: this.deviceSource(deviceCode) },
+      { code: 'reading', label: '读数', displayValue: this.deviceReading(deviceCode) }
+    ])
+  }
+
+  private selectProductByTrace(traceCode: string, source: AssistantSelectionSource): void {
+    this.selectedTraceCode = traceCode
+    displayAssistantHost.updateFocusedEntity('', traceCode)
+    const run = this.findRun(traceCode)
+    displayAssistantHost.publishSelection(AssistantEntityType.PRODUCT, traceCode, traceCode, source, [
+      { code: 'bottleType', label: '瓶型', displayValue: run.bottleType || '待识别' },
+      { code: 'stageCode', label: '工位', displayValue: this.stageData().name },
+      { code: 'status', label: '状态', displayValue: this.statusTextForRun(run.status) }
+    ])
+  }
+
+  private selectAlarm(alarm: AlarmRecord): void {
+    displayAssistantHost.publishSelection(AssistantEntityType.ALARM, alarm.alarmId, alarm.alarmType + ' · ' + alarm.deviceCode, 'ARKUI', [
+      { code: 'deviceCode', label: '设备', displayValue: alarm.deviceCode },
+      { code: 'stageCode', label: '工位', displayValue: this.stageCode },
+      { code: 'message', label: '报警', displayValue: alarm.message },
+      { code: 'status', label: '状态', displayValue: alarm.status }
+    ])
+  }
+
+  private selectTextFragment(fieldCode: string, displayText: string): void {
+    const ownerId: string = this.stageCode.length > 0 ? this.stageCode : 'LINE-01'
+    displayAssistantHost.publishSelection(
+      AssistantEntityType.TEXT_FRAGMENT,
+      this.pageRoute() + ':' + ownerId + ':' + fieldCode,
+      displayText,
+      'ARKUI',
+      [
+        { code: 'field', label: '字段', displayValue: fieldCode },
+        { code: 'stageCode', label: '工位', displayValue: this.stageCode }
+      ]
+    )
+  }
+
+  private selectSceneDevice(deviceCode: string, source: string): void {
+    const assistantSource: AssistantSelectionSource = source === 'THREE_2D' ? 'THREE_2D' : 'THREE_3D'
+    this.selectDeviceByCode(deviceCode, assistantSource)
+  }
+
+  private selectSceneProduct(traceCode: string, source: string): void {
+    const assistantSource: AssistantSelectionSource = source === 'THREE_2D' ? 'THREE_2D' : 'THREE_3D'
+    this.selectProductByTrace(traceCode, assistantSource)
+  }
+
+  private selectSceneStage(stageCode: string, source: string): void {
+    const assistantSource: AssistantSelectionSource = source === 'THREE_2D' ? 'THREE_2D' : 'THREE_3D'
+    let stageName: string = stageCode
+    FACTORY_STAGES.forEach((stage: StageDefinition) => {
+      if (stage.code === stageCode) stageName = stage.name
+    })
+    displayAssistantHost.publishSelection(AssistantEntityType.STAGE, stageCode, stageName, assistantSource, [
+      { code: 'stageCode', label: '工位', displayValue: stageCode },
+      { code: 'state', label: '状态', displayValue: this.runtimeStage.state },
+      { code: 'wip', label: '在制品', displayValue: this.wipCount.toString() }
+    ])
+  }
+
+  private clearSceneSelection(source: string): void {
+    const assistantSource: AssistantSelectionSource = source === 'THREE_2D' ? 'THREE_2D' : 'THREE_3D'
+    this.selectedDeviceCode = ''
+    this.selectedTraceCode = ''
+    displayAssistantHost.clearSelection(assistantSource)
+  }
+
+  private deviceTitle(deviceCode: string): string {
+    let title: string = deviceCode
+    this.stageData().devices.forEach((device: DeviceDefinition) => {
+      if (device.code === deviceCode) title = device.name
+    })
+    return title
+  }
+
+  private findRun(traceCode: string): FactoryRun {
+    let found: FactoryRun = {
+      traceCode: traceCode,
+      currentStage: this.stageCode,
+      status: 'RUNNING',
+      events: []
+    }
+    this.dashboardRuns().forEach((run: FactoryRun) => {
+      if (run.traceCode === traceCode) found = run
+    })
+    return found
+  }
+
   @Builder
   materialPanel() {
     Column() {
@@ -647,7 +778,7 @@ struct StageDetail {
             Text((run.bottleType || '待识别') + ' · ' + this.statusTextForRun(run.status)).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
           Text(run.defectType === undefined ? '检测结果待确认' : run.defectType).fontSize(9).fontColor(run.defectType === undefined ? Theme.muted : Theme.danger)
-        }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectedTraceCode = run.traceCode)
+        }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectProductByTrace(run.traceCode, 'ARKUI'))
       }, (run: FactoryRun) => run.traceCode)
     }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
   }
@@ -682,7 +813,7 @@ struct StageDetail {
               Text(alarm.message).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             Text('需管理端确认').fontSize(9).fontColor(Theme.warning)
-          }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
+          }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectAlarm(alarm))
         }, (alarm: AlarmRecord) => alarm.alarmId)
       }
     }.width('100%').padding(18).margin({ top: 12 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)

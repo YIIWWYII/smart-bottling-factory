@@ -11,6 +11,7 @@ import com.archermind.hdc.factory.runtime.service.FactoryRuntimeService;
 import com.archermind.hdc.factory.service.FactoryService;
 import com.archermind.hdc.factory.simulation.FactorySimulationService;
 import com.archermind.hdc.factory.simulation.SimulationState;
+import com.archermind.hdc.factory.parameter.ParameterStateService;
 import com.archermind.hdc.logistics.dto.LogisticsOverview;
 import com.archermind.hdc.logistics.model.AgvTask;
 import com.archermind.hdc.logistics.service.LogisticsService;
@@ -40,6 +41,7 @@ public class FactorySnapshotService {
     private final LogisticsService logisticsService;
     private final DeviceCapabilityCatalog capabilities;
     private final FactorySimulationService simulationService;
+    private final ParameterStateService parameterStateService;
 
     public FactorySnapshotService(FactoryStateVersionService stateVersions,
                                   FactoryRuntimeService runtimeService,
@@ -47,7 +49,8 @@ public class FactorySnapshotService {
                                   OperationsService operationsService,
                                   LogisticsService logisticsService,
                                   DeviceCapabilityCatalog capabilities,
-                                  FactorySimulationService simulationService) {
+                                  FactorySimulationService simulationService,
+                                  ParameterStateService parameterStateService) {
         this.stateVersions = stateVersions;
         this.runtimeService = runtimeService;
         this.factoryService = factoryService;
@@ -55,6 +58,7 @@ public class FactorySnapshotService {
         this.logisticsService = logisticsService;
         this.capabilities = capabilities;
         this.simulationService = simulationService;
+        this.parameterStateService = parameterStateService;
     }
 
     public LineSnapshot lineSnapshot() {
@@ -334,11 +338,7 @@ public class FactorySnapshotService {
     }
 
     private Map<String, Object> parameters(String deviceCode) {
-        Map<String, Object> values = new LinkedHashMap<>();
-        for (Map<String, Object> control : capabilities.controls(deviceCode)) {
-            values.put(String.valueOf(control.get("commandType")), control.get("currentValue"));
-        }
-        return values;
+        return parameterStateService.parameters(deviceCode);
     }
 
     private String dataMode(List<DeviceRuntimeState> devices) {

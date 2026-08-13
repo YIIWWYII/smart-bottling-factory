@@ -73,7 +73,7 @@ $requiredContracts | ForEach-Object {
 
 $adminConsoleFile = Join-Path $root 'entry\src\main\ets\pages\AdminConsole.ets'
 $adminConsoleText = Get-Content -Raw -Encoding UTF8 $adminConsoleFile
-$requiredMenus = @('DASHBOARD', 'PRODUCTION', 'INCIDENTS', 'DEVICES', 'MATERIALS', 'LOGISTICS', 'AI_AUDIT', 'USERS', 'SETTINGS', 'AUDIT')
+$requiredMenus = @('DASHBOARD', 'PRODUCTION', 'INCIDENTS', 'DEVICES', 'MATERIALS', 'LOGISTICS', 'AI_AUDIT', 'AI_CONFIG', 'KNOWLEDGE', 'USERS', 'SETTINGS', 'AUDIT')
 $requiredMenus | ForEach-Object {
     if (-not $adminConsoleText.Contains($_)) { $errors.Add("Missing admin navigation: $_") }
 }
@@ -99,13 +99,53 @@ if (-not (Test-Path -LiteralPath $rolePolicyFile)) {
 }
 
 $sessionText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\SessionStore.ets')
-@('expiresAt', 'isExpired()', "token === 'LOCAL-DEMO'") | ForEach-Object {
+@('expiresAt', 'isExpired()', 'setDemoSession(', 'demoMode') | ForEach-Object {
     if (-not $sessionText.Contains($_)) { $errors.Add("Missing session expiry evidence: $_") }
 }
+if ($sessionText -notmatch "setDemoSession[\s\S]*this\.token\s*=\s*''") { $errors.Add('Demo session token must stay empty') }
 
 $apiClientText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\ApiClient.ets')
 if (-not ($apiClientText -match 'responseCode\s*===\s*401[\s\S]*SessionStore\.clear\(\)')) { $errors.Add('HTTP 401 must clear the session') }
 if ($apiClientText -match 'responseCode\s*===\s*403[\s\S]{0,100}SessionStore\.clear\(\)') { $errors.Add('HTTP 403 must not clear a valid session') }
+if ($apiClientText -notmatch 'SessionStore\.isDemo[\s\S]{0,120}throw new ApiError') { $errors.Add('HTTP client must reject demo-mode requests before creating a client') }
+
+$loginText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\pages\Login.ets')
+if ($loginText -notmatch 'setSession\(result\.token') { $errors.Add('Real login must preserve the backend token') }
+if ($loginText -notmatch 'setDemoSession\(') { $errors.Add('Demo login must use a separate demo session') }
+
+$realtimeText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\FactoryRealtime.ets')
+if ($realtimeText -notmatch 'SessionStore\.isDemo[\s\S]{0,300}createWebSocket') { $errors.Add('WebSocket client must stop before connecting in demo mode') }
+
+$assistantAdapterText = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'entry\src\main\ets\service\AdminAssistantHostAdapter.ets')
+if ($assistantAdapterText -notmatch "SessionStore\.isDemo[\s\S]{0,100}httpBaseUrl:\s*''") { $errors.Add('Assistant endpoint must be disabled in demo mode') }
+
+$adminSourceText = ($etsFiles | ForEach-Object { Get-Content -Raw -Encoding UTF8 $_.FullName }) -join "`n"
+$projectText = (Get-ChildItem -Path $root -Recurse -File | Where-Object { $_.FullName -notmatch '\\(oh_modules|build)\\' } | ForEach-Object { Get-Content -Raw -Encoding UTF8 $_.FullName }) -join "`n"
+$fixedDemoToken = 'LOCAL' + '-DEMO'
+if ($projectText.Contains($fixedDemoToken)) { $errors.Add('Fixed demo tokens are forbidden in the admin console') }
+@('/assistant/conversations', '/assistant/conversations/', 'ai.conversation', 'AssistantApiClient', 'conversationId') | ForEach-Object {
+    if ($adminSourceText.Contains($_)) { $errors.Add("Admin console must not implement shared assistant conversation client: $_") }
+}
+
+$knowledgeGovernanceFile = Join-Path $root 'entry\src\main\ets\components\KnowledgeGovernance.ets'
+if (-not (Test-Path -LiteralPath $knowledgeGovernanceFile)) {
+    $errors.Add('Missing KnowledgeGovernance.ets')
+} else {
+    $knowledgeGovernanceText = Get-Content -Raw -Encoding UTF8 $knowledgeGovernanceFile
+    @('PERMISSION_KNOWLEDGE_REVIEW', 'submittedBy !== this.currentUsername()', 'submittedBy === this.currentUsername()', 'approveKnowledge', 'rejectKnowledge', 'revokeKnowledge', 'INDEXED') | ForEach-Object {
+        if (-not $knowledgeGovernanceText.Contains($_)) { $errors.Add("Missing knowledge governance negative evidence: $_") }
+    }
+}
+
+$aiCenterClientFile = Join-Path $root 'entry\src\main\ets\service\AiCenterClient.ets'
+if (Test-Path -LiteralPath $aiCenterClientFile) {
+    $aiCenterClientText = Get-Content -Raw -Encoding UTF8 $aiCenterClientFile
+    @('/admin/ai/config', '/admin/ai/config/test-question', '/admin/knowledge/reviews') | ForEach-Object {
+        if (-not $aiCenterClientText.Contains($_)) { $errors.Add("Missing admin AI business endpoint: $_") }
+    }
+    if ($aiCenterClientText.Contains('/assistant/')) { $errors.Add('AiCenterClient must not call shared assistant conversation endpoints') }
+    if ($aiCenterClientText -notmatch 'assertNetworkAllowed\(\)[\s\S]{0,120}createHttp') { $errors.Add('AI client must reject demo-mode requests before creating a client') }
+}
 
 if ($errors.Count -gt 0) {
     $errors | ForEach-Object { Write-Host "[FAIL] $_" -ForegroundColor Red }
@@ -125,3 +165,4 @@ Write-Host '[PASS] core backend API contracts are covered' -ForegroundColor Gree
 Write-Host "[PASS] $($requiredMenus.Count) real admin navigation entries are present" -ForegroundColor Green
 Write-Host '[PASS] VIEWER/OPERATOR/ENGINEER/ADMIN RBAC and session expiry guards are present' -ForegroundColor Green
 Write-Host '[PASS] list states and write confirmation/failure/audit evidence are present' -ForegroundColor Green
+Write-Host '[PASS] assistant boundary and knowledge-review negative guards are present' -ForegroundColor Green

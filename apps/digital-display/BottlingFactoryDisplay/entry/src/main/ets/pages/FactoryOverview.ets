@@ -5,6 +5,8 @@ import { FACTORY_STAGES } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { createMockBundle } from '../service/MockFactoryData'
 import { ApiConfig } from '../service/ApiConfig'
+import { AssistantController, AssistantDock, AssistantEntityType } from '@bottling/harmony-assistant'
+import { displayAssistantHost } from '../assistant/DisplayAssistantHostAdapter'
 import {
   AlarmRecord,
   FactoryBundle,
@@ -22,6 +24,7 @@ import {
 @Component
 struct FactoryOverview {
   @State bundle: FactoryBundle = FactoryRepository.bundle
+  @State realtimeOnline: boolean = FactoryRepository.realtimeOnline
   @State revision: number = 0
   @State dashboardTotal: number = 0
   @State dashboardCompleted: number = 0
@@ -35,17 +38,23 @@ struct FactoryOverview {
   @State onlineDeviceCount: number = 0
   @State totalDeviceCount: number = 0
   @State fallbackDeviceCount: number = 0
+  @State assistantController: AssistantController = new AssistantController(displayAssistantHost)
 
   private fallbackBundle: FactoryBundle = createMockBundle()
   private refreshTimer: number = -1
   private listener: () => void = () => {
     this.bundle = FactoryRepository.bundle
+    this.realtimeOnline = FactoryRepository.realtimeOnline
     this.syncSnapshot()
+    displayAssistantHost.updatePage('pages/FactoryOverview', this.bundle)
     this.revision += 1
   }
 
   aboutToAppear(): void {
+    displayAssistantHost.updatePage('pages/FactoryOverview', this.bundle)
+    displayAssistantHost.publishVisibility('VISIBLE')
     FactoryRepository.subscribe(this.listener)
+    this.realtimeOnline = FactoryRepository.realtimeOnline
     this.syncSnapshot()
     void FactoryRepository.refresh()
     FactoryRepository.connectRealtime()
@@ -53,6 +62,8 @@ struct FactoryOverview {
   }
 
   aboutToDisappear(): void {
+    displayAssistantHost.clearSelection('ARKUI')
+    displayAssistantHost.publishVisibility('HIDDEN')
     FactoryRepository.unsubscribe(this.listener)
     FactoryRepository.closeRealtime()
     if (this.refreshTimer >= 0) clearInterval(this.refreshTimer)
@@ -104,6 +115,7 @@ struct FactoryOverview {
     this.totalDeviceCount = runtime.devices.length
     this.fallbackDeviceCount = runtime.devices.filter(item => item.fallback).length
     this.openExceptionCount = operations.alarms.filter(item => item.status === 'OPEN').length + runtime.incidents.filter(item => item.status === 'OPEN').length
+    displayAssistantHost.updatePage('pages/FactoryOverview', this.bundle)
   }
 
   private stageRuntime(code: string): RuntimeStage {
@@ -148,8 +160,40 @@ struct FactoryOverview {
     return status === 'COMPLETED' ? '已入库' : status === 'REJECTED' ? '已剔除' : status === 'HOLD' ? '待处理' : '运行中'
   }
 
+  private selectStage(stage: StageDefinition): void {
+    displayAssistantHost.publishSelection(AssistantEntityType.STAGE, stage.code, stage.name, 'ARKUI', [
+      { code: 'state', label: '状态', displayValue: this.stageStatus(stage) },
+      { code: 'wip', label: '在制品', displayValue: this.stageProductCount(stage.code).toString() },
+      { code: 'buffer', label: '缓冲', displayValue: this.stageRuntime(stage.code).bufferLevel + '/' + this.stageRuntime(stage.code).bufferCapacity }
+    ])
+  }
+
+  private selectKpi(kpiCode: string, label: string, value: string): void {
+    displayAssistantHost.publishSelection(AssistantEntityType.KPI, 'LINE-01:' + kpiCode, label, 'ARKUI', [
+      { code: 'value', label: '当前值', displayValue: value },
+      { code: 'source', label: '来源', displayValue: this.bundle.source }
+    ])
+  }
+
+  private selectAlarm(alarm: AlarmRecord): void {
+    displayAssistantHost.publishSelection(AssistantEntityType.ALARM, alarm.alarmId, alarm.alarmType + ' · ' + alarm.deviceCode, 'ARKUI', [
+      { code: 'deviceCode', label: '设备', displayValue: alarm.deviceCode },
+      { code: 'message', label: '报警', displayValue: alarm.message },
+      { code: 'status', label: '状态', displayValue: alarm.status }
+    ])
+  }
+
+  private selectProduct(run: FactoryRun): void {
+    displayAssistantHost.publishSelection(AssistantEntityType.PRODUCT, run.traceCode, run.traceCode, 'ARKUI', [
+      { code: 'bottleType', label: '瓶型', displayValue: run.bottleType || '待识别' },
+      { code: 'stage', label: '当前工位', displayValue: this.stageLabel(run.currentStage) },
+      { code: 'status', label: '状态', displayValue: this.statusLabel(run.status) }
+    ])
+  }
+
   build() {
-    Scroll() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Scroll() {
       Column() {
         Row() {
           Column() {
@@ -162,7 +206,7 @@ struct FactoryOverview {
               status: this.bundle.online ? (this.openExceptionCount > 0 ? 'HOLD' : 'RUNNING') : 'STANDBY',
               label: this.bundle.online ? (this.openExceptionCount > 0 ? '连续运行 · 局部异常' : '后端在线') : 'LOCAL DEMO'
             })
-            Text('实时通道：' + (FactoryRepository.realtimeOnline ? '在线' : '重连中')).fontSize(9).fontColor('#D2E0EB').margin({ top: 8 })
+            Text('实时通道：' + (this.realtimeOnline ? '在线' : '重连中')).fontSize(9).fontColor('#D2E0EB').margin({ top: 8 })
             Text(this.formatTime(this.bundle.updatedAt)).fontSize(8).fontColor('#B8CEDC').margin({ top: 4 })
           }.alignItems(HorizontalAlign.End)
         }.width('100%').padding(22).backgroundColor(Theme.navy)
@@ -190,12 +234,12 @@ struct FactoryOverview {
 
         Scroll() {
           Row({ space: 8 }) {
-            MetricTile({ label: '累计投入', value: String(this.dashboardTotal), note: '进入产线的追踪批次' })
-            MetricTile({ label: '完成入库', value: String(this.dashboardCompleted), note: '全流程完成', tone: 'PASS' })
-            MetricTile({ label: '在制品 WIP', value: String(this.dashboardWip), note: '运行或待处理' })
-            MetricTile({ label: '检测剔除', value: String(this.dashboardRejected), note: '不合格品已隔离', tone: 'FAIL' })
-            MetricTile({ label: '待人工处理', value: String(this.dashboardHolding), note: '暂停自动放行', tone: 'WAIT' })
-            MetricTile({ label: '批次通过率', value: this.dashboardPassRate, note: '完成 / 已判定批次', tone: 'PASS' })
+            this.kpiTile('累计投入', String(this.dashboardTotal), '进入产线的追踪批次', 'total')
+            this.kpiTile('完成入库', String(this.dashboardCompleted), '全流程完成', 'completed', 'PASS')
+            this.kpiTile('在制品 WIP', String(this.dashboardWip), '运行或待处理', 'wip')
+            this.kpiTile('检测剔除', String(this.dashboardRejected), '不合格品已隔离', 'rejected', 'FAIL')
+            this.kpiTile('待人工处理', String(this.dashboardHolding), '暂停自动放行', 'holding', 'WAIT')
+            this.kpiTile('批次通过率', this.dashboardPassRate, '完成 / 已判定批次', 'passRate', 'PASS')
           }.padding({ top: 14, bottom: 4 })
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
 
@@ -207,7 +251,10 @@ struct FactoryOverview {
           this.tracePanel()
         }.width('100%').padding({ top: 10, bottom: 24 })
       }.width('100%').alignItems(HorizontalAlign.Start)
-    }.width('100%').height('100%').backgroundColor(Theme.page)
+      }.width('100%').height('100%').backgroundColor(Theme.page)
+      AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
+        .margin({ top: 16, right: 16 })
+    }.width('100%').height('100%')
   }
 
   @Builder
@@ -233,8 +280,18 @@ struct FactoryOverview {
         Text('速度 ' + (stage.code === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s')).fontSize(9).fontColor(Theme.blue)
       }.width('100%').margin({ top: 7 })
       Blank()
-      Button('进入工位').width('100%').height(34).backgroundColor(Theme.blue).borderRadius(2).onClick(() => router.pushUrl({ url: 'pages/StageDetail', params: { stageCode: stage.code } }))
+      Button('进入工位').width('100%').height(34).backgroundColor(Theme.blue).borderRadius(2).onClick(() => {
+        this.selectStage(stage)
+        router.pushUrl({ url: 'pages/StageDetail', params: { stageCode: stage.code } })
+      })
     }.width(198).height(220).alignItems(HorizontalAlign.Start).padding(13).backgroundColor(Theme.panel).border({ width: { top: 4, left: 1, right: 1, bottom: 2 }, color: statusColor(this.stageStatus(stage)) }).borderRadius(3)
+  }
+
+  @Builder
+  kpiTile(label: string, value: string, note: string, kpiCode: string, tone: string = 'NORMAL') {
+    Stack() {
+      MetricTile({ label: label, value: value, note: note, tone: tone })
+    }.onClick(() => this.selectKpi(kpiCode, label, value))
   }
 
   @Builder
@@ -302,7 +359,7 @@ struct FactoryOverview {
               Text(alarm.message).fontSize(9).fontColor(Theme.muted).margin({ top: 3 })
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             Text(alarm.value === undefined ? '--' : alarm.value.toString()).fontSize(11).fontColor(Theme.danger).fontWeight(FontWeight.Bold)
-          }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line })
+          }.width('100%').padding(10).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectAlarm(alarm))
         }, (alarm: AlarmRecord) => alarm.alarmId)
       }
     }.width(390).constraintSize({ minHeight: 220 }).alignItems(HorizontalAlign.Start).padding(17).margin(5).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
@@ -318,7 +375,7 @@ struct FactoryOverview {
           Text(run.bottleType || '待识别').fontSize(9).fontColor(Theme.text).width(80)
           Text(this.stageLabel(run.currentStage)).fontSize(9).fontColor(Theme.muted).layoutWeight(1)
           StateBadge({ status: run.status, label: this.statusLabel(run.status) })
-        }.width('100%').constraintSize({ minHeight: 44 }).border({ width: { bottom: 1 }, color: Theme.line })
+        }.width('100%').constraintSize({ minHeight: 44 }).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectProduct(run))
       }, (run: FactoryRun) => run.traceCode)
     }.width(800).constraintSize({ minHeight: 220 }).alignItems(HorizontalAlign.Start).padding(17).margin(5).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
   }

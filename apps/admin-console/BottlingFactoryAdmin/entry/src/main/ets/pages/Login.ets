@@ -33,7 +33,7 @@ struct Login {
   }
 
   enterDemo(): void {
-    SessionStore.setSession('LOCAL-DEMO', { id: 0, username: 'demo-' + this.demoRole.toLowerCase(), displayName: '只读验收账号', role: this.demoRole, status: 'ACTIVE' })
+    SessionStore.setDemoSession({ id: 0, username: 'demo-' + this.demoRole.toLowerCase(), displayName: '只读验收账号', role: this.demoRole, status: 'ACTIVE' })
     router.replaceUrl({ url: 'pages/AdminConsole' })
   }
 
