@@ -68,6 +68,7 @@ export class AiCenterError extends Error {
 
 export class AiCenterClient {
   async request<T>(path: string, method: http.RequestMethod = http.RequestMethod.GET, body?: string): Promise<T> {
+    this.assertNetworkAllowed()
     const client = http.createHttp()
     const headers: AiRequestHeaders = this.headers('application/json;charset=UTF-8')
     try {
@@ -164,6 +165,7 @@ export class AiCenterClient {
   }
 
   async uploadKnowledge(fileUri: string, fileName: string, contentType: string, metadata: KnowledgeUploadMetadata): Promise<KnowledgeSubmission> {
+    this.assertNetworkAllowed()
     const boundary: string = '----BottlingKnowledge' + new Date().getTime().toString()
     const body: ArrayBuffer = this.buildMultipartBody(boundary, fileUri, fileName, contentType, metadata)
     const client = http.createHttp()
@@ -212,6 +214,10 @@ export class AiCenterClient {
     if (!SessionStore.isAuthenticated || SessionStore.isDemo || SessionStore.token.length === 0) return ''
     const token: string = SessionStore.token.trim()
     return token.toLowerCase().startsWith('bearer ') ? token : 'Bearer ' + token
+  }
+
+  private assertNetworkAllowed(): void {
+    if (SessionStore.isDemo) throw new AiCenterError('本地演示模式不访问 AI 中枢接口')
   }
 
   private unwrap<T>(responseCode: number, raw: string): T {

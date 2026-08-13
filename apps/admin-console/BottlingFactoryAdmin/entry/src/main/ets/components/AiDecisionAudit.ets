@@ -3,6 +3,7 @@ import { SectionTitle, StateBadge } from './IndustrialComponents'
 import { AiDecisionRecord } from '../model/AiCenterModels'
 import { aiCenterClient } from '../service/AiCenterClient'
 import { AiCenterConfig } from '../service/AiCenterConfig'
+import { SessionStore } from '../service/SessionStore'
 import {
   adminAssistantSelectionBus,
   assistantField,
@@ -20,10 +21,19 @@ export struct AiDecisionAuditPanel {
   @State errorMessage: string = ''
 
   aboutToAppear(): void {
+    if (SessionStore.isDemo) {
+      this.errorMessage = '本地演示模式不访问 AI 中枢决策接口。'
+      return
+    }
     void this.refresh()
   }
 
   private async refresh(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.decisions = []
+      this.errorMessage = '本地演示模式不访问 AI 中枢决策接口。'
+      return
+    }
     this.loading = true
     this.errorMessage = ''
     try {
@@ -113,4 +123,3 @@ export struct AiDecisionAuditPanel {
     }.width('100%').padding(12).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
   }
 }
-

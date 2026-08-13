@@ -30,9 +30,11 @@ export class ApiError extends Error {
 
 export class ApiClient {
   async request<T>(path: string, method: http.RequestMethod = http.RequestMethod.GET, body?: string): Promise<T> {
+    if (SessionStore.isDemo) throw new ApiError('本地演示模式不访问后端接口')
     const client = http.createHttp()
-    const headers: RequestHeaders = SessionStore.token.length > 0
-      ? { 'Content-Type': 'application/json;charset=UTF-8', 'Authorization': SessionStore.token }
+    const token: string = this.authorizationToken()
+    const headers: RequestHeaders = token.length > 0
+      ? { 'Content-Type': 'application/json;charset=UTF-8', 'Authorization': token }
       : { 'Content-Type': 'application/json;charset=UTF-8' }
     try {
       const response = await client.request(ApiConfig.API_BASE + path, {
@@ -77,6 +79,11 @@ export class ApiClient {
 
   async logout(): Promise<void> {
     await this.request<Object>('/auth/logout', http.RequestMethod.POST)
+  }
+
+  private authorizationToken(): string {
+    if (SessionStore.isDemo) return ''
+    return SessionStore.token.trim()
   }
 }
 
