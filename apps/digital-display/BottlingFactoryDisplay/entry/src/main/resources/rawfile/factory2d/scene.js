@@ -63,6 +63,8 @@
   var lastFrameTime = 0;
   var motionPhase = 0;
   var compatWatchTimer = 0;
+  var compatPlanSignature = '';
+  var compatProductNodes = [];
   var draggedDevice = null;
   var pointerStart = { x: 0, y: 0 };
   var previousPointer = { x: 0, y: 0 };
@@ -140,34 +142,111 @@
   }
 
   function showCompatibilityPlanIfNeeded() {
-    if (!state.overview || !compatPlan || !renderer) return;
-    if (renderer.info.render.calls >= 3) return;
+    if (!state.overview || !compatPlan) return;
     renderCompatibilityPlan();
     compatPlan.classList.remove('hidden');
+  }
+
+  function compatibilityNavigate(url) {
+    window.location.href = url;
+  }
+
+  function markCompatibilitySelection(entityType, entityId, label) {
+    selectionLabel.textContent = label || (entityType + ' ' + entityId);
+    selectionLabel.classList.remove('hidden');
+    testProbe.lastSelection = { entityType: entityType, entityId: entityId };
+    updateProbe();
+  }
+
+  function demoProducts() {
+    return [
+      { traceCode: 'DEMO-001', status: 'RUNNING', bottleType: 'PLA-500' },
+      { traceCode: 'DEMO-002', status: 'RUNNING', bottleType: 'PLA-500' },
+      { traceCode: 'DEMO-003', status: 'HOLD', bottleType: 'PLA-330' },
+      { traceCode: 'DEMO-004', status: 'RUNNING', bottleType: 'PLA-500' }
+    ];
+  }
+
+  function updateCompatibilityProductPositions() {
+    compatProductNodes.forEach(function (token, index) {
+      token.style.left = (8 + ((motionPhase + index * 0.13) % 1) * 84) + '%';
+    });
   }
 
   function renderCompatibilityPlan() {
     if (!compatPlan) return;
     var stages = state.stages && state.stages.length ? state.stages : demoStages();
+    var devices = state.devices && state.devices.length ? state.devices : [];
+    var products = state.products && state.products.length ? state.products : demoProducts();
+    var nextSignature = JSON.stringify({
+      statusColors: state.statusColors,
+      stages: stages.map(function (stage) { return stage.code + ':' + stage.state + ':' + String(stage.wip || 0); }),
+      devices: devices.map(function (device) { return device.stageCode + ':' + device.code + ':' + device.state; }),
+      products: products.map(function (product) { return product.traceCode + ':' + product.status; })
+    });
+    if (nextSignature === compatPlanSignature && compatProductNodes.length > 0) {
+      updateCompatibilityProductPositions();
+      return;
+    }
+    compatPlanSignature = nextSignature;
+    compatProductNodes = [];
     var track = document.createElement('div');
     track.className = 'compat-plan-track';
     stages.forEach(function (stage) {
-      var status = stage.state === 'ALARM' || stage.state === 'FAIL' ? 'alarm' : stage.state === 'HOLD' || stage.state === 'WAIT' ? 'wait' : '';
+      var status = state.statusColors && (stage.state === 'ALARM' || stage.state === 'FAIL' ? 'alarm' : stage.state === 'HOLD' || stage.state === 'WAIT' ? 'wait' : '');
       var block = document.createElement('div');
       block.className = 'compat-stage ' + status;
-      block.textContent = stage.name || stage.code;
+      block.setAttribute('role', 'button');
+      block.setAttribute('tabindex', '0');
+      block.setAttribute('data-stage-code', stage.code);
+      block.addEventListener('click', function () {
+        markCompatibilitySelection('STAGE', stage.code, stage.name || stage.code);
+        compatibilityNavigate('factory://stage/' + encodeURIComponent(stage.code));
+      });
+      var title = document.createElement('strong');
+      title.textContent = stage.name || stage.code;
+      block.appendChild(title);
       var wip = document.createElement('small');
       wip.textContent = 'WIP ' + String(stage.wip || 0);
       block.appendChild(wip);
+      var stageDevices = devices.filter(function (device) {
+        return device.stageCode === stage.code;
+      });
+      if (!stageDevices.length) stageDevices = demoDevices(stage.code).slice(0, 2);
+      var deviceRow = document.createElement('span');
+      deviceRow.className = 'compat-device-row';
+      stageDevices.slice(0, 2).forEach(function (device) {
+        var deviceMark = document.createElement('button');
+        deviceMark.className = 'compat-device ' + (state.statusColors && (device.state === 'ALARM' ? 'alarm' : device.state === 'WAIT' ? 'wait' : ''));
+        deviceMark.type = 'button';
+        deviceMark.textContent = device.code;
+        deviceMark.setAttribute('aria-label', device.name || device.code);
+        deviceMark.addEventListener('click', function (event) {
+          event.stopPropagation();
+          markCompatibilitySelection('DEVICE', device.code, device.name || device.code);
+          compatibilityNavigate('factory://device/' + encodeURIComponent(device.code));
+        });
+        deviceRow.appendChild(deviceMark);
+      });
+      block.appendChild(deviceRow);
       track.appendChild(block);
     });
-    (state.products || []).slice(0, 8).forEach(function (product, index) {
-      var token = document.createElement('i');
-      token.className = 'compat-product ' + (product.status === 'HOLD' ? 'hold' : product.status === 'REJECTED' ? 'rejected' : '');
-      token.style.left = (8 + ((motionPhase + index * 0.13) % 1) * 84) + '%';
+    products.slice(0, 8).forEach(function (product, index) {
+      var token = document.createElement('button');
+      token.type = 'button';
+      token.className = 'compat-product ' + (state.statusColors && (product.status === 'HOLD' ? 'hold' : product.status === 'REJECTED' ? 'rejected' : ''));
+      token.setAttribute('aria-label', product.traceCode || 'PRODUCT');
+      token.title = product.traceCode || 'PRODUCT';
+      token.addEventListener('click', function (event) {
+        event.stopPropagation();
+        markCompatibilitySelection('PRODUCT', product.traceCode || 'PRODUCT', product.traceCode || 'PRODUCT');
+        compatibilityNavigate('factory://product/' + encodeURIComponent(product.traceCode || 'PRODUCT'));
+      });
+      compatProductNodes.push(token);
       track.appendChild(token);
     });
     compatPlan.replaceChildren(track);
+    updateCompatibilityProductPositions();
   }
 
   function clearObject(object) {
@@ -670,7 +749,12 @@
   function renderSnapshotFrame() {
     animateFlow(motionPhase);
     positionProducts(motionPhase);
-    if (!compatPlan.classList.contains('hidden')) renderCompatibilityPlan();
+    if (state.overview) {
+      renderCompatibilityPlan();
+      compatPlan.classList.remove('hidden');
+    } else if (!compatPlan.classList.contains('hidden')) {
+      compatPlan.classList.add('hidden');
+    }
     if (renderer && scene && camera) renderer.render(scene, camera);
     updateProbe();
   }
@@ -833,6 +917,11 @@
     }
     animateFlow(motionPhase);
     positionProducts(motionPhase);
+    if (state.overview) {
+      if (compatProductNodes.length === 0) renderCompatibilityPlan();
+      else updateCompatibilityProductPositions();
+      compatPlan.classList.remove('hidden');
+    }
     renderer.render(scene, camera);
     updateProbe();
   }
@@ -859,10 +948,7 @@
           updateHud();
           renderSnapshotFrame();
         }
-        if (state.overview && renderer && renderer.info.render.calls < 3) {
-          renderCompatibilityPlan();
-          compatPlan.classList.remove('hidden');
-        }
+        showCompatibilityPlanIfNeeded();
       } catch (error) {
         state.errorMessage = error && error.message ? error.message : 'DATA ERROR';
         sourceLabel.textContent = 'DATA ERROR';
