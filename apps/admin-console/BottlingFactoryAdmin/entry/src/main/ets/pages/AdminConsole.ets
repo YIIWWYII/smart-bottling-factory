@@ -64,6 +64,11 @@ interface MenuItem {
   minRole: string
 }
 
+interface MenuGroup {
+  label: string
+  items: Array<MenuItem>
+}
+
 interface UpdateUserPayload {
   role: string
   status: string
@@ -82,6 +87,13 @@ const MENU: Array<MenuItem> = [
   { code: 'USERS', label: '用户权限', description: '账号、角色和状态', minRole: 'ADMIN' },
   { code: 'SETTINGS', label: '系统配置', description: '阈值和策略版本', minRole: 'VIEWER' },
   { code: 'AUDIT', label: '操作审计', description: '用户操作和后端结果', minRole: 'VIEWER' }
+]
+
+const NAV_GROUPS: Array<MenuGroup> = [
+  { label: '运行管理', items: [MENU[0], MENU[1], MENU[2]] },
+  { label: '资产与追溯', items: [MENU[3], MENU[4], MENU[5]] },
+  { label: 'AI 治理', items: [MENU[6], MENU[7], MENU[8]] },
+  { label: '平台管理', items: [MENU[9], MENU[10], MENU[11]] }
 ]
 
 const DEMO_USERS: Array<AuthUser> = [
@@ -574,13 +586,16 @@ struct AdminConsole {
               if (this.message.length > 0) {
                 Text(this.message).fontSize(11).fontColor(Theme.danger).padding(12).width('100%').backgroundColor('#FFF1F2').margin({ top: 12 })
               }
-            }.width('100%').alignItems(HorizontalAlign.Start).padding(20)
+            }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 24, right: 24, top: 20, bottom: 28 })
           }.width('100%').layoutWeight(1).backgroundColor(Theme.page)
         }.layoutWeight(1).height('100%')
       }.width('100%').height('100%').backgroundColor(Theme.page)
+      if (this.selectedDetail !== '请选择一条记录查看详情。') {
+        this.detailDrawer()
+      }
       if (!SessionStore.isDemo) {
         AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
-          .margin({ top: 18, right: 18 })
+          .margin({ top: 18, right: 18, bottom: 18 })
       }
     }.width('100%').height('100%').backgroundColor(Theme.page)
   }
@@ -588,76 +603,99 @@ struct AdminConsole {
   @Builder
   sidebar() {
     Column() {
-      Text('BOTTLING ADMIN').fontSize(10).fontColor('#A9CDE6').fontWeight(FontWeight.Bold)
-      Text('后台管理').fontSize(24).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 8 })
-      Text(this.roleName()).fontSize(10).fontColor('#C8DCE9').margin({ top: 16 })
-      Divider().color('#45687F').margin({ top: 14, bottom: 10 })
+      Row({ space: 10 }) {
+        Text('BF').fontSize(14).fontColor('#FFFFFF').fontWeight(FontWeight.Bold)
+          .width(34).height(34).textAlign(TextAlign.Center).backgroundColor(Theme.blue)
+        Column() {
+          Text('BOTTLING').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold).letterSpacing(0.8)
+          Text('后台管理').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+        }.alignItems(HorizontalAlign.Start)
+      }.width('100%')
+      Row({ space: 6 }) {
+        Circle().width(7).height(7).fill(this.bundle.online ? Theme.success : Theme.warning)
+        Text(this.bundle.online ? '生产后端在线' : '后端连接待确认').fontSize(9).fontColor(Theme.muted)
+      }.margin({ top: 14, bottom: 12 })
+      Text(this.roleName()).fontSize(10).fontColor(Theme.blue).padding({ left: 8, right: 8, top: 5, bottom: 5 }).backgroundColor('#EAF3F9')
+      Divider().color(Theme.line).margin({ top: 16, bottom: 8 })
       Scroll() {
-        Column({ space: 5 }) {
-          ForEach(MENU, (item: MenuItem) => {
-            Button(item.label)
-              .type(ButtonType.Normal)
-              .width('100%')
-              .height(40)
-              .fontSize(12)
-              .fontColor(this.section === item.code ? '#FFFFFF' : '#C7D8E4')
-              .backgroundColor(this.section === item.code ? Theme.blue : Color.Transparent)
-              .borderRadius(2)
-              .onClick(() => this.selectSection(item.code))
-          }, (item: MenuItem) => item.code)
+        Column({ space: 10 }) {
+          ForEach(NAV_GROUPS, (group: MenuGroup) => {
+            Column({ space: 3 }) {
+              Text(group.label).fontSize(9).fontColor(Theme.muted).fontWeight(FontWeight.Bold).margin({ left: 10, bottom: 3 })
+              ForEach(group.items, (item: MenuItem) => {
+                Button(item.label)
+                  .type(ButtonType.Normal)
+                  .width('100%')
+                  .height(38)
+                  .fontSize(11)
+                  .fontColor(this.section === item.code ? Theme.blue : Theme.text)
+                  .backgroundColor(this.section === item.code ? '#EAF3F9' : Color.Transparent)
+                  .border({ width: { left: 3 }, color: this.section === item.code ? Theme.blue : Color.Transparent })
+                  .borderRadius(0)
+                  .onClick(() => this.selectSection(item.code))
+              }, (item: MenuItem) => item.code)
+            }.width('100%').alignItems(HorizontalAlign.Start)
+          }, (group: MenuGroup) => group.label)
         }.width('100%').alignItems(HorizontalAlign.Start)
       }.width('100%').layoutWeight(1)
       Button('退出登录')
         .type(ButtonType.Normal)
         .width('100%')
         .height(38)
-        .fontColor('#FFFFFF')
+        .fontColor(Theme.muted)
         .backgroundColor(Color.Transparent)
-        .border({ width: 1, color: '#5B7A92' })
+        .border({ width: 1, color: Theme.line })
         .onClick(() => void this.logout())
-    }.width(232).height('100%').padding(18).alignItems(HorizontalAlign.Start).backgroundColor(Theme.navy)
+    }.width(248).height('100%').padding(18).alignItems(HorizontalAlign.Start).backgroundColor(Theme.panel).border({ width: { right: 1 }, color: Theme.line })
   }
 
   @Builder
   topbar() {
     Row() {
       Column() {
-        Text(this.currentMenu().label).fontSize(25).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
-        Text(this.currentMenu().description).fontSize(11).fontColor(Theme.muted).margin({ top: 4 })
+        Text('后台管理 / ' + this.currentMenu().label).fontSize(20).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+        Text(this.currentMenu().description).fontSize(10).fontColor(Theme.muted).margin({ top: 5 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+      Text('数据源').fontSize(9).fontColor(Theme.muted).margin({ right: 6 })
       StateBadge({ status: this.bundle.online ? 'RUNNING' : 'WAIT', label: this.dataSourceLabel() })
       Text(SessionStore.user === undefined ? '--' : SessionStore.user.displayName)
-        .fontSize(12)
+        .fontSize(11)
         .fontColor(Theme.text)
         .fontWeight(FontWeight.Bold)
-        .margin({ left: 16 })
-    }.width('100%').height(76).padding({ left: 22, right: 22 }).backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
+        .margin({ left: 16, right: 12 })
+      Button('刷新')
+        .type(ButtonType.Normal)
+        .height(32)
+        .fontSize(10)
+        .fontColor(Theme.blue)
+        .backgroundColor(Color.Transparent)
+        .border({ width: 1, color: Theme.line })
+        .onClick(() => { this.loading = true; void this.refreshAll() })
+    }.width('100%').height(68).padding({ left: 24, right: 24 }).backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
   }
 
   @Builder
   connectionBanner() {
     if (!this.bundle.online || SessionStore.isDemo) {
-      Text((SessionStore.isDemo ? '演示账号只读。' : '') + (this.bundle.errorMessage.length > 0 ? this.bundle.errorMessage : '后端不可达，当前显示本地演示数据。'))
-        .fontSize(11)
-        .fontColor(Theme.warning)
-        .padding(12)
-        .width('100%')
-        .backgroundColor('#FFF7E6')
-        .border({ width: { left: 4 }, color: Theme.warning })
-        .margin({ bottom: 14 })
+      Row({ space: 8 }) {
+        Circle().width(8).height(8).fill(Theme.warning)
+        Text((SessionStore.isDemo ? '演示账号只读。' : '') + (this.bundle.errorMessage.length > 0 ? this.bundle.errorMessage : '后端不可达，当前显示本地演示数据。'))
+          .fontSize(10).fontColor(Theme.warning).layoutWeight(1)
+      }.padding(10).width('100%').backgroundColor('#FFF8EA').border({ width: { left: 3 }, color: Theme.warning }).margin({ bottom: 14 })
     }
   }
 
   @Builder
   adminToolbar() {
     Row({ space: 10 }) {
+      Text('筛选').fontSize(10).fontColor(Theme.muted)
       TextInput({ text: this.query, placeholder: '搜索编号、工位、设备、追踪号或操作者' })
         .height(38)
         .layoutWeight(1)
         .backgroundColor(Theme.panel)
         .onChange((value: string) => { this.query = value; this.resetPage() })
-      Button(this.filter).type(ButtonType.Normal).height(38).fontColor(Theme.blue).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line }).onClick(() => this.nextFilter())
-      Button('刷新').height(38).backgroundColor(Theme.blue).fontColor('#FFFFFF').onClick(() => { this.loading = true; void this.refreshAll() })
+      Button('状态：' + this.filter).type(ButtonType.Normal).height(38).fontColor(Theme.blue).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line }).onClick(() => this.nextFilter())
+      Button('应用刷新').height(38).fontSize(10).backgroundColor(Theme.blue).fontColor('#FFFFFF').onClick(() => { this.loading = true; void this.refreshAll() })
     }.width('100%').margin({ bottom: 12 })
   }
 
@@ -704,6 +742,15 @@ struct AdminConsole {
   }
 
   @Builder
+  tableHeader(columns: Array<string>) {
+    Row() {
+      ForEach(columns, (column: string) => {
+        Text(column).fontSize(9).fontColor(Theme.muted).fontWeight(FontWeight.Bold).layoutWeight(1)
+      }, (column: string) => column)
+    }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 }).backgroundColor(Theme.panelSoft).border({ width: { bottom: 1 }, color: Theme.line })
+  }
+
+  @Builder
   emptyState(text: string) {
     Column() {
       Text(text).fontSize(13).fontColor(Theme.muted)
@@ -714,21 +761,61 @@ struct AdminConsole {
   @Builder
   detailPanel() {
     Column() {
-      Text('详情').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
-      Text(this.selectedDetail).fontSize(11).fontColor(Theme.muted).margin({ top: 8 }).width('100%')
-    }.width('100%').padding(14).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line }).margin({ top: 12 })
+      Text('详情已在右侧上下文抽屉中显示。').fontSize(10).fontColor(Theme.muted)
+    }.width('100%').padding(10).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line }).margin({ top: 12 })
+  }
+
+  @Builder
+  detailDrawer() {
+    Column() {
+      Row() {
+        Column() {
+          Text('CONTEXT').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold).letterSpacing(0.8)
+          Text('详情抽屉').fontSize(17).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        Button('关闭')
+          .type(ButtonType.Normal)
+          .height(30)
+          .fontSize(10)
+          .fontColor(Theme.muted)
+          .backgroundColor(Color.Transparent)
+          .border({ width: 1, color: Theme.line })
+          .onClick(() => this.selectedDetail = '请选择一条记录查看详情。')
+      }.width('100%').padding({ bottom: 12 }).border({ width: { bottom: 1 }, color: Theme.line })
+      Text(this.selectedDetail)
+        .fontSize(11)
+        .fontColor(Theme.text)
+        .lineHeight(19)
+        .width('100%')
+        .margin({ top: 14 })
+      Blank()
+      Text('引用导航只读；写操作仍必须通过页面按钮、确认框和后端权限闸口。')
+        .fontSize(9)
+        .fontColor(Theme.muted)
+        .padding(10)
+        .width('100%')
+        .backgroundColor(Theme.panelSoft)
+        .border({ width: 1, color: Theme.line })
+    }
+    .width(360)
+    .height('100%')
+    .padding(18)
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor(Theme.panel)
+    .border({ width: { left: 1 }, color: Theme.line })
+    .shadow({ radius: 18, color: '#1F2A3320', offsetX: -3, offsetY: 0 })
   }
 
   @Builder
   dashboardView() {
-    Flex({ wrap: FlexWrap.Wrap }) {
+    Row() {
       this.metric('累计批次', this.bundle.dashboard.total.toString(), '进入产线', 'NORMAL')
       this.metric('运行中', this.bundle.dashboard.running.toString(), '连续流水', 'RUNNING')
       this.metric('完成入库', this.bundle.dashboard.completed.toString(), '箱级库存', 'PASS')
       this.metric('待处理', this.bundle.dashboard.holding.toString(), '人工待办', 'WAIT')
       this.metric('开放异常', this.openIncidentCount().toString(), '质量或设备', this.openIncidentCount() > 0 ? 'ALARM' : 'PASS')
       this.metric('AI 审计', this.bundle.operations.aiAudits.length.toString(), '建议与校验', 'NORMAL')
-    }.width('100%').margin({ bottom: 14 })
+    }.width('100%').height(86).margin({ bottom: 18 }).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
     Row({ space: 12 }) {
       this.stageSummary()
       this.todoSummary()
@@ -739,9 +826,9 @@ struct AdminConsole {
   metric(label: string, value: string, note: string, tone: string) {
     Column() {
       Text(label).fontSize(10).fontColor(Theme.muted)
-      Text(value).fontSize(25).fontColor(statusColor(tone)).fontWeight(FontWeight.Bold).margin({ top: 7 })
+      Text(value).fontSize(24).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7 })
       Text(note).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
-    }.width(168).height(96).padding(13).margin({ right: 8, bottom: 8 }).alignItems(HorizontalAlign.Start).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: statusColor(tone) }).borderRadius(3)
+    }.layoutWeight(1).height('100%').padding(13).alignItems(HorizontalAlign.Start).border({ width: { right: 1 }, color: Theme.line })
   }
 
   @Builder
@@ -787,6 +874,7 @@ struct AdminConsole {
         Button('新建生产工单').enabled(false).fontColor('#FFFFFF').backgroundColor(Theme.neutral)
         Text('不可用：P0 目标端点 /production/orders 尚未在当前后端分支实现。').fontSize(10).fontColor(Theme.warning)
       }.width('100%').margin({ top: 8, bottom: 8 })
+      this.tableHeader(['追踪号 / 批次', '当前工序', '状态', '箱码', '操作'])
       if (this.filteredRuns().length === 0) {
         this.emptyState('没有匹配的生产任务。')
       } else {
@@ -812,6 +900,7 @@ struct AdminConsole {
   incidentView() {
     Column() {
       SectionTitle({ code: 'INCIDENT CENTER', title: '异常处置中心', description: '处置策略包含剔除、局停、返工、缓冲和上下游影响。' })
+      this.tableHeader(['异常 / 工位 / 设备', '状态', '说明', '操作'])
       if (this.filteredIncidents().length === 0) {
         this.emptyState('当前没有匹配的异常。')
       } else {
@@ -830,6 +919,7 @@ struct AdminConsole {
         this.pager(this.filteredIncidents().length)
       }
       Text('开放报警').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 18, bottom: 8 })
+      this.tableHeader(['报警 / 设备', '状态', '内容', '操作'])
       if (this.bundle.operations.alarms.filter((alarm: AlarmRecord) => alarm.status === 'OPEN').length === 0) {
         this.emptyState('当前没有开放报警。')
       } else {
@@ -854,6 +944,7 @@ struct AdminConsole {
   deviceView() {
     Column() {
       SectionTitle({ code: 'EQUIPMENT', title: '设备管理', description: '查看档案、在线态、维护状态和参数模板归属。' })
+      this.tableHeader(['设备 / 工位', '状态', '数据源', '速度', '操作'])
       if (this.filteredDevices().length === 0) {
         this.emptyState('没有匹配的设备。')
       } else {
@@ -879,6 +970,7 @@ struct AdminConsole {
   materialView() {
     Column() {
       SectionTitle({ code: 'MATERIAL TRACE', title: '产品与物料', description: '追踪号、瓶型、质量事件、箱码和库位。' })
+      this.tableHeader(['追踪号', '瓶型', '质量事件', '箱码', '操作'])
       if (this.filteredRuns().length === 0) {
         this.emptyState('没有匹配的产品或物料。')
       } else {
@@ -906,6 +998,7 @@ struct AdminConsole {
         Text('不可用：当前端点仅支持创建任务，尚缺车辆候选、优先级、冲突校验和服务端审计字段。').fontSize(10).fontColor(Theme.warning)
       }.width('100%').margin({ top: 8 })
       Text('AGV 任务').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 10, bottom: 8 })
+      this.tableHeader(['任务 / 车辆 / 箱码', '状态', '速度 / 避障', '操作'])
       if (this.filteredAgvTasks().length === 0) {
         this.emptyState('没有匹配的 AGV 任务。')
       } else {
@@ -921,6 +1014,7 @@ struct AdminConsole {
         this.pager(this.filteredAgvTasks().length)
       }
       Text('仓区安全与库存').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 18, bottom: 8 })
+      this.tableHeader(['仓区', '状态', '环境读数'])
       if (this.bundle.logistics.zones.length === 0 && this.bundle.logistics.stock.length === 0) {
         this.emptyState('当前没有仓区安全或箱级库存数据。')
       } else {
@@ -1067,6 +1161,7 @@ struct AdminConsole {
   userView() {
     Column() {
       SectionTitle({ code: 'ACCESS CONTROL', title: '用户权限', description: 'ADMIN 管理账号、角色和状态；后端仍执行真实鉴权。' })
+      this.tableHeader(['账号 / 最近登录', '角色', '状态', '操作'])
       if (!SessionStore.isAdmin) {
         this.noAccessView()
       } else if (this.filteredUsers().length === 0) {
@@ -1094,6 +1189,7 @@ struct AdminConsole {
   settingsView() {
     Column() {
       SectionTitle({ code: 'SYSTEM CONFIG', title: '系统配置', description: '展示阈值和策略版本；没有正式契约前不发送配置写入。' })
+      this.tableHeader(['策略 / 版本', '当前值', '状态', '操作'])
       ForEach(SYSTEM_POLICIES, (policy: SystemPolicy) => {
         Row() {
           Column() {
@@ -1120,6 +1216,7 @@ struct AdminConsole {
       if (this.auditError.length > 0) {
         Text('服务端审计不可用：' + this.auditError + '。目标端点为 GET /audit/operations。').fontSize(10).fontColor(Theme.warning).width('100%').padding(10).backgroundColor('#FFF7E6').margin({ bottom: 10 })
       }
+      this.tableHeader(['动作 / 时间', '操作者', '目标', '结果', '操作'])
       if (this.filteredAuditRecords().length === 0) {
         this.emptyState('没有可验证的服务端操作审计记录。')
       } else {

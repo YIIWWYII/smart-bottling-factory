@@ -10,16 +10,16 @@ export struct SectionTitle {
   build() {
     Row() {
       Column() {
-        Text(this.code).fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-        Text(this.title).fontSize(21).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+        Text(this.code).fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold).letterSpacing(0.8)
+        Text(this.title).fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
         if (this.description.length > 0) {
-          Text(this.description).fontSize(11).fontColor(Theme.muted).margin({ top: 4 })
+          Text(this.description).fontSize(10).fontColor(Theme.muted).margin({ top: 5 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
     }
     .width('100%')
-    .padding({ bottom: 12 })
-    .border({ width: { bottom: 2 }, color: Theme.line })
+    .padding({ bottom: 14 })
+    .border({ width: { bottom: 1 }, color: Theme.line })
   }
 }
 
@@ -33,16 +33,15 @@ export struct MetricTile {
   build() {
     Column() {
       Text(this.label).fontSize(10).fontColor(Theme.muted)
-      Text(this.value).fontSize(24).fontColor(statusColor(this.tone)).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 4 })
+      Text(this.value).fontSize(23).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 4 })
       Text(this.note).fontSize(9).fontColor(Theme.muted).maxLines(2)
     }
     .alignItems(HorizontalAlign.Start)
-    .width(176)
-    .height(98)
-    .padding(13)
+    .layoutWeight(1)
+    .height(86)
+    .padding(14)
     .backgroundColor(Theme.panel)
-    .border({ width: { top: 4, left: 1, right: 1, bottom: 2 }, color: this.tone === 'NORMAL' ? Theme.accent : statusColor(this.tone) })
-    .borderRadius(3)
+    .border({ width: { right: 1 }, color: Theme.line })
   }
 }
 
@@ -54,11 +53,11 @@ export struct StateBadge {
   build() {
     Row({ space: 6 }) {
       Circle().width(8).height(8).fill(statusColor(this.status))
-      Text(this.label).fontSize(10).fontColor(statusColor(this.status)).fontWeight(FontWeight.Medium)
+      Text(this.label).fontSize(10).fontColor(Theme.text).fontWeight(FontWeight.Medium)
     }
-    .padding({ left: 8, right: 8, top: 5, bottom: 5 })
-    .border({ width: 1, color: statusColor(this.status) })
-    .backgroundColor(Theme.panel)
+    .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+    .border({ width: { left: 2 }, color: statusColor(this.status) })
+    .backgroundColor(Theme.panelSoft)
   }
 }
 

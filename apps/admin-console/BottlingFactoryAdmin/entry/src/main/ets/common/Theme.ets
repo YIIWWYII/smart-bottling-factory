@@ -15,19 +15,19 @@ export interface ThemeConfig {
 }
 
 export const Theme: ThemeConfig = {
-  navy: '#0E2A45',
-  blue: '#235E8F',
-  accent: '#3A86B9',
-  page: '#EEF3F7',
+  navy: '#12344D',
+  blue: '#006FAE',
+  accent: '#2E6F95',
+  page: '#F0F2F4',
   panel: '#FFFFFF',
-  panelSoft: '#F5F8FB',
-  line: '#C8D4DE',
-  text: '#1D3447',
-  muted: '#5C7284',
-  success: '#1E8860',
-  warning: '#C98912',
-  danger: '#B9444C',
-  neutral: '#6E8190'
+  panelSoft: '#F7F8F9',
+  line: '#D7DDE2',
+  text: '#172B3A',
+  muted: '#5D6B76',
+  success: '#2B805F',
+  warning: '#A96F00',
+  danger: '#B33E4B',
+  neutral: '#7A8791'
 }
 
 export function statusColor(status: string): string {
