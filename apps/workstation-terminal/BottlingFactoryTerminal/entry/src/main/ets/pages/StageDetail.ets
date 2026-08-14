@@ -803,6 +803,28 @@ struct StageDetail {
     }
   }
 
+  private navigateToStage(stageCode: string): void {
+    const target = findStage(stageCode)
+    if (target === undefined || target.code === this.stageCode) return
+    this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+    this.clearFocusedEntity()
+    router.replaceUrl({ url: 'pages/StageDetail', params: { stageCode: target.code } })
+  }
+
+  private deviceActionText(code: string): string {
+    const runtime = this.runtimeDevice(code)
+    if (runtime !== undefined && runtime.actionCode !== undefined && runtime.actionCode.length > 0) {
+      return runtime.actionCode
+    }
+    const device = this.currentStage().devices.find((item: DeviceDefinition) => item.code === code)
+    if (device !== undefined && device.role.length > 0) {
+      const actions: Array<ActionControlDefinition> = this.controlsValue().actions
+      const action = actions.find((item: ActionControlDefinition) => item.deviceCode === code)
+      return action === undefined ? device.role : action.label
+    }
+    return '等待设备动作数据'
+  }
+
   private statusTextForRun(status: string): string {
     if (status === 'COMPLETED') return '已完成'
     if (status === 'REJECTED') return '已剔除'
@@ -987,17 +1009,24 @@ struct StageDetail {
 
   build() {
     Stack({ alignContent: Alignment.TopEnd }) {
-      Scroll() {
-        Column() {
-          this.topBar()
-          this.stageHeader()
-          this.visualSection()
-          this.stationSnapshotSection()
-          this.controlSection()
+      Row() {
+        this.stationRail()
+        Scroll() {
+          Column() {
+            this.hmiTopBar()
+            this.hmiStatusStrip()
+            this.hmiWorkSurface()
+            this.hmiDataSection()
+            this.hmiControlConsole()
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          .padding({ bottom: 32 })
         }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-        .padding({ bottom: 32 })
+        .layoutWeight(1)
+        .scrollable(ScrollDirection.Vertical)
+        .scrollBar(BarState.Auto)
+        .edgeEffect(EdgeEffect.Spring)
       }
       .width('100%')
       .height('100%')
@@ -1007,6 +1036,547 @@ struct StageDetail {
     }
     .width('100%')
     .height('100%')
+  }
+
+  @Builder
+  stationRail() {
+    Column() {
+      Row() {
+        Column() {
+          Text('LINE 01').fontSize(10).fontColor('#9EC7D1').fontWeight(FontWeight.Bold)
+          Text('工位终端').fontSize(22).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 4 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text('HMI').fontSize(10).fontColor('#B7E8DD').fontWeight(FontWeight.Bold)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 18, bottom: 18 })
+      .border({ width: { bottom: 1 }, color: '#31556A' })
+
+      Text('本站导航').fontSize(10).fontColor('#9EC7D1').fontWeight(FontWeight.Bold)
+        .alignSelf(ItemAlign.Start)
+        .margin({ left: 16, top: 18, bottom: 8 })
+
+      ForEach(FACTORY_STAGES, (stage: StageDefinition, index: number) => {
+        Row({ space: 8 }) {
+          Text((index + 1).toString().padStart(2, '0')).fontSize(10)
+            .fontColor(stage.code === this.stageCode ? '#B7E8DD' : '#7995A4')
+            .width(24)
+          Column() {
+            Text(stage.name).fontSize(12)
+              .fontColor(stage.code === this.stageCode ? '#FFFFFF' : '#C2D1D8')
+              .fontWeight(stage.code === this.stageCode ? FontWeight.Bold : FontWeight.Normal)
+            Text(stage.code).fontSize(8).fontColor('#7995A4').margin({ top: 3 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Text(stage.code === this.stageCode ? '本站' : '·').fontSize(9)
+            .fontColor(stage.code === this.stageCode ? '#B7E8DD' : '#587383')
+        }
+        .width('100%')
+        .padding({ left: 16, right: 14, top: 11, bottom: 11 })
+        .backgroundColor(stage.code === this.stageCode ? '#164A63' : Color.Transparent)
+        .border({ width: { left: stage.code === this.stageCode ? 4 : 0 }, color: '#58B7B0' })
+        .onClick(() => this.navigateToStage(stage.code))
+      }, (stage: StageDefinition) => stage.code)
+
+      Blank()
+
+      Column() {
+        Text('实时通道').fontSize(9).fontColor('#7995A4')
+        Text(FactoryRepository.realtimeOnline ? 'WEBSOCKET ONLINE' : 'RECONNECTING')
+          .fontSize(10)
+          .fontColor(FactoryRepository.realtimeOnline ? '#B7E8DD' : '#F0C979')
+          .fontWeight(FontWeight.Bold)
+          .margin({ top: 5 })
+        Text(this.bundle.source).fontSize(9).fontColor('#C2D1D8').margin({ top: 4 })
+        Text('SNAPSHOT ' + this.snapshot.stateVersion.toString()).fontSize(8).fontColor('#7995A4').margin({ top: 8 })
+      }
+      .width('100%')
+      .padding(16)
+      .backgroundColor('#0A2438')
+    }
+    .width(222)
+    .height('100%')
+    .backgroundColor(Theme.navy)
+  }
+
+  @Builder
+  hmiTopBar() {
+    Row() {
+      Button('←')
+        .type(ButtonType.Normal)
+        .width(38)
+        .height(32)
+        .fontSize(18)
+        .fontColor('#FFFFFF')
+        .backgroundColor('#17465D')
+        .onClick(() => {
+          this.assistantSelectionPublisher.clear(this.assistantPageRoute(), 'ARKUI')
+          this.clearFocusedEntity()
+          router.back()
+        })
+      Column() {
+        Text(this.currentStage().code + ' / ' + this.currentStage().name).fontSize(16).fontColor('#FFFFFF').fontWeight(FontWeight.Bold)
+        Text(this.currentStage().description).fontSize(9).fontColor('#B6CBD4').margin({ top: 4 }).maxLines(1)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 12 })
+      .layoutWeight(1)
+      Row({ space: 12 }) {
+        Text(this.stageStateText()).fontSize(10).fontColor('#B7E8DD').fontWeight(FontWeight.Bold)
+        Text(FactoryRepository.realtimeOnline ? 'WS ONLINE' : 'WS OFFLINE').fontSize(9)
+          .fontColor(FactoryRepository.realtimeOnline ? '#B7E8DD' : '#F0C979')
+        Text(this.snapshot.dataMode + ' · v' + this.snapshot.stateVersion.toString()).fontSize(9).fontColor('#B6CBD4')
+      }
+    }
+    .width('100%')
+    .padding({ left: 16, right: 18, top: 12, bottom: 12 })
+    .backgroundColor(Theme.navy)
+  }
+
+  @Builder
+  hmiStatusStrip() {
+    Row({ space: 1 }) {
+      this.hmiStatusCell('状态', this.stageStateText(), this.stageStateValue())
+      this.hmiStatusCell('在制品', this.stationRunsValue().length.toString(), 'RUNNING')
+      this.hmiStatusCell('缓冲', this.runtimeStageValue().bufferLevel.toString() + '/' + this.runtimeStageValue().bufferCapacity.toString(), 'RUNNING')
+      this.hmiStatusCell('报警', this.stationAlarmsValue().length.toString(), this.stationAlarmsValue().length > 0 ? 'ALARM' : 'RUNNING')
+      this.hmiStatusCell('快照', 'v' + this.snapshot.stateVersion.toString(), FactoryRepository.snapshotMode === 'CANONICAL' ? 'RUNNING' : 'WAIT')
+    }
+    .width('100%')
+    .height(74)
+    .backgroundColor(Theme.panel)
+    .border({ width: { bottom: 1 }, color: Theme.line })
+  }
+
+  @Builder
+  hmiStatusCell(label: string, value: string, tone: string) {
+    Column() {
+      Text(label).fontSize(9).fontColor(Theme.muted)
+      Text(value).fontSize(16).fontColor(statusColor(tone)).fontWeight(FontWeight.Bold).margin({ top: 7 })
+    }
+    .alignItems(HorizontalAlign.Start)
+    .layoutWeight(1)
+    .height('100%')
+    .padding({ left: 14, top: 13 })
+    .backgroundColor(Theme.panel)
+    .border({ width: { right: 1 }, color: Theme.line })
+  }
+
+  @Builder
+  hmiWorkSurface() {
+    Column() {
+      Row() {
+        Column() {
+          Text('WORK SURFACE').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+          Text('设备作业台').fontSize(22).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text('PROCESS / MATERIAL FLOW').fontSize(9).fontColor(Theme.muted)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 14, bottom: 10 })
+
+      Row({ space: 10 }) {
+        this.hmiDeviceNav()
+        Column() {
+          Row({ space: 6 }) {
+            this.hmiToggle('2D', this.planarEnabled, 'PLANAR')
+            this.hmiToggle('3D', this.threeEnabled, 'THREE')
+            this.hmiToggle('颜色', this.statusColorsEnabled, 'COLORS')
+            this.hmiToggle('暂停', this.paused, 'PAUSE')
+            this.hmiToggle('布局', this.layoutEditEnabled, 'LAYOUT')
+          }
+          .width('100%')
+          .padding({ bottom: 8 })
+
+          Row({ space: 8 }) {
+            if (this.planarEnabled) {
+              this.hmiScenePanel('2D / PROCESS MAP', '独立平面工艺图 · 物料流 · 状态节点', 'PLANAR', this.threeEnabled ? 300 : 390)
+            }
+            if (this.threeEnabled) {
+              this.hmiScenePanel('3D / MACHINE VIEW', '立体设备动画 · 点击查看 · 可拖拽布局', 'THREE', this.planarEnabled ? 300 : 390)
+            }
+            if (!this.planarEnabled && !this.threeEnabled) {
+              Column() {
+                Text('视图已关闭').fontSize(18).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+                Text('实时数据仍继续刷新，开启 2D 或 3D 查看当前作业。').fontSize(10).fontColor(Theme.muted).margin({ top: 8 })
+              }
+              .layoutWeight(1)
+              .height(180)
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+              .backgroundColor(Theme.panelSoft)
+            }
+          }
+          .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        this.hmiDeviceDetail()
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 16 })
+    }
+    .width('100%')
+    .backgroundColor(Theme.panel)
+    .border({ width: { bottom: 1 }, color: Theme.line })
+  }
+
+  @Builder
+  hmiToggle(label: string, enabled: boolean, key: string) {
+    Button((enabled ? 'ON ' : 'OFF ') + label)
+      .type(ButtonType.Normal)
+      .height(30)
+      .fontSize(9)
+      .fontColor(enabled ? '#FFFFFF' : Theme.muted)
+      .backgroundColor(enabled ? Theme.blue : '#E7ECEF')
+      .border({ width: 1, color: enabled ? Theme.blue : Theme.line })
+      .onClick(() => {
+        if (key === 'PLANAR') this.planarEnabled = !this.planarEnabled
+        if (key === 'THREE') this.threeEnabled = !this.threeEnabled
+        if (key === 'COLORS') this.statusColorsEnabled = !this.statusColorsEnabled
+        if (key === 'PAUSE') this.paused = !this.paused
+        if (key === 'LAYOUT') this.layoutEditEnabled = !this.layoutEditEnabled
+      })
+  }
+
+  @Builder
+  hmiDeviceNav() {
+    Column() {
+      Row() {
+        Text('设备').fontSize(12).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+        Blank()
+        Text(this.currentStage().devices.length.toString()).fontSize(10).fontColor(Theme.muted)
+      }
+      .width('100%')
+      .padding({ bottom: 8 })
+      .border({ width: { bottom: 2 }, color: Theme.line })
+
+      ForEach(this.currentStage().devices, (device: DeviceDefinition, index: number) => {
+        Row({ space: 7 }) {
+          Text((index + 1).toString().padStart(2, '0')).fontSize(9).fontColor(Theme.muted).width(20)
+          Circle().width(8).height(8).fill(statusColor(this.deviceRuntime(device.code)))
+          Column() {
+            Text(device.name).fontSize(10).fontColor(Theme.text).fontWeight(FontWeight.Bold).maxLines(1)
+            Text(device.code).fontSize(8).fontColor(Theme.muted).margin({ top: 3 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .padding({ top: 10, bottom: 10 })
+        .backgroundColor(this.selectedDeviceCode === device.code ? '#E4F0F2' : Color.Transparent)
+        .border({ width: { left: this.selectedDeviceCode === device.code ? 3 : 0 }, color: Theme.accent })
+        .onClick(() => this.selectDeviceForAssistant(device))
+      }, (device: DeviceDefinition) => device.code)
+    }
+    .width(190)
+    .padding(12)
+    .backgroundColor(Theme.panelSoft)
+    .border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  hmiScenePanel(title: string, hint: string, viewMode: string, height: number) {
+    Column() {
+      Row() {
+        Text(title).fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+        Blank()
+        Text(hint).fontSize(8).fontColor(Theme.muted).maxLines(1)
+      }
+      .width('100%')
+      .padding({ left: 8, right: 8, top: 8, bottom: 7 })
+      FactoryThreeScene({
+        payload: this.scenePayload(viewMode),
+        sceneHeight: height,
+        label: title,
+        onDeviceSelected: (deviceCode: string): void => this.selectDeviceCodeForAssistant(deviceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
+        onProductSelected: (traceCode: string): void => this.selectProductCodeForAssistant(traceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
+        selectedDeviceCode: $selectedDeviceCode,
+        selectedTraceCode: $selectedTraceCode
+      })
+    }
+    .layoutWeight(1)
+    .backgroundColor('#E8EEF0')
+    .border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  hmiDeviceDetail() {
+    Column() {
+      Text('设备详情').fontSize(12).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      if (this.selectedDeviceCode.length === 0) {
+        Text('从左侧设备树或作业画面选择设备').fontSize(10).fontColor(Theme.muted).margin({ top: 18 })
+      } else {
+        Text(this.deviceDisplay(this.selectedDeviceCode)).fontSize(16).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 14 })
+        Text(this.selectedDeviceRole()).fontSize(9).fontColor(Theme.muted).margin({ top: 5 })
+        Row() {
+          Circle().width(9).height(9).fill(statusColor(this.deviceRuntime(this.selectedDeviceCode)))
+          Text(this.deviceRuntime(this.selectedDeviceCode)).fontSize(11).fontColor(statusColor(this.deviceRuntime(this.selectedDeviceCode))).fontWeight(FontWeight.Bold).margin({ left: 7 })
+          Blank()
+          Text(this.deviceSource(this.selectedDeviceCode)).fontSize(9).fontColor(Theme.blue)
+        }
+        .width('100%')
+        .margin({ top: 14 })
+        .padding({ top: 9, bottom: 9 })
+        .border({ width: { top: 1, bottom: 1 }, color: Theme.line })
+        Text('关键读数').fontSize(9).fontColor(Theme.muted).margin({ top: 14 })
+        Text(this.deviceReading(this.selectedDeviceCode)).fontSize(22).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+        Text('当前动作：' + this.deviceActionText(this.selectedDeviceCode)).fontSize(9).fontColor(Theme.muted).margin({ top: 12 })
+        Text('允许参数').fontSize(9).fontColor(Theme.muted).margin({ top: 18, bottom: 6 })
+        ForEach(this.controlsValue().parameters.filter((control: ParameterControlDefinition) => control.deviceCode === this.selectedDeviceCode).slice(0, 3),
+          (control: ParameterControlDefinition) => {
+            Column() {
+              Row() {
+                Text(control.label).fontSize(9).fontColor(Theme.text)
+                Blank()
+                Text(this.parameterCurrent(control).toString() + ' ' + control.unit).fontSize(9).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+              }
+              .width('100%')
+              Row() {
+                Text('下限 ' + this.parameterMin(control).toString()).fontSize(8).fontColor(Theme.muted)
+                Blank()
+                Text('上限 ' + this.parameterMax(control).toString()).fontSize(8).fontColor(Theme.muted)
+              }
+              .width('100%')
+              .margin({ top: 5 })
+              .height(5)
+              .backgroundColor('#DDE6E9')
+              .border({ width: { left: 2 }, color: Theme.accent })
+              .onClick(() => this.selectParameterForAssistant(control))
+            }
+            .width('100%')
+            .padding({ top: 8, bottom: 8 })
+            .border({ width: { bottom: 1 }, color: Theme.line })
+          }, (control: ParameterControlDefinition) => control.parameterCode)
+      }
+    }
+    .width(310)
+    .padding(14)
+    .backgroundColor(Theme.panelSoft)
+    .border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  hmiDataSection() {
+    Row({ space: 10 }) {
+      this.hmiMaterialPanel()
+      this.hmiSensorPanel()
+      this.hmiQualityPanel()
+    }
+    .width('100%')
+    .padding(16)
+    .backgroundColor(Theme.page)
+  }
+
+  @Builder
+  hmiMaterialPanel() {
+    Column() {
+      Text('在制品 / MATERIAL').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+      Text(this.stationRunsValue().length.toString() + ' 件本站在制品').fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 10 })
+      ForEach(this.stationRunsValue().slice(0, 4), (run: FactoryRun) => {
+        Row({ space: 7 }) {
+          Circle().width(7).height(7).fill(statusColor(run.status))
+          Column() {
+            Text(run.traceCode).fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+            Text((run.bottleType || '待识别') + ' · ' + this.statusTextForRun(run.status)).fontSize(8).fontColor(Theme.muted).margin({ top: 3 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Text(run.defectType || '--').fontSize(8).fontColor(run.defectType ? Theme.danger : Theme.muted)
+        }
+        .width('100%')
+        .padding({ top: 7, bottom: 7 })
+        .border({ width: { bottom: 1 }, color: Theme.line })
+        .onClick(() => this.selectProductForAssistant(run))
+      }, (run: FactoryRun) => run.traceCode)
+      if (this.stationRunsValue().length === 0) {
+        Text('等待上游物料到站').fontSize(10).fontColor(Theme.muted).margin({ top: 12 })
+      }
+    }
+    .layoutWeight(1)
+    .padding(14)
+    .backgroundColor(Theme.panel)
+    .border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  hmiSensorPanel() {
+    Column() {
+      Text('传感器 / SENSORS').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+      Text(this.stationReadingsValue().length.toString() + ' 个实时读数').fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 10 })
+      ForEach(this.stationReadingsValue().slice(0, 4), (reading: SensorReading) => {
+        Row() {
+          Column() {
+            Text(reading.sensorType).fontSize(9).fontColor(Theme.text).fontWeight(FontWeight.Bold)
+            Text(reading.deviceCode + ' · ' + reading.quality).fontSize(8).fontColor(Theme.muted).margin({ top: 3 })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Text(reading.value.toString() + ' ' + reading.unit).fontSize(11).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+        }
+        .width('100%')
+        .padding({ top: 7, bottom: 7 })
+        .border({ width: { bottom: 1 }, color: Theme.line })
+        .onClick(() => this.selectSensorForAssistant(reading))
+      }, (reading: SensorReading) => reading.readingId)
+      if (this.stationReadingsValue().length === 0) {
+        Text('等待传感器数据').fontSize(10).fontColor(Theme.muted).margin({ top: 12 })
+      }
+    }
+    .layoutWeight(1)
+    .padding(14)
+    .backgroundColor(Theme.panel)
+    .border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  hmiQualityPanel() {
+    Column() {
+      Text('质量门 / INTERLOCK').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+      Text(this.qualitySummary()).fontSize(16).fontColor(statusColor(this.qualityGates().some((gate: QualityGateView) => gate.status === 'FAIL') ? 'FAIL' : 'PASS')).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 10 })
+      ForEach(this.qualityGates().slice(0, 4), (gate: QualityGateView) => {
+        Row() {
+          Circle().width(7).height(7).fill(statusColor(gate.status))
+          Text(gate.label).fontSize(9).fontColor(Theme.text).margin({ left: 7 }).layoutWeight(1)
+          Text(gate.status).fontSize(9).fontColor(statusColor(gate.status)).fontWeight(FontWeight.Bold)
+        }
+        .width('100%')
+        .padding({ top: 7, bottom: 7 })
+        .border({ width: { bottom: 1 }, color: Theme.line })
+        .onClick(() => this.selectQualityGateForAssistant(gate))
+      }, (gate: QualityGateView) => gate.label)
+      if (this.stationAlarmsValue().length > 0) {
+        Text(this.stationAlarmsValue().length.toString() + ' 个开放报警').fontSize(9).fontColor(Theme.danger).margin({ top: 10 })
+      }
+    }
+    .layoutWeight(1)
+    .padding(14)
+    .backgroundColor(Theme.panel)
+    .border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  hmiControlConsole() {
+    Column() {
+      Row() {
+        Column() {
+          Text('CONTROL CONSOLE').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+          Text('参数与操作').fontSize(22).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text(this.commandBlockReason(false).length > 0 ? '只读 / 操作被安全门阻止' : '受控操作 · 后端最终鉴权')
+          .fontSize(9)
+          .fontColor(this.commandBlockReason(false).length > 0 ? Theme.warning : Theme.success)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 14, bottom: 10 })
+
+      Row({ space: 10 }) {
+        Column() {
+          Text('参数组').fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ bottom: 7 })
+          ForEach(this.controlsValue().parameters, (control: ParameterControlDefinition) => {
+            this.hmiParameterRow(control)
+          }, (control: ParameterControlDefinition) => control.parameterCode)
+        }
+        .layoutWeight(1)
+        .padding(14)
+        .backgroundColor(Theme.panel)
+        .border({ width: 1, color: Theme.line })
+
+        Column() {
+          this.identityPanel()
+          Text('动作').fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 10, bottom: 7 })
+          ForEach(this.controlsValue().actions, (control: ActionControlDefinition) => {
+            this.hmiActionRow(control)
+          }, (control: ActionControlDefinition) => control.commandType + control.deviceCode)
+          this.pendingConfirmPanel()
+          this.commandStatusPanel()
+        }
+        .width(380)
+        .padding(14)
+        .backgroundColor(Theme.panel)
+        .border({ width: 1, color: Theme.line })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 16 })
+    }
+    .width('100%')
+    .backgroundColor(Theme.page)
+    .border({ width: { top: 1 }, color: Theme.line })
+  }
+
+  @Builder
+  hmiParameterRow(control: ParameterControlDefinition) {
+    Column() {
+      Row() {
+        Column() {
+          Text(control.label).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold)
+          Text(control.deviceCode + ' · ' + control.role).fontSize(8).fontColor(Theme.muted).margin({ top: 3 })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text(this.parameterCurrent(control).toString() + ' ' + control.unit).fontSize(15).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      }
+      .width('100%')
+      Row() {
+        Text(this.parameterMin(control).toString()).fontSize(8).fontColor(Theme.muted)
+        Blank()
+        Text('范围 / ' + this.parameterMax(control).toString() + ' ' + control.unit).fontSize(8).fontColor(Theme.muted)
+      }
+      .width('100%')
+      .margin({ top: 6 })
+      .height(6)
+      .backgroundColor('#DDE6E9')
+      .border({ width: { left: 5 }, color: Theme.accent })
+      Row({ space: 7 }) {
+        Button('-').width(34).height(28).fontSize(12).enabled(this.canEditParameter(control))
+          .onClick(() => this.setTarget(control, -this.parameterStep(control)))
+        Button('+').width(34).height(28).fontSize(12).enabled(this.canEditParameter(control))
+          .onClick(() => this.setTarget(control, this.parameterStep(control)))
+        Button('提交调整').layoutWeight(1).height(28).fontSize(9)
+          .fontColor('#FFFFFF')
+          .backgroundColor(this.commandBlockReason(true, control.requiredRole, control.deviceCode, control.commandType).length === 0 ? Theme.blue : Theme.neutral)
+          .enabled(this.commandBlockReason(true, control.requiredRole, control.deviceCode, control.commandType).length === 0)
+          .onClick(() => this.prepareParameter(control))
+      }
+      .width('100%')
+      .margin({ top: 8 })
+      Text('联锁：' + control.interlock + ' · 风险：' + control.risk).fontSize(8).fontColor(Theme.muted).margin({ top: 6 })
+    }
+    .width('100%')
+    .padding({ top: 11, bottom: 11 })
+    .border({ width: { bottom: 1 }, color: Theme.line })
+    .onClick(() => this.selectParameterForAssistant(control))
+  }
+
+  @Builder
+  hmiActionRow(control: ActionControlDefinition) {
+    Row({ space: 8 }) {
+      Column() {
+        Text(control.label).fontSize(10).fontColor(Theme.text).fontWeight(FontWeight.Bold)
+        Text(control.intent).fontSize(8).fontColor(Theme.muted).margin({ top: 3 }).maxLines(2)
+        Text('联锁：' + control.interlock).fontSize(8).fontColor(Theme.muted).margin({ top: 4 }).maxLines(2)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Button(control.dangerous ? '确认执行' : '发起')
+        .height(32)
+        .fontSize(9)
+        .fontColor('#FFFFFF')
+        .backgroundColor(this.commandBlockReason(control.dangerous, control.requiredRole, control.deviceCode, control.commandType).length === 0 ? (control.dangerous ? Theme.warning : Theme.blue) : Theme.neutral)
+        .enabled(this.commandBlockReason(control.dangerous, control.requiredRole, control.deviceCode, control.commandType).length === 0)
+        .onClick(() => this.prepareAction(control))
+    }
+    .width('100%')
+    .padding({ top: 9, bottom: 9 })
+    .border({ width: { bottom: 1 }, color: Theme.line })
   }
 
   @Builder
