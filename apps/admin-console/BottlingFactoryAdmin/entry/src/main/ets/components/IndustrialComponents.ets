@@ -1,4 +1,4 @@
-import { Theme, statusColor, statusSurface } from '../common/Theme'
+import { Theme, statusColor } from '../common/Theme'
 import { DeviceDefinition, QualityGateView } from '../model/FactoryModels'
 
 @Component
@@ -8,18 +8,17 @@ export struct SectionTitle {
   @Prop description: string = ''
 
   build() {
-    Row({ space: 12 }) {
-      Column().width(4).height(this.description.length > 0 ? 48 : 34).backgroundColor(Theme.accent)
+    Row() {
       Column() {
-        Text(this.code).fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-        Text(this.title).fontSize(19).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 3 })
+        Text(this.code).fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold).letterSpacing(0.8)
+        Text(this.title).fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
         if (this.description.length > 0) {
-          Text(this.description).fontSize(10).fontColor(Theme.muted).margin({ top: 4 }).maxLines(2)
+          Text(this.description).fontSize(10).fontColor(Theme.muted).margin({ top: 5 })
         }
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
     }
     .width('100%')
-    .padding({ bottom: 10 })
+    .padding({ bottom: 14 })
     .border({ width: { bottom: 1 }, color: Theme.line })
   }
 }
@@ -33,17 +32,16 @@ export struct MetricTile {
 
   build() {
     Column() {
-      Text(this.label).fontSize(10).fontColor(Theme.muted).fontWeight(FontWeight.Medium)
-      Text(this.value).fontSize(26).fontColor(this.tone === 'NORMAL' ? Theme.text : statusColor(this.tone)).fontWeight(FontWeight.Bold).margin({ top: 8, bottom: 5 })
+      Text(this.label).fontSize(10).fontColor(Theme.muted)
+      Text(this.value).fontSize(23).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 4 })
       Text(this.note).fontSize(9).fontColor(Theme.muted).maxLines(2)
     }
     .alignItems(HorizontalAlign.Start)
-    .width(176)
-    .height(104)
+    .layoutWeight(1)
+    .height(86)
     .padding(14)
     .backgroundColor(Theme.panel)
-    .border({ width: { left: 4, top: 1, right: 1, bottom: 1 }, color: this.tone === 'NORMAL' ? Theme.accent : statusColor(this.tone) })
-    .borderRadius(4)
+    .border({ width: { right: 1 }, color: Theme.line })
   }
 }
 
@@ -54,13 +52,12 @@ export struct StateBadge {
 
   build() {
     Row({ space: 6 }) {
-      Circle().width(7).height(7).fill(statusColor(this.status))
-      Text(this.label).fontSize(10).fontColor(statusColor(this.status)).fontWeight(FontWeight.Medium)
+      Circle().width(8).height(8).fill(statusColor(this.status))
+      Text(this.label).fontSize(10).fontColor(Theme.text).fontWeight(FontWeight.Medium)
     }
-    .padding({ left: 9, right: 9, top: 5, bottom: 5 })
-    .border({ width: 1, color: statusColor(this.status) })
-    .borderRadius(12)
-    .backgroundColor(statusSurface(this.status))
+    .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+    .border({ width: { left: 2 }, color: statusColor(this.status) })
+    .backgroundColor(Theme.panelSoft)
   }
 }
 
@@ -86,8 +83,8 @@ export struct DeviceStateRow {
       }.alignItems(HorizontalAlign.End).width(110)
     }
     .width('100%')
-    .constraintSize({ minHeight: 62 })
-    .padding({ left: 12, right: 12, top: 9, bottom: 9 })
+    .constraintSize({ minHeight: 58 })
+    .padding({ left: 10, right: 10, top: 7, bottom: 7 })
     .border({ width: { bottom: 1 }, color: Theme.line })
     .backgroundColor(Theme.panel)
   }
@@ -110,8 +107,8 @@ export struct QualityGateRow {
       }.alignItems(HorizontalAlign.End).width(150)
     }
     .width('100%')
-    .constraintSize({ minHeight: 64 })
-    .padding({ left: 12, right: 12, top: 9, bottom: 9 })
+    .constraintSize({ minHeight: 60 })
+    .padding({ left: 10, right: 10, top: 7, bottom: 7 })
     .border({ width: { bottom: 1 }, color: Theme.line })
   }
 }
