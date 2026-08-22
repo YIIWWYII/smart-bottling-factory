@@ -89,7 +89,7 @@ export struct AiDecisionAuditPanel {
         }.width('100%').padding(8).backgroundColor(Theme.panelSoft)
       }
       if (this.errorMessage.length > 0) {
-        Text('接口阻塞：' + this.errorMessage + '。旧 Spring Boot AI 兼容接口不作为新决策审计数据源。').fontSize(10).fontColor(Theme.danger).width('100%').padding(10).backgroundColor('#FFF1F2')
+        Text('接口阻塞：' + this.errorMessage + '。旧 Spring Boot AI 兼容接口不作为新决策审计数据源。').fontSize(10).fontColor(Theme.danger).width('100%').padding(10).backgroundColor(Theme.dangerSoft)
       }
       if (!this.loading && this.filtered().length === 0) {
         Text(this.errorMessage.length > 0 ? '无法取得 AI 中枢决策记录。' : '没有匹配的 AI 决策记录。').fontSize(11).fontColor(Theme.muted).width('100%').padding(24).textAlign(TextAlign.Center).backgroundColor(Theme.panelSoft)

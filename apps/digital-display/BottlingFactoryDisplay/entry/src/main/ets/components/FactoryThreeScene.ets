@@ -81,7 +81,7 @@ export struct FactoryThreeScene {
         })
         .width('100%')
         .height(this.heightValue)
-        .backgroundColor('#DFEAF1')
+        .backgroundColor('#0F2737')
 
       if (!this.webReady) {
         Column({ space: 8 }) {
@@ -91,7 +91,7 @@ export struct FactoryThreeScene {
         .width('100%')
         .height(this.heightValue)
         .justifyContent(FlexAlign.Center)
-        .backgroundColor('#DFEAF1')
+        .backgroundColor('#0F2737')
       }
     }
     .width('100%')

@@ -6,6 +6,7 @@
   var stageLabel = document.getElementById('stage-name');
   var sourceLabel = document.getElementById('data-source');
   var selectionLabel = document.getElementById('selection');
+  var compatPlan = document.getElementById('compat-plan');
 
   if (!window.THREE) {
     fallback.classList.remove('hidden');
@@ -30,6 +31,7 @@
   };
 
   var state = {
+    overview: false,
     stageCode: 'PRETREATMENT',
     stageName: 'PRETREATMENT',
     stateVersion: 0,
@@ -41,7 +43,8 @@
     speed: 0.12,
     progress: 0,
     devices: [],
-    products: []
+    products: [],
+    stages: []
   };
 
   var scene;
@@ -59,6 +62,9 @@
   var running = true;
   var lastFrameTime = 0;
   var motionPhase = 0;
+  var compatWatchTimer = 0;
+  var compatPlanSignature = '';
+  var compatProductNodes = [];
   var draggedDevice = null;
   var pointerStart = { x: 0, y: 0 };
   var previousPointer = { x: 0, y: 0 };
@@ -114,6 +120,7 @@
       camera.lookAt(0, 0, 0);
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
+      renderer.setClearColor(COLORS.floor, 1);
       host.appendChild(renderer.domElement);
       bindInteractions();
       rebuildPlan();
@@ -121,6 +128,7 @@
       resizeObserver = new ResizeObserver(resize);
       resizeObserver.observe(host);
       animationFrameId = requestAnimationFrame(renderLoop);
+      compatWatchTimer = window.setTimeout(showCompatibilityPlanIfNeeded, 900);
     } catch (error) {
       fallback.classList.remove('hidden');
       state.errorMessage = error && error.message ? error.message : 'WEBGL UNAVAILABLE';
@@ -132,6 +140,114 @@
     if (!material) return;
     if (material.map) material.map.dispose();
     material.dispose();
+  }
+
+  function showCompatibilityPlanIfNeeded() {
+    if (!state.overview || !compatPlan) return;
+    renderCompatibilityPlan();
+    compatPlan.classList.remove('hidden');
+  }
+
+  function compatibilityNavigate(url) {
+    window.location.href = url;
+  }
+
+  function markCompatibilitySelection(entityType, entityId, label) {
+    selectionLabel.textContent = label || (entityType + ' ' + entityId);
+    selectionLabel.classList.remove('hidden');
+    testProbe.lastSelection = { entityType: entityType, entityId: entityId };
+    updateProbe();
+  }
+
+  function demoProducts() {
+    return [
+      { traceCode: 'DEMO-001', status: 'RUNNING', bottleType: 'PLA-500' },
+      { traceCode: 'DEMO-002', status: 'RUNNING', bottleType: 'PLA-500' },
+      { traceCode: 'DEMO-003', status: 'HOLD', bottleType: 'PLA-330' },
+      { traceCode: 'DEMO-004', status: 'RUNNING', bottleType: 'PLA-500' }
+    ];
+  }
+
+  function updateCompatibilityProductPositions() {
+    compatProductNodes.forEach(function (token, index) {
+      token.style.left = (8 + ((motionPhase + index * 0.13) % 1) * 84) + '%';
+    });
+  }
+
+  function renderCompatibilityPlan() {
+    if (!compatPlan) return;
+    var stages = state.stages && state.stages.length ? state.stages : demoStages();
+    var devices = state.devices && state.devices.length ? state.devices : [];
+    var products = state.products && state.products.length ? state.products : demoProducts();
+    var nextSignature = JSON.stringify({
+      statusColors: state.statusColors,
+      stages: stages.map(function (stage) { return stage.code + ':' + stage.state + ':' + String(stage.wip || 0); }),
+      devices: devices.map(function (device) { return device.stageCode + ':' + device.code + ':' + device.state; }),
+      products: products.map(function (product) { return product.traceCode + ':' + product.status; })
+    });
+    if (nextSignature === compatPlanSignature && compatProductNodes.length > 0) {
+      updateCompatibilityProductPositions();
+      return;
+    }
+    compatPlanSignature = nextSignature;
+    compatProductNodes = [];
+    var track = document.createElement('div');
+    track.className = 'compat-plan-track';
+    stages.forEach(function (stage) {
+      var status = state.statusColors && (stage.state === 'ALARM' || stage.state === 'FAIL' ? 'alarm' : stage.state === 'HOLD' || stage.state === 'WAIT' ? 'wait' : '');
+      var block = document.createElement('div');
+      block.className = 'compat-stage ' + status;
+      block.setAttribute('role', 'button');
+      block.setAttribute('tabindex', '0');
+      block.setAttribute('data-stage-code', stage.code);
+      block.addEventListener('click', function () {
+        markCompatibilitySelection('STAGE', stage.code, stage.name || stage.code);
+        compatibilityNavigate('factory://stage/' + encodeURIComponent(stage.code));
+      });
+      var title = document.createElement('strong');
+      title.textContent = stage.name || stage.code;
+      block.appendChild(title);
+      var wip = document.createElement('small');
+      wip.textContent = 'WIP ' + String(stage.wip || 0);
+      block.appendChild(wip);
+      var stageDevices = devices.filter(function (device) {
+        return device.stageCode === stage.code;
+      });
+      if (!stageDevices.length) stageDevices = demoDevices(stage.code).slice(0, 2);
+      var deviceRow = document.createElement('span');
+      deviceRow.className = 'compat-device-row';
+      stageDevices.slice(0, 2).forEach(function (device) {
+        var deviceMark = document.createElement('button');
+        deviceMark.className = 'compat-device ' + (state.statusColors && (device.state === 'ALARM' ? 'alarm' : device.state === 'WAIT' ? 'wait' : ''));
+        deviceMark.type = 'button';
+        deviceMark.textContent = device.code;
+        deviceMark.setAttribute('aria-label', device.name || device.code);
+        deviceMark.addEventListener('click', function (event) {
+          event.stopPropagation();
+          markCompatibilitySelection('DEVICE', device.code, device.name || device.code);
+          compatibilityNavigate('factory://device/' + encodeURIComponent(device.code));
+        });
+        deviceRow.appendChild(deviceMark);
+      });
+      block.appendChild(deviceRow);
+      track.appendChild(block);
+    });
+    products.slice(0, 8).forEach(function (product, index) {
+      var token = document.createElement('button');
+      token.type = 'button';
+      token.className = 'compat-product ' + (state.statusColors && (product.status === 'HOLD' ? 'hold' : product.status === 'REJECTED' ? 'rejected' : ''));
+      token.setAttribute('aria-label', product.traceCode || 'PRODUCT');
+      token.title = product.traceCode || 'PRODUCT';
+      token.addEventListener('click', function (event) {
+        event.stopPropagation();
+        markCompatibilitySelection('PRODUCT', product.traceCode || 'PRODUCT', product.traceCode || 'PRODUCT');
+        compatibilityNavigate('factory://product/' + encodeURIComponent(product.traceCode || 'PRODUCT'));
+      });
+      compatProductNodes.push(token);
+      track.appendChild(token);
+    });
+    compatPlan.replaceChildren(track);
+    updateCompatibilityProductPositions();
   }
 
   function clearObject(object) {
@@ -154,13 +270,19 @@
     root.add(deviceRoot);
     root.add(productRoot);
     scene.add(root);
+    root.position.set(0, 0, 0);
+    root.scale.set(1, 1, 1);
     clickable = [];
 
-    createGrid();
-    createStageLane();
-    createProcessOverlay();
-    createFlowArrows();
-    createDevices();
+    if (state.overview) {
+      createOverviewPlan();
+    } else {
+      createGrid();
+      createStageLane();
+      createProcessOverlay();
+      createFlowArrows();
+      createDevices();
+    }
     createProducts();
     updateHud();
     updateProbe();
@@ -215,6 +337,69 @@
         root.add(marker);
       });
     }
+  }
+
+  function createOverviewPlan() {
+    createGrid();
+
+    var lane = rect(18.2, 2.55, COLORS.belt, 0.86);
+    lane.userData.selectType = 'stage';
+    lane.userData.stageCode = 'LINE-01';
+    lane.userData.label = '整线输送主线';
+    setXY(lane, 0, 0, 0.01);
+    root.add(lane);
+    clickable.push(lane);
+
+    var center = rect(17.5, 0.16, COLORS.accent, 0.98);
+    setXY(center, 0, 0, 0.03);
+    root.add(center);
+
+    var stages = state.stages && state.stages.length ? state.stages : demoStages();
+    stages.forEach(function (stage, index) {
+      var x = -8 + index * (16 / Math.max(1, stages.length - 1));
+      var stageColor = colorForState(stage.state || 'STANDBY', COLORS.blue);
+      var block = rect(1.52, 1.22, state.statusColors ? stageColor : COLORS.panel, 0.96);
+      block.userData.selectType = 'stage';
+      block.userData.stageCode = stage.code;
+      block.userData.label = stage.name + ' · ' + (stage.state || 'STANDBY');
+      setXY(block, x, 0.1, 0.08);
+      root.add(block);
+      clickable.push(block);
+
+      var stageBorder = ring(0.58, 0.045, state.statusColors ? stageColor : COLORS.accent, 1);
+      stageBorder.scale.x = 1.28;
+      stageBorder.scale.y = 0.78;
+      setXY(stageBorder, x, 0.1, 0.1);
+      root.add(stageBorder);
+
+      var label = createLabel(stage.name || stage.code, '#173247');
+      label.scale.set(1.1, 0.28, 1);
+      setXY(label, x, 1.05, 0.2);
+      root.add(label);
+
+      var wip = createLabel('WIP ' + String(stage.wip || 0), '#476276');
+      wip.scale.set(0.84, 0.22, 1);
+      setXY(wip, x, -0.98, 0.2);
+      root.add(wip);
+
+      var stageDevices = (state.devices || []).filter(function (device) {
+        return device.stageCode === stage.code;
+      });
+      if (stageDevices.length > 0) addOverviewDevice(stageDevices[0], x, -1.48);
+    });
+
+    createFlowArrows();
+  }
+
+  function addOverviewDevice(device, x, y) {
+    var stateColor = colorForState(device.state || 'STANDBY', COLORS.blue);
+    var base = rect(0.76, 0.34, state.statusColors ? stateColor : COLORS.panel, 0.98);
+    base.userData.selectType = 'device';
+    base.userData.deviceCode = device.code;
+    base.userData.label = (device.name || device.code) + ' · ' + (device.state || 'STANDBY');
+    setXY(base, x, y, 0.12);
+    deviceRoot.add(base);
+    clickable.push(base);
   }
 
   function addProcessBlock(x, y, width, height, color, opacity) {
@@ -506,6 +691,20 @@
     });
   }
 
+  function demoStages() {
+    return [
+      { code: 'PRETREATMENT', name: '预处理', state: 'RUNNING', wip: 0 },
+      { code: 'GAS_INSPECTION', name: '气体检测', state: 'RUNNING', wip: 0 },
+      { code: 'APPEARANCE_INSPECTION', name: '外观检测', state: 'RUNNING', wip: 0 },
+      { code: 'BEVERAGE_READY', name: '饮料制备', state: 'RUNNING', wip: 0 },
+      { code: 'FILLING', name: '灌装', state: 'RUNNING', wip: 0 },
+      { code: 'SECONDARY_INSPECTION', name: '二次检测', state: 'RUNNING', wip: 0 },
+      { code: 'PACKING', name: '装箱', state: 'RUNNING', wip: 0 },
+      { code: 'AGV_TRANSPORT', name: 'AGV运输', state: 'RUNNING', wip: 0 },
+      { code: 'WAREHOUSE_INBOUND', name: '仓储', state: 'RUNNING', wip: 0 }
+    ];
+  }
+
   function colorForState(value, neutral) {
     if (!state.statusColors) return neutral;
     if (value === 'RUNNING' || value === 'PASS' || value === 'PASSED' || value === 'COMPLETED') return COLORS.running;
@@ -518,6 +717,10 @@
     if (!productRoot) return;
     productRoot.children.forEach(function (product, index) {
       var t = (phase + index * 0.16) % 1;
+      if (state.overview) {
+        product.position.set(-7.9 + t * 15.8, index % 2 ? 0.42 : -0.42, 0.25);
+        return;
+      }
       var y = state.stageCode === 'WAREHOUSE_INBOUND' ? 0.9 + (index % 3) * 0.45 : index % 2 ? 0.28 : -0.28;
       if (state.stageCode === 'AGV_TRANSPORT') y = index % 2 ? 0.48 : -0.48;
       var x = -7.7 + t * 15.4;
@@ -549,6 +752,12 @@
   function renderSnapshotFrame() {
     animateFlow(motionPhase);
     positionProducts(motionPhase);
+    if (state.overview) {
+      renderCompatibilityPlan();
+      compatPlan.classList.remove('hidden');
+    } else if (!compatPlan.classList.contains('hidden')) {
+      compatPlan.classList.add('hidden');
+    }
     if (renderer && scene && camera) renderer.render(scene, camera);
     updateProbe();
   }
@@ -711,6 +920,11 @@
     }
     animateFlow(motionPhase);
     positionProducts(motionPhase);
+    if (state.overview) {
+      if (compatProductNodes.length === 0) renderCompatibilityPlan();
+      else updateCompatibilityProductPositions();
+      compatPlan.classList.remove('hidden');
+    }
     renderer.render(scene, camera);
     updateProbe();
   }
@@ -737,6 +951,7 @@
           updateHud();
           renderSnapshotFrame();
         }
+        showCompatibilityPlanIfNeeded();
       } catch (error) {
         state.errorMessage = error && error.message ? error.message : 'DATA ERROR';
         sourceLabel.textContent = 'DATA ERROR';
@@ -746,6 +961,7 @@
     dispose: function () {
       running = false;
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (compatWatchTimer) window.clearTimeout(compatWatchTimer);
       if (resizeObserver) resizeObserver.disconnect();
       if (renderer && renderer.domElement) {
         renderer.domElement.removeEventListener('pointerdown', onPointerDown);

@@ -83,7 +83,7 @@ export struct FactoryThreeScene {
         .width('100%')
         .height(this.sceneHeight)
         .id(this.label.indexOf('2D') >= 0 ? 'workstation-scene-2d' : 'workstation-scene-3d')
-        .backgroundColor('#DFEAF1')
+        .backgroundColor('#0F2737')
 
       if (!this.webReady) {
         Column({ space: 8 }) {
@@ -93,7 +93,7 @@ export struct FactoryThreeScene {
         .width('100%')
         .height(this.sceneHeight)
         .justifyContent(FlexAlign.Center)
-        .backgroundColor('#DFEAF1')
+        .backgroundColor('#0F2737')
       }
     }
     .width('100%')

@@ -1,6 +1,8 @@
 import { router } from '@kit.ArkUI'
 import { Theme, statusColor } from '../common/Theme'
 import { SectionTitle, MetricTile, StateBadge } from '../components/IndustrialComponents'
+import { FactoryPlanScene } from '../components/FactoryPlanScene'
+import { FactoryOverviewScene } from '../components/FactoryOverviewScene'
 import { FACTORY_STAGES } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { createMockBundle } from '../service/MockFactoryData'
@@ -19,6 +21,48 @@ import {
   RuntimeStage,
   StageDefinition
 } from '../model/FactoryModels'
+
+class OverviewSceneDevice {
+  code: string = ''
+  name: string = ''
+  state: string = 'STANDBY'
+  source: string = 'SIMULATION'
+  reading: string = ''
+  stageCode: string = ''
+}
+
+class OverviewSceneProduct {
+  traceCode: string = ''
+  bottleType: string = ''
+  status: string = 'RUNNING'
+  defectType: string = ''
+}
+
+class OverviewSceneStage {
+  code: string = ''
+  name: string = ''
+  state: string = 'STANDBY'
+  wip: number = 0
+  onlineDevices: number = 0
+  totalDevices: number = 0
+}
+
+class OverviewScenePayload {
+  overview: boolean = true
+  stageCode: string = 'LINE-01'
+  stageName: string = '装瓶生产线'
+  stateVersion: number = 0
+  source: string = 'LOCAL DEMO'
+  errorMessage: string = ''
+  paused: boolean = false
+  statusColors: boolean = true
+  layoutEdit: boolean = false
+  speed: number = 0.12
+  progress: number = 0
+  devices: Array<OverviewSceneDevice> = []
+  products: Array<OverviewSceneProduct> = []
+  stages: Array<OverviewSceneStage> = []
+}
 
 @Entry
 @Component
@@ -39,6 +83,8 @@ struct FactoryOverview {
   @State totalDeviceCount: number = 0
   @State fallbackDeviceCount: number = 0
   @State assistantController: AssistantController = new AssistantController(displayAssistantHost)
+  @State overviewSelectedDeviceCode: string = ''
+  @State overviewSelectedTraceCode: string = ''
 
   private fallbackBundle: FactoryBundle = createMockBundle()
   private refreshTimer: number = -1
@@ -160,6 +206,67 @@ struct FactoryOverview {
     return status === 'COMPLETED' ? '已入库' : status === 'REJECTED' ? '已剔除' : status === 'HOLD' ? '待处理' : '运行中'
   }
 
+  private deviceRuntime(code: string): string {
+    let state: string = 'STANDBY'
+    this.runtimeData().devices.forEach(item => {
+      if (item.deviceCode === code) state = item.state
+    })
+    return state
+  }
+
+  private deviceSource(code: string): string {
+    let source: string = 'SIMULATION'
+    this.runtimeData().devices.forEach(item => {
+      if (item.deviceCode === code) source = item.source + (item.fallback ? ' · 兜底' : '')
+    })
+    return source
+  }
+
+  private deviceReading(code: string): string {
+    let value: string = ''
+    this.operationsData().latestReadings.forEach(item => {
+      if (item.deviceCode === code) value = item.value + ' ' + item.unit
+    })
+    return value
+  }
+
+  private overviewScenePayload(): string {
+    const payload = new OverviewScenePayload()
+    payload.stateVersion = this.bundle.stateVersion
+    payload.source = this.bundle.source
+    payload.errorMessage = this.bundle.errorMessage
+    FACTORY_STAGES.forEach((stage: StageDefinition) => {
+      const stageItem = new OverviewSceneStage()
+      stageItem.code = stage.code
+      stageItem.name = stage.name
+      stageItem.state = this.stageStatus(stage)
+      stageItem.wip = this.stageProductCount(stage.code)
+      stageItem.onlineDevices = this.runtimeData().devices.filter(device =>
+        device.stageCode === stage.code && device.state !== 'OFFLINE').length
+      stageItem.totalDevices = stage.devices.length
+      payload.stages.push(stageItem)
+      stage.devices.forEach(device => {
+        const deviceItem = new OverviewSceneDevice()
+        deviceItem.code = device.code
+        deviceItem.name = device.name
+        deviceItem.stageCode = stage.code
+        deviceItem.state = this.deviceRuntime(device.code)
+        deviceItem.source = this.deviceSource(device.code)
+        deviceItem.reading = this.deviceReading(device.code)
+        payload.devices.push(deviceItem)
+      })
+    })
+    this.dashboardRuns().filter(item => item.status !== 'COMPLETED').slice(0, 12).forEach(run => {
+      const product = new OverviewSceneProduct()
+      product.traceCode = run.traceCode
+      product.bottleType = run.bottleType || '待识别'
+      product.status = run.status
+      product.defectType = run.defectType || ''
+      payload.products.push(product)
+    })
+    return JSON.stringify(payload)
+  }
+
   private selectStage(stage: StageDefinition): void {
     displayAssistantHost.publishSelection(AssistantEntityType.STAGE, stage.code, stage.name, 'ARKUI', [
       { code: 'state', label: '状态', displayValue: this.stageStatus(stage) },
@@ -191,66 +298,135 @@ struct FactoryOverview {
     ])
   }
 
+  private selectOverviewDevice(deviceCode: string, source: string): void {
+    this.overviewSelectedDeviceCode = deviceCode
+    let name: string = deviceCode
+    FACTORY_STAGES.forEach(stage => stage.devices.forEach(device => {
+      if (device.code === deviceCode) name = device.name
+    }))
+    displayAssistantHost.publishSelection(AssistantEntityType.DEVICE, deviceCode, name, source === 'THREE_2D' ? 'THREE_2D' : 'ARKUI', [
+      { code: 'state', label: '状态', displayValue: this.deviceRuntime(deviceCode) },
+      { code: 'source', label: '来源', displayValue: this.deviceSource(deviceCode) },
+      { code: 'reading', label: '读数', displayValue: this.deviceReading(deviceCode) }
+    ])
+  }
+
+  private selectOverviewProduct(traceCode: string, source: string): void {
+    this.overviewSelectedTraceCode = traceCode
+    const run = this.dashboardRuns().find(item => item.traceCode === traceCode)
+    if (run === undefined) return
+    this.selectProduct(run)
+  }
+
+  private openStageFromPlan(stageCode: string): void {
+    const stage = FACTORY_STAGES.find(item => item.code === stageCode)
+    if (stage === undefined) return
+    this.selectStage(stage)
+    router.pushUrl({ url: 'pages/StageDetail', params: { stageCode: stage.code } })
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopEnd }) {
       Scroll() {
-      Column() {
-        Row() {
-          Column() {
-            Text('BOTTLING LINE · NATIVE MONITOR').fontSize(10).fontColor('#A9CDE6').fontWeight(FontWeight.Bold)
-            Text('智慧装瓶产线全局监控').fontSize(29).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 6 })
-            Text('生产、质量、设备、物流与仓储一体化运行态势').fontSize(12).fontColor('#D2E0EB').margin({ top: 5 })
-          }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-          Column() {
-            StateBadge({
-              status: this.bundle.online ? (this.openExceptionCount > 0 ? 'HOLD' : 'RUNNING') : 'STANDBY',
-              label: this.bundle.online ? (this.openExceptionCount > 0 ? '连续运行 · 局部异常' : '后端在线') : 'LOCAL DEMO'
-            })
-            Text('实时通道：' + (this.realtimeOnline ? '在线' : '重连中')).fontSize(9).fontColor('#D2E0EB').margin({ top: 8 })
-            Text(this.formatTime(this.bundle.updatedAt)).fontSize(8).fontColor('#B8CEDC').margin({ top: 4 })
-          }.alignItems(HorizontalAlign.End)
-        }.width('100%').padding(22).backgroundColor(Theme.navy)
-
-        Row() {
-          Text('全局总览').fontSize(10).fontColor(Theme.muted).fontWeight(FontWeight.Bold)
-          Blank()
-          Button('刷新数据').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => void FactoryRepository.refresh())
-        }.width('100%').padding({ left: 16, right: 8, top: 4, bottom: 4 })
-
         Column() {
-          SectionTitle({
-            code: 'CONTINUOUS PRODUCTION FLOW',
-            title: '整线生产流程',
-            description: '点击任一工位查看设备、物料、质量门和异常影响。'
-          })
+          Row() {
+            Column() {
+              Text('DIGITAL DISPLAY / LINE 01').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+              Text('智慧装瓶产线 · 总览').fontSize(28).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 5 })
+              Text('整线状态、工艺节拍与当前批次的单一入口').fontSize(11).fontColor(Theme.muted).margin({ top: 5 })
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+            Column() {
+              StateBadge({
+                status: this.bundle.online ? (this.openExceptionCount > 0 ? 'HOLD' : 'RUNNING') : 'STANDBY',
+                label: this.bundle.online ? (this.openExceptionCount > 0 ? '运行 · 局部异常' : '后端在线') : 'LOCAL DEMO'
+              })
+              Text('实时通道 ' + (this.realtimeOnline ? '在线' : '重连中') + '  ·  ' + this.bundle.source).fontSize(9).fontColor(Theme.muted).margin({ top: 7 })
+              Text('快照 ' + this.formatTime(this.bundle.updatedAt)).fontSize(8).fontColor(Theme.muted).margin({ top: 3 })
+            }.alignItems(HorizontalAlign.End)
+          }.width('100%').padding(18).backgroundColor(Theme.panel).border({ width: { bottom: 3 }, color: Theme.navy })
+
+          Column() {
+            Row() {
+              Column() {
+                Text('01  PROCESS NAVIGATION').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+                Text('工艺主流程').fontSize(21).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              Button('刷新数据').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => void FactoryRepository.refresh())
+            }.width('100%').padding({ bottom: 10 }).border({ width: { bottom: 2 }, color: Theme.line })
+            Scroll() {
+              Row({ space: 8 }) {
+                ForEach(FACTORY_STAGES, (stage: StageDefinition, index: number) => {
+                  this.stageCard(stage, index)
+                }, (stage: StageDefinition) => stage.code)
+              }.padding({ top: 12, bottom: 6 })
+            }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Auto).width('100%')
+          }.width('100%').padding(16).backgroundColor(Theme.panel)
+
+          Column() {
+            Row() {
+              Column() {
+                Text('02  LINE SYNOPTIC').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+                Text('二维产线主画布').fontSize(23).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+                Text('设备、输送带、瓶子和工位状态按当前快照持续运动；点击对象可查看上下文。').fontSize(10).fontColor(Theme.muted).margin({ top: 4 })
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              StateBadge({ status: this.bundle.source === 'MQTT' ? 'RUNNING' : 'WAIT', label: this.bundle.source })
+            }.width('100%').padding({ bottom: 10 })
+            FactoryPlanScene({
+              payload: this.overviewScenePayload(),
+              caption: '整线二维工艺图',
+              heightValue: 430,
+              selectionSource: 'THREE_2D',
+              selectedDeviceCode: $overviewSelectedDeviceCode,
+              selectedTraceCode: $overviewSelectedTraceCode,
+              onStageSelected: (stageCode: string, source: string): void => this.openStageFromPlan(stageCode),
+              onDeviceSelected: (deviceCode: string, source: string): void => this.selectOverviewDevice(deviceCode, source),
+              onProductSelected: (traceCode: string, source: string): void => this.selectOverviewProduct(traceCode, source),
+              onSelectionCleared: (source: string): void => {
+                this.overviewSelectedDeviceCode = ''
+                this.overviewSelectedTraceCode = ''
+                displayAssistantHost.clearSelection('THREE_2D')
+              }
+            })
+          }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.blue })
+
+          Column() {
+            Row() {
+              Column() {
+                Text('03  DIGITAL TWIN').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+                Text('三维整线数字孪生').fontSize(23).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+                Text('保留整线空间关系与设备作业动画；点击工位进入对应作业页。').fontSize(10).fontColor(Theme.muted).margin({ top: 4 })
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              Text('STATE v' + this.bundle.stateVersion).fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+            }.width('100%').padding({ bottom: 10 })
+            FactoryOverviewScene({
+              payload: this.overviewScenePayload(),
+              heightValue: 430,
+              onStageSelected: (stageCode: string): void => this.openStageFromPlan(stageCode)
+            })
+          }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { bottom: 2 }, color: Theme.line })
+
           Scroll() {
-            Row({ space: 10 }) {
-              ForEach(FACTORY_STAGES, (stage: StageDefinition, index: number) => {
-                this.stageCard(stage, index)
-              }, (stage: StageDefinition) => stage.code)
-            }.padding({ top: 16, bottom: 8 })
-          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Auto).width('100%')
-        }.width('100%').padding(18).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.blue }).borderRadius(3)
+            Row({ space: 8 }) {
+              this.kpiTile('累计投入', String(this.dashboardTotal), '进入产线的追踪批次', 'total')
+              this.kpiTile('完成入库', String(this.dashboardCompleted), '全流程完成', 'completed', 'PASS')
+              this.kpiTile('在制品 WIP', String(this.dashboardWip), '运行或待处理', 'wip')
+              this.kpiTile('检测剔除', String(this.dashboardRejected), '不合格品已隔离', 'rejected', 'FAIL')
+              this.kpiTile('待人工处理', String(this.dashboardHolding), '暂停自动放行', 'holding', 'WAIT')
+              this.kpiTile('批次通过率', this.dashboardPassRate, '完成 / 已判定批次', 'passRate', 'PASS')
+            }.padding({ top: 14, bottom: 4 })
+          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
 
-        Scroll() {
-          Row({ space: 8 }) {
-            this.kpiTile('累计投入', String(this.dashboardTotal), '进入产线的追踪批次', 'total')
-            this.kpiTile('完成入库', String(this.dashboardCompleted), '全流程完成', 'completed', 'PASS')
-            this.kpiTile('在制品 WIP', String(this.dashboardWip), '运行或待处理', 'wip')
-            this.kpiTile('检测剔除', String(this.dashboardRejected), '不合格品已隔离', 'rejected', 'FAIL')
-            this.kpiTile('待人工处理', String(this.dashboardHolding), '暂停自动放行', 'holding', 'WAIT')
-            this.kpiTile('批次通过率', this.dashboardPassRate, '完成 / 已判定批次', 'passRate', 'PASS')
-          }.padding({ top: 14, bottom: 4 })
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
+          Row({ space: 10 }) {
+            this.productionPanel()
+            this.equipmentPanel()
+            this.exceptionPanel()
+          }.width('100%').padding({ top: 10 })
 
-        Flex({ wrap: FlexWrap.Wrap }) {
-          this.productionPanel()
-          this.equipmentPanel()
-          this.logisticsPanel()
-          this.exceptionPanel()
-          this.tracePanel()
-        }.width('100%').padding({ top: 10, bottom: 24 })
-      }.width('100%').alignItems(HorizontalAlign.Start)
+          Row({ space: 10 }) {
+            this.logisticsPanel()
+            this.tracePanel()
+          }.width('100%').padding({ top: 10, bottom: 24 })
+        }.width('100%').alignItems(HorizontalAlign.Start).padding({ bottom: 24 })
       }.width('100%').height('100%').backgroundColor(Theme.page)
       AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
         .margin({ top: 16, right: 16 })

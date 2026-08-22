@@ -14,20 +14,20 @@
 
   var THREE = window.THREE;
   var COLORS = {
-    navy: 0x123a5b,
-    blue: 0x145da0,
-    accent: 0x1f7acb,
-    steel: 0x698395,
-    steelDark: 0x405968,
-    floor: 0xd6e2e9,
-    white: 0xf4f8fb,
+    navy: 0x071219,
+    blue: 0x176f96,
+    accent: 0x2cc4d8,
+    steel: 0x45616d,
+    steelDark: 0x203943,
+    floor: 0x142831,
+    white: 0x8caab4,
     running: 0x238b5a,
     warning: 0xd89016,
     alarm: 0xc83f49,
     offline: 0x8397a6,
     product: 0x2a86cf,
     liquid: 0x40a8d8,
-    box: 0xb68a52
+    box: 0x936e43
   };
 
   var state = {
@@ -110,8 +110,8 @@
   function init() {
     try {
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xdfeaf1);
-      scene.fog = new THREE.Fog(0xdfeaf1, 22, 42);
+      scene.background = new THREE.Color(0x0a171e);
+      scene.fog = new THREE.Fog(0x0a171e, 22, 42);
 
       createCameraForMode();
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
@@ -121,9 +121,9 @@
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       host.appendChild(renderer.domElement);
 
-      var hemisphere = new THREE.HemisphereLight(0xf5fbff, 0x657786, 2.2);
+      var hemisphere = new THREE.HemisphereLight(0xbad3d8, 0x071219, 1.65);
       scene.add(hemisphere);
-      var key = new THREE.DirectionalLight(0xffffff, 3.2);
+      var key = new THREE.DirectionalLight(0xd8eef0, 2.35);
       key.position.set(-8, 15, 10);
       key.castShadow = true;
       key.shadow.mapSize.set(1024, 1024);
@@ -132,7 +132,7 @@
       key.shadow.camera.top = 14;
       key.shadow.camera.bottom = -14;
       scene.add(key);
-      var rim = new THREE.DirectionalLight(0x6db7e8, 1.5);
+      var rim = new THREE.DirectionalLight(0x2a9db9, 1.7);
       rim.position.set(10, 8, -10);
       scene.add(rim);
 
@@ -168,9 +168,9 @@
     floor.userData.isFloor = true;
     scene.add(floor);
 
-    var grid = new THREE.GridHelper(36, 36, 0x7c9bad, 0xaec0cb);
+    var grid = new THREE.GridHelper(36, 36, 0x2b5966, 0x1e3d49);
     grid.position.y = -0.035;
-    grid.material.opacity = 0.35;
+    grid.material.opacity = 0.46;
     grid.material.transparent = true;
     scene.add(grid);
 
@@ -411,6 +411,19 @@
     else if (kind === 'lamp') createLamp(group);
     else createMachine(group);
 
+    var statusRail = box(1.76, 0.07, 0.09, COLORS.offline);
+    statusRail.position.set(0, 0.25, 0.72);
+    statusRail.userData.isStatusIndicator = true;
+    group.add(statusRail);
+
+    var lightPost = cylinder(0.035, 0.72, COLORS.steel, 10);
+    lightPost.position.set(-0.82, 0.62, -0.56);
+    group.add(lightPost);
+    var statusLight = cylinder(0.1, 0.18, COLORS.offline, 16);
+    statusLight.position.set(-0.82, 1.02, -0.56);
+    statusLight.userData.isStatusIndicator = true;
+    group.add(statusLight);
+
     group.traverse(function (child) {
       if (child.isMesh) {
         child.userData.deviceOwner = group;
@@ -464,6 +477,11 @@
       core.position.y = 0.34;
       group.add(core);
     }
+
+    var statusRail = box(kind === 'agv' ? 2.08 : 1.7, 0.05, 0.09, COLORS.offline);
+    statusRail.position.set(0, 0.29, -0.56);
+    statusRail.userData.isStatusIndicator = true;
+    group.add(statusRail);
 
     var label = createLabelSprite(device.name || device.code, '#173247');
     label.userData.deviceOwner = group;
@@ -788,7 +806,9 @@
       group.traverse(function (child) {
         if (!child.isMesh) return;
         var baseColor = child.userData.baseColor === undefined ? COLORS.steel : child.userData.baseColor;
-        var targetColor = state.statusColors ? colorForState(runtimeState, baseColor) : baseColor;
+        var targetColor = child.userData.isStatusIndicator && state.statusColors
+          ? colorForState(runtimeState, COLORS.offline)
+          : baseColor;
         child.material.color.setHex(targetColor);
       });
     });
@@ -877,8 +897,10 @@
       camera.position.set(0, 24, 0);
       camera.up.set(0, 0, -1);
       camera.lookAt(0, 0, 0);
+      document.body.classList.add('planar');
       return;
     }
+    document.body.classList.remove('planar');
     var cosPitch = Math.cos(cameraOrbit.pitch);
     camera.position.set(
       Math.sin(cameraOrbit.yaw) * cosPitch * cameraOrbit.distance,
@@ -905,7 +927,9 @@
     renderer.setSize(width, height, false);
     if (camera.isOrthographicCamera) {
       var aspect = width / height;
-      var frustum = 15;
+      // The stage view is a very wide tablet canvas. Keep the process lane large
+      // enough to read instead of fitting the empty horizontal margins.
+      var frustum = state.viewMode === 'PLANAR' ? 4.7 : 15;
       camera.left = -frustum * aspect;
       camera.right = frustum * aspect;
       camera.top = frustum;
