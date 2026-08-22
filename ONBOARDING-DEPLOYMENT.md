@@ -349,3 +349,4 @@ DevEco SDK、OHPM 缓存、模拟器和构建目录也应在 D 盘配置。
 
 - `contracts/README.md`
 - `docs/design/INDUSTRIAL-HMI-UI-SYSTEM.md`
+- `SOFTWARE-HARDWARE-INTEGRATION-REQUIREMENTS.md`（企业软硬件对接、设备点位、协议和验收）

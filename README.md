@@ -60,6 +60,10 @@ AI 默认使用 `LOCAL_DEMO`，不会自动调用外部模型；没有 MQTT 数�
 
 **[项目交接与部署说明](ONBOARDING-DEPLOYMENT.md)**
 
+企业软硬件对接、设备点位、协议、命令回执和验收要求见：
+
+**[软硬件对接需求](SOFTWARE-HARDWARE-INTEGRATION-REQUIREMENTS.md)**
+
 最简启动顺序：
 
 1. 安装 Git、JDK 8、Maven、MySQL、Python、DevEco Studio 和 HarmonyOS SDK。
