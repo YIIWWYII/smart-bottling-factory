@@ -1,42 +1,100 @@
-# 智慧装瓶工厂前后端
+# 智慧装瓶工厂
 
-本仓库包含五个独立业务工程：三个鸿蒙前端、Spring Boot 生产后端和独立 AI 中枢。另有一个供三端复用的鸿蒙助手包 `packages/harmony-assistant`；它由 AI 中枢任务实现，是 HAR 依赖，不是独立 App 或第六个业务工程。
+智慧装瓶工厂是一套面向装瓶生产线的工业监测与控制系统，覆盖瓶体预处理、气体安全检测、外观检测、饮料准备、灌装、二次检测、装箱、AGV 运输和仓储入库九个环节。
 
-| 工程 | 目录 | 应用标识 | 职责 |
-| --- | --- | --- | --- |
-| 数字展板 | `apps/digital-display/BottlingFactoryDisplay` | `com.factory.bottling.display` | 全局总览、工位详情、2D/3D 动态可视化，只读 |
-| 小屏终端 | `apps/workstation-terminal/BottlingFactoryTerminal` | `com.factory.bottling.terminal` | 本工位状态、设备参数、受控操作和命令结果 |
-| 后台管理 | `apps/admin-console/BottlingFactoryAdmin` | `com.factory.bottling.admin` | 登录认证、运营管理、异常处置、权限和审计 |
-| 后端 | `services/backend/hdc_server` | Spring Boot | 业务中枢、持久化、实时推送、设备与 AI 外部接口 |
-| AI 中枢 | `services/ai-center` | Python AI service | 视觉识别、隐式决策、上下文问答、RAG、MCP 和知识治理 |
-| 共享助手包 | `packages/harmony-assistant` | `@bottling/harmony-assistant` HAR | 三端统一助手 UI、会话、流式响应、引用和错误/权限状态 |
+系统由三个鸿蒙原生应用、一个 Spring Boot 生产后端、一个独立 AI 中枢和一个三端共享的鸿蒙助手包组成。项目支持本地模拟数据演示，也为 MQTT 传感器、视觉识别和生产设备接入保留接口。
 
-共同接口真相源在 [contracts/README.md](contracts/README.md)，工程边界和合并门槛在 [docs/engineering/DEVELOPMENT_STANDARD.md](docs/engineering/DEVELOPMENT_STANDARD.md)，七个 Codex 对话的职责和提示词在 `contracts/ownership.md` 与 `docs/ai-prompts/`。
+## 项目组成
 
-第一次接手项目请先阅读 [交接与部署说明](docs/ONBOARDING-DEPLOYMENT.md)。其中包含当前已验证范围、D 盘环境要求、MySQL/AI 配置、三个鸿蒙 App 构建运行、演示账号和常见问题。当前版本适合模拟数据演示和联调，真实硬件、真实大模型和生产签名仍需单独配置与验收。
+| 模块 | 位置 | 用途 |
+| --- | --- | --- |
+| 数字展板 | `apps/digital-display` | 查看整条产线总览、九个工序和工序详情；包含独立 2D 平面工艺图与 3D Three.js 场景 |
+| 工位终端 | `apps/workstation-terminal` | 查看当前工位、设备和物料状态，进行有权限的参数调整并查看命令回执 |
+| 后台管理 | `apps/admin-console` | 用户认证、生产任务、设备、异常、产品物料、物流仓储、AI 配置、知识治理和操作审计 |
+| 生产后端 | `services/backend/hdc_server` | Spring Boot 业务中枢，负责生产事实、MySQL 持久化、实时推送、权限和设备命令安全校验 |
+| AI 中枢 | `services/ai-center` | 独立 Python 服务，负责助手会话、模型配置、知识治理、演示 RAG、视觉和决策接口 |
+| 共享助手 | `packages/harmony-assistant` | 三个鸿蒙应用共用的 ArkUI 助手 HAR，统一会话、流式回答、引用和权限反馈 |
 
-## 开发原则
+## 架构关系
 
-1. 七个对话各用独立物理工作区和分支；总架构只改 `README/contracts/docs`，五个开发对话只改各自所有权目录，融合对话负责最终合并和联调。
-2. 三个鸿蒙应用保持独立，不重新合并成入口选择器；三端复用同一个上下文助手包，只实现各自的宿主上下文适配器。
-3. 公共契约只能通过明确的契约变更提案修改，前端不得猜测字段。
-4. 数字展板和小屏的 2D、3D 都通过 HarmonyOS ArkWeb 的 `Web` 组件内嵌 HAP 本地 Three.js 实现；2D 是独立平面工艺图，不是 3D 俯视角。
-5. 共享 AI 助手使用原生 ArkUI 侧栏/抽屉，统一会话、流式回答、引用、加载/错误状态；三端通过稳定实体 ID 提供文字、表格行、参数卡片和 Three.js 设备/物料选择上下文，不得复制三套助手。
-6. 视觉识别、隐式决策、问答、RAG、MCP 和知识库归 AI 中枢；Spring Boot 不实现模型、提示词、向量检索或文档切分。
-7. AI 只提交字段级参数命令意图，Spring Boot 执行最终权限、人工锁、版本、范围和联锁校验；设备 ACK 后才算执行成功。
-8. 用户资料在后台管理上传和审核，只有 AI 中枢完成正式发布与索引后才能参与 RAG。
+```text
+传感器 / 视觉设备 / MQTT
+            │
+            ▼
+Spring Boot 生产后端 ───── MySQL
+       │       │  ╲
+       │       │   ╲ AI 中枢 ── 模型 / RAG / 知识治理
+       │       │
+       ├───────┼────── HTTP / WebSocket
+       │       │
+       ▼       ▼
+数字展板   工位终端   后台管理
+```
 
-## 七对话协作
+数字展板和工位终端中的 2D、3D 画面均通过 HarmonyOS ArkWeb 加载 HAP 内的本地 Three.js 资源。2D 是独立的平面工艺图，不是 3D 场景的俯视角。
 
-- 总架构：`codex/ai-architecture`，维护跨端契约、所有权、提示词和验收门槛，不开发业务模块。
-- 数字展板、小屏、后台、生产后端：分别维护自己的 `apps/` 或 `services/backend/`。
-- AI 中枢：`codex/ai-center`，同时维护 `services/ai-center/` 和唯一共享包 `packages/harmony-assistant/`。
-- 融合评审：`integration/full-system`，按契约合并、验证五个业务工程和共享包，不创建新应用。
-9. 无 MQTT 数据时允许明确标识的 `SIMULATION`/`LOCAL DEMO`，不得伪装成实机数据。
-10. `main` 只通过融合评审后的 PR 更新，禁止开发对话直接推送。
+## 当前能力
 
-## 环境约束
+- 九工序连续生产流程和并行饮料准备流程展示。
+- 设备、传感器、在制品、质量门、报警、AGV 和仓储信息展示。
+- 2D/3D 场景独立开关、暂停/恢复、状态标识、设备拖拽布局和实体选择。
+- Spring Boot HTTP 接口、生产 WebSocket、MySQL 持久化和模拟数据降级。
+- 工位端按设备能力、角色、范围、联锁和人工锁执行受控命令。
+- AI 助手会话、流式响应、停止、重试、知识提交/审核和 AI 配置。
+- 管理端支持模型地址、模型名、API Key、超时和 RAG 参数配置；API Key 不返回明文。
 
-- DevEco、SDK、模拟器、依赖缓存、构建暂存和工作区都放在 `D:\HarmonyOS-Dev`，不占用 C 盘。
-- 鸿蒙构建使用 `D:\Codex\.codex\skills\deveco-cli\scripts\build-harmony.ps1`。
-- DevEco/Hvigor/ArkTS 问题先查 `D:\HarmonyOS-Dev\Logs\devecocli-official-docs.md`，再查 `devecocli docs`，最后查华为官方在线文档。
+## 当前限制
+
+当前仓库适合代码评审、模拟数据演示和软件联调，不能直接当作真实产线控制软件使用。以下能力需要在现场或正式环境单独配置和验收：
+
+- 真实传感器、MQTT Broker、PLC、机械臂和 AGV。
+- 真实视觉识别模型和生产级推理服务。
+- 真实大模型、生产级向量数据库和正式 MCP 工具链。
+- 鸿蒙调试签名、真机安装和长时间运行性能。
+
+AI 默认使用 `LOCAL_DEMO`，不会自动调用外部模型；没有 MQTT 数据时，页面会明确显示 `SIMULATION` 或 `LOCAL DEMO`。
+
+## 快速开始
+
+完整的跨电脑安装、配置、启动、账号和故障排查步骤见：
+
+**[项目交接与部署说明](ONBOARDING-DEPLOYMENT.md)**
+
+最简启动顺序：
+
+1. 安装 Git、JDK 8、Maven、MySQL、Python、DevEco Studio 和 HarmonyOS SDK。
+2. 克隆仓库并创建 MySQL 数据库 `hdc`。
+3. 启动 Spring Boot 后端，默认端口 `8088`。
+4. 启动 AI 中枢，默认端口 `8091`。
+5. 在三个 App 的 `ApiConfig.ets` 中填写运行服务电脑的局域网 IP。
+6. 用 DevEco Studio 或官方 `devecocli` 分别构建并运行三个鸿蒙工程。
+
+项目、SDK、模拟器、Maven 仓库和 Python 环境建议放在 D 盘或其他非 C 盘的 ASCII 路径。
+
+## 演示账号
+
+后台管理：`admin / admin123`
+
+工位端密码统一为 `station123`，用户名对应工序：
+
+```text
+station_pretreatment   station_gas          station_appearance
+station_beverage       station_filling      station_secondary
+station_packing        station_agv          station_warehouse
+```
+
+数字展板默认只读，不需要登录。
+
+## 目录说明
+
+```text
+apps/       三个鸿蒙原生应用
+services/   Spring Boot 后端和 Python AI 中枢
+packages/   三端共享的鸿蒙助手 HAR
+contracts/  跨模块接口和数据约定
+docs/       工程验证和设计参考
+```
+
+## License
+
+当前仓库主要用于项目组开发、教学演示和竞赛展示。正式对外发布前，请补充项目组确定的开源许可证和第三方资源声明。

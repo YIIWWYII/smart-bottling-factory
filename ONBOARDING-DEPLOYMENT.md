@@ -6,7 +6,7 @@
 
 ## 1. 先看结论
 
-当前 GitHub 分支 `codex/ui-system-redesign` 已包含以下部分：
+当前 GitHub 默认分支 `main` 已包含以下部分：
 
 | 部分 | 当前状态 | 说明 |
 | --- | --- | --- |
@@ -100,12 +100,12 @@ Set-Location 'D:\HarmonyOS-Dev\Workspaces'
 git clone https://github.com/YIIWWYII/smart-bottling-factory.git smart-bottling-factory
 Set-Location '.\smart-bottling-factory'
 git fetch origin --prune
-git checkout codex/ui-system-redesign
-git pull --ff-only origin codex/ui-system-redesign
+git checkout main
+git pull --ff-only origin main
 git status --short --branch
 ```
 
-如果老师只需要稳定融合版本，应先询问项目负责人使用哪个分支；不要自行把多个开发分支混合复制到一个工程中。本次功能核验基线为 `codex/ui-system-redesign` 的 `866f68b`；拉取后以该分支最新提交为准，可用 `git rev-parse HEAD` 查看。
+陌生使用者直接使用默认分支 `main` 即可，不要自行把多个开发分支混合复制到一个工程中。拉取后可用 `git rev-parse HEAD` 查看当前版本。
 
 ## 5. 初始化 MySQL
 
