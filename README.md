@@ -13,6 +13,8 @@
 
 共同接口真相源在 [contracts/README.md](contracts/README.md)，工程边界和合并门槛在 [docs/engineering/DEVELOPMENT_STANDARD.md](docs/engineering/DEVELOPMENT_STANDARD.md)，七个 Codex 对话的职责和提示词在 `contracts/ownership.md` 与 `docs/ai-prompts/`。
 
+第一次接手项目请先阅读 [交接与部署说明](docs/ONBOARDING-DEPLOYMENT.md)。其中包含当前已验证范围、D 盘环境要求、MySQL/AI 配置、三个鸿蒙 App 构建运行、演示账号和常见问题。当前版本适合模拟数据演示和联调，真实硬件、真实大模型和生产签名仍需单独配置与验收。
+
 ## 开发原则
 
 1. 七个对话各用独立物理工作区和分支；总架构只改 `README/contracts/docs`，五个开发对话只改各自所有权目录，融合对话负责最终合并和联调。
