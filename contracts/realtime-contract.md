@@ -21,7 +21,7 @@
 }
 ```
 
-当前 `factory.stage.changed` 部分字段在顶层，融合时先兼容读取，再统一到 `payload`。
+当前 `factory.stage.changed` 部分字段在顶层，服务升级期间先兼容读取，再统一到 `payload`。
 
 产线状态事件使用 `lineId/stageCode/stateVersion`。问答和知识审核不属于产线快照，改用 `aggregateType`、`aggregateId`、`aggregateVersion`，例如会话 ID 或提交审核 ID；不得伪造无意义的 `lineId`。
 

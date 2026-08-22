@@ -19,7 +19,7 @@
 
 ### 1.1 已验证的证据
 
-在当前融合工作区执行过：
+在项目组验证环境执行过：
 
 - 后端 `mvn test`：`Tests run: 32, Failures: 0, Errors: 0`。
 - AI 中枢 `scripts/smoke_test.py`：`SMOKE TEST PASSED`。
@@ -345,9 +345,7 @@ DevEco SDK、OHPM 缓存、模拟器和构建目录也应在 D 盘配置。
 - AI 中枢负责视觉、问答、RAG、决策建议和知识治理；普通助手问答不能创建设备命令。
 - 模拟数据必须标注 `SIMULATION` 或 `LOCAL DEMO`，不能当作真实硬件数据。
 
-详细接口与所有权请先阅读：
+详细接口与设计说明请先阅读：
 
 - `contracts/README.md`
-- `docs/engineering/DEVELOPMENT_STANDARD.md`
-- `docs/engineering/TESTING_TOOLCHAIN.md`
 - `docs/design/INDUSTRIAL-HMI-UI-SYSTEM.md`

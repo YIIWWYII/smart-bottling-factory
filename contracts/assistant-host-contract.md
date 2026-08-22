@@ -7,11 +7,10 @@
 - 源码路径：`packages/harmony-assistant/`
 - OHPM 包名：`@bottling/harmony-assistant`
 - 交付形态：可被三个 HAP 依赖的 ArkTS HAR，不是独立 HAP 或第六个业务工程
-- 唯一实现分支：`codex/ai-center`
-- 唯一实现对话：AI 中枢任务，同时维护 `services/ai-center/` 和 `packages/harmony-assistant/`
+- 共享包源码与 AI 中枢服务分别位于 `packages/harmony-assistant/` 和 `services/ai-center/`，两个模块按同一接口版本发布
 - 三个宿主 App：只实现 `AssistantHostAdapter`、页面挂载点、选择事件和引用导航
 
-共享包调用独立 AI 中枢的问答接口。宿主不直接实现 AI HTTP/WebSocket 客户端，也不把共享包源码复制进 App。三个 App 必须锁定同一包版本；融合验收记录包版本和 HAR 校验值。
+共享包调用独立 AI 中枢的问答接口。宿主不直接实现 AI HTTP/WebSocket 客户端，也不把共享包源码复制进 App。三个 App 必须锁定同一包版本；发布验收记录包版本和 HAR 校验值。
 
 ## 共享包导出面
 
@@ -171,12 +170,11 @@ ArkUI 卡片、列表和表格在构造视图模型时保留业务 ID。Three.js
 - 后台知识上传/审核、工位正式调参、AI 决策审批仍由各自业务页面完成。助手可以解释并深链，不能代替业务页面。
 - 共享包不得依赖三个 App 的 Repository、Spring Boot 控制客户端、MQTT 或设备 SDK；三个 App 也不得把控制函数注入适配器。
 
-## 依赖与融合顺序
+## 发布顺序
 
-1. 总架构先发布本契约。
-2. `codex/ai-center` 实现并推送 `packages/harmony-assistant/` 的 HAR、导出 API 和测试。
-3. 三个前端基于同一 AI 中枢提交引入完全相同版本的共享包，只在自身 `apps/...` 目录实现适配器、挂载点和选择映射。
-4. 融合先合入生产后端，再合入 `codex/ai-center`（AI 服务与共享包），然后依次合入展板、小屏和后台。
-5. 三个 HAP 必须同时构建、安装，并核对助手包版本、会话行为、稳定实体 ID、权限、停止/重试、引用导航和无命令能力。
+1. 先发布或更新本契约以及对应的后端接口。
+2. 构建并发布 `packages/harmony-assistant/` 的 HAR，同时验证导出 API 和测试。
+3. 三个前端引入完全相同版本的共享包，只在自身 `apps/...` 目录实现适配器、挂载点和选择映射。
+4. 联调时先启动生产后端和 AI 中枢，再验证三个 HAP 的会话、稳定实体 ID、权限、停止/重试、引用导航和无命令能力。
 
 任一 App 出现本地聊天组件、独立 AI ApiClient、不同助手包版本、Three.js 临时 ID、令牌进入上下文、助手创建命令或共享包依赖宿主业务实现，均为 P0 阻断项。
