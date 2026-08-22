@@ -21,25 +21,25 @@ export interface ThemeConfig {
 }
 
 export const Theme: ThemeConfig = {
-  navy: '#12344D',
-  steel: '#315A73',
-  blue: '#006FAE',
-  accent: '#2E6F95',
-  page: '#F0F2F4',
+  navy: '#062C4B',
+  steel: '#123F61',
+  blue: '#0B66B2',
+  accent: '#1686D7',
+  page: '#EEF3F7',
   panel: '#FFFFFF',
-  panelSoft: '#F7F8F9',
-  panelStrong: '#E7ECEF',
-  line: '#D7DDE2',
-  lineStrong: '#ADB9C1',
-  text: '#172B3A',
-  muted: '#5D6B76',
-  success: '#2B805F',
-  successSoft: '#E6F2EC',
-  warning: '#A96F00',
-  warningSoft: '#FFF4DC',
-  danger: '#B33E4B',
-  dangerSoft: '#FBE8EB',
-  neutral: '#7A8791'
+  panelSoft: '#F6F8FA',
+  panelStrong: '#DCE6EE',
+  line: '#C8D5E0',
+  lineStrong: '#829BAD',
+  text: '#102D45',
+  muted: '#60778A',
+  success: '#1E9B60',
+  successSoft: '#E3F5EA',
+  warning: '#D28A00',
+  warningSoft: '#FFF3D2',
+  danger: '#D43D45',
+  dangerSoft: '#FCE4E5',
+  neutral: '#71879A'
 }
 
 export function statusSurface(status: string): string {

@@ -11,6 +11,7 @@ import {
 } from '@bottling/harmony-assistant'
 import { Theme, statusColor } from '../common/Theme'
 import { DeviceStateRow, QualityGateRow, SectionTitle, StateBadge } from '../components/IndustrialComponents'
+import { FactoryPlanScene } from '../components/FactoryPlanScene'
 import { FactoryThreeScene } from '../components/FactoryThreeScene'
 import { FACTORY_STAGES, findStage } from '../config/FactoryStages'
 import { ActionControlDefinition, controlsForStage, ParameterControlDefinition, WorkstationStageControls } from '../config/WorkstationControls'
@@ -1291,15 +1292,28 @@ struct StageDetail {
       }
       .width('100%')
       .padding({ left: 8, right: 8, top: 8, bottom: 7 })
-      FactoryThreeScene({
-        payload: this.scenePayload(viewMode),
-        sceneHeight: height,
-        label: title,
-        onDeviceSelected: (deviceCode: string): void => this.selectDeviceCodeForAssistant(deviceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
-        onProductSelected: (traceCode: string): void => this.selectProductCodeForAssistant(traceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
-        selectedDeviceCode: $selectedDeviceCode,
-        selectedTraceCode: $selectedTraceCode
-      })
+      if (viewMode === 'PLANAR') {
+        FactoryPlanScene({
+          payload: this.scenePayload(viewMode),
+          heightValue: height,
+          caption: title,
+          selectionSource: 'THREE_2D',
+          onDeviceSelected: (deviceCode: string, source: string): void => this.selectDeviceCodeForAssistant(deviceCode, 'THREE_2D'),
+          onProductSelected: (traceCode: string, source: string): void => this.selectProductCodeForAssistant(traceCode, 'THREE_2D'),
+          selectedDeviceCode: $selectedDeviceCode,
+          selectedTraceCode: $selectedTraceCode
+        })
+      } else {
+        FactoryThreeScene({
+          payload: this.scenePayload(viewMode),
+          sceneHeight: height,
+          label: title,
+          onDeviceSelected: (deviceCode: string): void => this.selectDeviceCodeForAssistant(deviceCode, 'THREE_3D'),
+          onProductSelected: (traceCode: string): void => this.selectProductCodeForAssistant(traceCode, 'THREE_3D'),
+          selectedDeviceCode: $selectedDeviceCode,
+          selectedTraceCode: $selectedTraceCode
+        })
+      }
     }
     .layoutWeight(1)
     .backgroundColor('#E8EEF0')
@@ -1739,15 +1753,28 @@ struct StageDetail {
       }
       .width('100%')
       .padding({ bottom: 8 })
-      FactoryThreeScene({
-        payload: this.scenePayload(viewMode),
-        sceneHeight: height,
-        label: title,
-        onDeviceSelected: (deviceCode: string): void => this.selectDeviceCodeForAssistant(deviceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
-        onProductSelected: (traceCode: string): void => this.selectProductCodeForAssistant(traceCode, viewMode === 'PLANAR' ? 'THREE_2D' : 'THREE_3D'),
-        selectedDeviceCode: $selectedDeviceCode,
-        selectedTraceCode: $selectedTraceCode
-      })
+      if (viewMode === 'PLANAR') {
+        FactoryPlanScene({
+          payload: this.scenePayload(viewMode),
+          heightValue: height,
+          caption: title,
+          selectionSource: 'THREE_2D',
+          onDeviceSelected: (deviceCode: string, source: string): void => this.selectDeviceCodeForAssistant(deviceCode, 'THREE_2D'),
+          onProductSelected: (traceCode: string, source: string): void => this.selectProductCodeForAssistant(traceCode, 'THREE_2D'),
+          selectedDeviceCode: $selectedDeviceCode,
+          selectedTraceCode: $selectedTraceCode
+        })
+      } else {
+        FactoryThreeScene({
+          payload: this.scenePayload(viewMode),
+          sceneHeight: height,
+          label: title,
+          onDeviceSelected: (deviceCode: string): void => this.selectDeviceCodeForAssistant(deviceCode, 'THREE_3D'),
+          onProductSelected: (traceCode: string): void => this.selectProductCodeForAssistant(traceCode, 'THREE_3D'),
+          selectedDeviceCode: $selectedDeviceCode,
+          selectedTraceCode: $selectedTraceCode
+        })
+      }
     }
     .width('100%')
     .padding(12)

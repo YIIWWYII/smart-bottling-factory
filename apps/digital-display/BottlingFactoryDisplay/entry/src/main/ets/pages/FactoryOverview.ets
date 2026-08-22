@@ -19,7 +19,8 @@ import {
   OperationsOverview,
   RuntimeSnapshot,
   RuntimeStage,
-  StageDefinition
+  StageDefinition,
+  DeviceDefinition
 } from '../model/FactoryModels'
 
 class OverviewSceneDevice {
@@ -329,45 +330,33 @@ struct FactoryOverview {
     Stack({ alignContent: Alignment.TopEnd }) {
       Scroll() {
         Column() {
-          Row() {
-            Column() {
-              Text('DIGITAL DISPLAY / LINE 01').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-              Text('智慧装瓶产线 · 总览').fontSize(28).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 5 })
-              Text('整线状态、工艺节拍与当前批次的单一入口').fontSize(11).fontColor(Theme.muted).margin({ top: 5 })
-            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-            Column() {
-              StateBadge({
-                status: this.bundle.online ? (this.openExceptionCount > 0 ? 'HOLD' : 'RUNNING') : 'STANDBY',
-                label: this.bundle.online ? (this.openExceptionCount > 0 ? '运行 · 局部异常' : '后端在线') : 'LOCAL DEMO'
-              })
-              Text('实时通道 ' + (this.realtimeOnline ? '在线' : '重连中') + '  ·  ' + this.bundle.source).fontSize(9).fontColor(Theme.muted).margin({ top: 7 })
-              Text('快照 ' + this.formatTime(this.bundle.updatedAt)).fontSize(8).fontColor(Theme.muted).margin({ top: 3 })
-            }.alignItems(HorizontalAlign.End)
-          }.width('100%').padding(18).backgroundColor(Theme.panel).border({ width: { bottom: 3 }, color: Theme.navy })
+          this.overviewTopBar()
 
           Column() {
             Row() {
               Column() {
-                Text('01  PROCESS NAVIGATION').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-                Text('工艺主流程').fontSize(21).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+                Text('01  MAIN PRODUCTION LINE').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+                Text('主生产线 · 连续工艺流').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              Button('刷新数据').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => void FactoryRepository.refresh())
+              Text('点击工序卡进入工位详情').fontSize(9).fontColor(Theme.muted)
             }.width('100%').padding({ bottom: 10 }).border({ width: { bottom: 2 }, color: Theme.line })
             Scroll() {
               Row({ space: 8 }) {
-                ForEach(FACTORY_STAGES, (stage: StageDefinition, index: number) => {
+                ForEach(FACTORY_STAGES.filter((stage: StageDefinition) => stage.code !== 'BEVERAGE_READY'), (stage: StageDefinition, index: number) => {
                   this.stageCard(stage, index)
                 }, (stage: StageDefinition) => stage.code)
               }.padding({ top: 12, bottom: 6 })
             }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Auto).width('100%')
-          }.width('100%').padding(16).backgroundColor(Theme.panel)
+          }.width('100%').padding({ left: 14, right: 14, top: 13, bottom: 8 }).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+
+          this.parallelPrepPanel()
 
           Column() {
             Row() {
               Column() {
-                Text('02  LINE SYNOPTIC').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-                Text('二维产线主画布').fontSize(23).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
-                Text('设备、输送带、瓶子和工位状态按当前快照持续运动；点击对象可查看上下文。').fontSize(10).fontColor(Theme.muted).margin({ top: 4 })
+                Text('02  LINE SYNOPTIC').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+                Text('整线设备与物料动态平面图').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+                Text('设备、输送带、瓶子和工位状态按同一实时快照运动；点击对象查看上下文。').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               StateBadge({ status: this.bundle.source === 'MQTT' ? 'RUNNING' : 'WAIT', label: this.bundle.source })
             }.width('100%').padding({ bottom: 10 })
@@ -387,14 +376,14 @@ struct FactoryOverview {
                 displayAssistantHost.clearSelection('THREE_2D')
               }
             })
-          }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.blue })
+          }.width('100%').padding({ left: 14, right: 14, top: 13, bottom: 14 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.blue })
 
           Column() {
             Row() {
               Column() {
-                Text('03  DIGITAL TWIN').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-                Text('三维整线数字孪生').fontSize(23).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
-                Text('保留整线空间关系与设备作业动画；点击工位进入对应作业页。').fontSize(10).fontColor(Theme.muted).margin({ top: 4 })
+                Text('03  DIGITAL TWIN').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+                Text('三维整线数字孪生').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+                Text('保留整线空间关系与设备作业动画；点击工位进入对应作业页。').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               Text('STATE v' + this.bundle.stateVersion).fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
             }.width('100%').padding({ bottom: 10 })
@@ -403,7 +392,7 @@ struct FactoryOverview {
               heightValue: 430,
               onStageSelected: (stageCode: string): void => this.openStageFromPlan(stageCode)
             })
-          }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { bottom: 2 }, color: Theme.line })
+          }.width('100%').padding({ left: 14, right: 14, top: 13, bottom: 14 }).backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
 
           Scroll() {
             Row({ space: 8 }) {
@@ -431,6 +420,59 @@ struct FactoryOverview {
       AssistantDock({ controller: this.assistantController, panelWidth: 410, panelHeight: 620 })
         .margin({ top: 16, right: 16 })
     }.width('100%').height('100%')
+  }
+
+  @Builder
+  overviewTopBar() {
+    Row() {
+      Row({ space: 10 }) {
+        Text('BF').fontSize(16).fontColor('#FFFFFF').fontWeight(FontWeight.Bold)
+          .width(38).height(38).textAlign(TextAlign.Center).backgroundColor(Theme.blue)
+        Column() {
+          Text('SMART BOTTLING / LINE 01').fontSize(9).fontColor('#A8C8E0').fontWeight(FontWeight.Bold)
+          Text('智慧装瓶生产线').fontSize(22).fontColor(Theme.onDark).fontWeight(FontWeight.Bold).margin({ top: 3 })
+        }.alignItems(HorizontalAlign.Start)
+      }.layoutWeight(1)
+      this.topBarValue('整线状态', this.bundle.online ? (this.openExceptionCount > 0 ? '运行 · 局部异常' : '运行中') : '演示数据', this.bundle.online && this.openExceptionCount === 0 ? 'PASS' : 'WAIT')
+      this.topBarValue('数据源', this.bundle.source, this.bundle.source === 'MQTT' ? 'PASS' : 'WAIT')
+      this.topBarValue('快照版本', 'v' + this.bundle.stateVersion.toString(), 'NORMAL')
+      this.topBarValue('更新时间', this.formatTime(this.bundle.updatedAt), 'NORMAL')
+      this.topBarValue('开放报警', this.openExceptionCount.toString(), this.openExceptionCount > 0 ? 'ALARM' : 'PASS')
+    }.width('100%').height(64).padding({ left: 16, right: 16 }).backgroundColor(Theme.navy)
+  }
+
+  @Builder
+  topBarValue(label: string, value: string, tone: string) {
+    Column() {
+      Text(label).fontSize(8).fontColor(Theme.onDarkMuted)
+      Text(value).fontSize(11).fontColor(tone === 'NORMAL' ? Theme.onDark : statusColor(tone)).fontWeight(FontWeight.Bold).margin({ top: 5 })
+    }.alignItems(HorizontalAlign.Start).padding({ left: 14, right: 14 }).border({ width: { left: 1 }, color: '#345A78' })
+  }
+
+  @Builder
+  parallelPrepPanel() {
+    Column() {
+      Row() {
+        Column() {
+          Text('PARALLEL BEVERAGE PREPARATION').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+          Text('饮料准备并行线').fontSize(17).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        Text('混合调配 → 高温杀菌 → 温湿度监控 → 汇入灌装').fontSize(9).fontColor(Theme.muted)
+      }.width('100%').padding({ bottom: 10 }).border({ width: { bottom: 1 }, color: Theme.line })
+      Row({ space: 8 }) {
+        ForEach(FACTORY_STAGES[3].devices, (device: DeviceDefinition, index: number) => {
+          Row() {
+            Circle().width(8).height(8).fill(statusColor(this.deviceRuntime(device.code)))
+            Column() {
+              Text(device.name).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold)
+              Text(device.code + ' · ' + this.deviceReading(device.code)).fontSize(8).fontColor(Theme.muted).margin({ top: 4 })
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+            Text(index === 0 ? '配方' : index === 1 ? '杀菌' : '检测').fontSize(9).fontColor(Theme.blue)
+          }.layoutWeight(1).height(60).padding(10).backgroundColor(Theme.panelSoft).border({ width: { left: 3, top: 1, right: 1, bottom: 1 }, color: statusColor(this.deviceRuntime(device.code)) })
+            .onClick(() => this.selectOverviewDevice(device.code, 'ARKUI'))
+        }, (device: DeviceDefinition) => device.code)
+      }.width('100%')
+    }.width('100%').padding({ left: 14, right: 14, top: 12, bottom: 12 }).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
   }
 
   @Builder

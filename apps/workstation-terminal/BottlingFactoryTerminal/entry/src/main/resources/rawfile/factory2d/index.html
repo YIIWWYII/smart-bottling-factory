@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="color-scheme" content="light">
+  <title>Factory 2D Plan</title>
+  <link rel="stylesheet" href="./scene.css">
+</head>
+<body>
+  <main id="plan-host" aria-label="digital display 2d factory plan"></main>
+  <section class="hud hud-left">
+    <span class="live-dot"></span>
+    <strong id="stage-name">2D PLAN</strong>
+    <span id="data-source">LOCAL DEMO</span>
+  </section>
+  <section class="hud hud-right">
+    <span><i class="legend running"></i>RUNNING</span>
+    <span><i class="legend warning"></i>WAIT</span>
+    <span><i class="legend alarm"></i>ALARM</span>
+  </section>
+  <section id="selection" class="selection hidden"></section>
+  <section id="compat-plan" class="compat-plan hidden" aria-label="2d compatibility plan"></section>
+  <section id="fallback" class="fallback hidden">
+    <strong>2D plan unavailable</strong>
+    <span>Check ArkWeb WebGL support, or temporarily disable the 2D layer.</span>
+  </section>
+  <script src="../factory3d/vendor/three.min.js"></script>
+  <script src="./scene.js"></script>
+</body>
+</html>
+
+

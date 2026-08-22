@@ -638,37 +638,45 @@ struct StageDetail {
     Column() {
       Row() {
         Column() {
-          Row({ space: 8 }) {
-            Text('01').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-            Text('LIVE CELL').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-          }
-          Text('工位现场').fontSize(17).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 5 })
+          Text('01  LIVE WORKCELL').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+          Text('工位现场').fontSize(18).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+          Text('2D 平面图与 3D 设备场景共用同一实时快照').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Scroll() {
           Row({ space: 6 }) {
-            this.visualModeButton('立体', 'THREE')
-            this.visualModeButton('平面', 'PLANAR')
+            this.visualModeButton('2D 平面', 'PLANAR')
+            this.visualModeButton('3D 立体', 'THREE')
             this.visualToggle('状态色', this.statusColorsEnabled, 'COLORS')
             this.visualToggle('布局编辑', this.layoutEditEnabled, 'LAYOUT')
-          Button(this.paused ? '▶ 恢复动画' : 'Ⅱ 暂停动画').type(ButtonType.Normal).height(32).fontSize(9).fontColor(this.paused ? Theme.navy : Theme.text).backgroundColor(this.paused ? Theme.warning : Theme.panel).border({ width: 1, color: this.paused ? Theme.warning : Theme.line }).borderRadius(2).onClick(() => this.togglePaused())
+            Button(this.paused ? '▶ 恢复实时' : 'Ⅱ 暂停实时').type(ButtonType.Normal).height(32).fontSize(9).fontColor(this.paused ? Theme.navy : Theme.text).backgroundColor(this.paused ? Theme.warning : Theme.panel).border({ width: 1, color: this.paused ? Theme.warning : Theme.line }).borderRadius(2).onClick(() => this.togglePaused())
           }
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).constraintSize({ maxWidth: 720 })
       }.width('100%').alignItems(VerticalAlign.Bottom).padding({ left: 28, right: 28, top: 16, bottom: 12 })
 
-      if (this.threeEnabled && this.activeVisual === 'THREE') {
+      if (this.planarEnabled && this.threeEnabled) {
+        Row({ space: 10 }) {
+          Column() {
+            Row() { Text('2D  /  PROCESS PLAN').fontSize(8).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Blank(); Text(this.layoutEditEnabled ? '拖拽调整布局' : '平面路径 · 点击对象').fontSize(8).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.onDarkMuted) }.width('100%').padding({ left: 10, right: 10, bottom: 7 })
+            FactoryPlanScene({ payload: this.scenePayload(), caption: '独立二维工艺图', heightValue: 300, selectionSource: 'THREE_2D', selectedDeviceCode: $selectedDeviceCode, selectedTraceCode: $selectedTraceCode, onStageSelected: (stageCode: string, source: string): void => this.selectSceneStage(stageCode, source), onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source), onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source), onSelectionCleared: (source: string): void => this.clearSceneSelection(source) })
+          }.layoutWeight(1).backgroundColor('#071015').padding(10)
+          Column() {
+            Row() { Text('3D  /  MACHINE VIEW').fontSize(8).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Blank(); Text(this.layoutEditEnabled ? '拖拽调整布局' : '旋转 · 缩放 · 点击对象').fontSize(8).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.onDarkMuted) }.width('100%').padding({ left: 10, right: 10, bottom: 7 })
+            FactoryThreeScene({ payload: this.scenePayload(), viewMode: 'THREE', caption: 'Three.js 设备场景', heightValue: 300, selectionSource: 'THREE_3D', selectedDeviceCode: $selectedDeviceCode, selectedTraceCode: $selectedTraceCode, onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source), onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source), onSelectionCleared: (source: string): void => this.clearSceneSelection(source) })
+          }.layoutWeight(1).backgroundColor('#071015').padding(10)
+        }.width('100%').padding({ left: 12, right: 12, bottom: 12 })
+      } else if (this.threeEnabled) {
         Column() {
-          Row() { Text('THREE.JS  /  3D WORKCELL').fontSize(8).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Blank(); Text(this.layoutEditEnabled ? '拖拽调整布局' : '旋转 · 缩放 · 点击查看').fontSize(8).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.onDarkMuted) }.width('100%').padding({ left: 12, right: 12, bottom: 8 })
-          FactoryThreeScene({ payload: this.scenePayload(), viewMode: 'THREE', caption: '3D 工位现场', heightValue: 414, selectionSource: 'THREE_3D', selectedDeviceCode: $selectedDeviceCode, selectedTraceCode: $selectedTraceCode, onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source), onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source), onSelectionCleared: (source: string): void => this.clearSceneSelection(source) })
-        }.width('100%').backgroundColor('#071015')
-      }
-      if (this.planarEnabled && this.activeVisual === 'PLANAR') {
+          Row() { Text('3D  /  MACHINE VIEW').fontSize(8).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Blank(); Text(this.layoutEditEnabled ? '拖拽调整布局' : '旋转 · 缩放 · 点击对象').fontSize(8).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.onDarkMuted) }.width('100%').padding({ left: 12, right: 12, bottom: 8 })
+          FactoryThreeScene({ payload: this.scenePayload(), viewMode: 'THREE', caption: 'Three.js 设备场景', heightValue: 380, selectionSource: 'THREE_3D', selectedDeviceCode: $selectedDeviceCode, selectedTraceCode: $selectedTraceCode, onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source), onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source), onSelectionCleared: (source: string): void => this.clearSceneSelection(source) })
+        }.width('100%').backgroundColor('#071015').padding({ left: 12, right: 12, bottom: 12 })
+      } else if (this.planarEnabled) {
         Column() {
-          Row() { Text('THREE.JS  /  2D PROCESS PLAN').fontSize(8).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Blank(); Text(this.layoutEditEnabled ? '拖拽调整平面布局' : '正交工艺图 · 点击查看').fontSize(8).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.onDarkMuted) }.width('100%').padding({ left: 12, right: 12, bottom: 8 })
-          FactoryPlanScene({ payload: this.scenePayload(), caption: '2D 工艺平面图', heightValue: 366, selectionSource: 'THREE_2D', selectedDeviceCode: $selectedDeviceCode, selectedTraceCode: $selectedTraceCode, onStageSelected: (stageCode: string, source: string): void => this.selectSceneStage(stageCode, source), onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source), onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source), onSelectionCleared: (source: string): void => this.clearSceneSelection(source) })
-        }.width('100%').backgroundColor('#071015')
+          Row() { Text('2D  /  PROCESS PLAN').fontSize(8).fontColor(Theme.accent).fontWeight(FontWeight.Bold); Blank(); Text(this.layoutEditEnabled ? '拖拽调整布局' : '平面路径 · 点击对象').fontSize(8).fontColor(this.layoutEditEnabled ? Theme.warning : Theme.onDarkMuted) }.width('100%').padding({ left: 12, right: 12, bottom: 8 })
+          FactoryPlanScene({ payload: this.scenePayload(), caption: '独立二维工艺图', heightValue: 380, selectionSource: 'THREE_2D', selectedDeviceCode: $selectedDeviceCode, selectedTraceCode: $selectedTraceCode, onStageSelected: (stageCode: string, source: string): void => this.selectSceneStage(stageCode, source), onDeviceSelected: (deviceCode: string, source: string): void => this.selectSceneDevice(deviceCode, source), onProductSelected: (traceCode: string, source: string): void => this.selectSceneProduct(traceCode, source), onSelectionCleared: (source: string): void => this.clearSceneSelection(source) })
+        }.width('100%').backgroundColor('#071015').padding({ left: 12, right: 12, bottom: 12 })
       }
       if (!this.threeEnabled && !this.planarEnabled) {
-        Column() { Text('可视化已关闭').fontSize(16).fontColor(Theme.onDark).fontWeight(FontWeight.Bold); Text('实时数据仍在更新，打开 2D 或 3D 继续查看现场。').fontSize(9).fontColor(Theme.onDarkMuted).margin({ top: 8 }) }.width('100%').height(170).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center).backgroundColor(Theme.panel)
+        Column() { Text('可视化已关闭').fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold); Text('实时数据仍在更新，打开 2D 或 3D 继续查看现场。').fontSize(9).fontColor(Theme.muted).margin({ top: 8 }) }.width('100%').height(170).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center).backgroundColor(Theme.panelSoft)
       }
     }.width('100%').backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
   }

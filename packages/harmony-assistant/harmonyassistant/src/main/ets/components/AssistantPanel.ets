@@ -120,9 +120,9 @@ export struct AssistantPanel {
       List({ space: 8 }) {
         ForEach(this.controller.messages, (message: AssistantMessageView) => {
           ListItem() {
-            AssistantMessageCard({ message: message, content: message.content })
+            AssistantMessageCard({ message: message, content: message.content === undefined ? '' : message.content })
           }
-        }, (message: AssistantMessageView) => message.messageId + ':' + message.content.length.toString())
+        }, (message: AssistantMessageView) => message.messageId)
         if (this.controller.status === AssistantUiStatus.SENDING || this.controller.status === AssistantUiStatus.STREAMING) {
           ListItem() {
             Row({ space: 8 }) {

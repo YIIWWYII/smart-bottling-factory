@@ -607,30 +607,30 @@ struct AdminConsole {
         Text('BF').fontSize(14).fontColor('#FFFFFF').fontWeight(FontWeight.Bold)
           .width(34).height(34).textAlign(TextAlign.Center).backgroundColor(Theme.blue)
         Column() {
-          Text('BOTTLING').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold).letterSpacing(0.8)
-          Text('后台管理').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+          Text('SMART BOTTLING').fontSize(9).fontColor('#9FC5DF').fontWeight(FontWeight.Bold)
+          Text('工厂管理台').fontSize(18).fontColor('#FFFFFF').fontWeight(FontWeight.Bold).margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start)
       }.width('100%')
       Row({ space: 6 }) {
-        Circle().width(7).height(7).fill(this.bundle.online ? Theme.success : Theme.warning)
-        Text(this.bundle.online ? '生产后端在线' : '后端连接待确认').fontSize(9).fontColor(Theme.muted)
+        Circle().width(7).height(7).fill(this.bundle.online ? '#49D38A' : '#F2C04C')
+        Text(this.bundle.online ? '生产后端在线' : '后端连接待确认').fontSize(9).fontColor('#B4C8D6')
       }.margin({ top: 14, bottom: 12 })
-      Text(this.roleName()).fontSize(10).fontColor(Theme.blue).padding({ left: 8, right: 8, top: 5, bottom: 5 }).backgroundColor('#EAF3F9')
-      Divider().color(Theme.line).margin({ top: 16, bottom: 8 })
+      Text(this.roleName()).fontSize(10).fontColor('#D7EAF8').padding({ left: 8, right: 8, top: 5, bottom: 5 }).backgroundColor('#123F61')
+      Divider().color('#2B5876').margin({ top: 16, bottom: 8 })
       Scroll() {
         Column({ space: 10 }) {
           ForEach(NAV_GROUPS, (group: MenuGroup) => {
             Column({ space: 3 }) {
-              Text(group.label).fontSize(9).fontColor(Theme.muted).fontWeight(FontWeight.Bold).margin({ left: 10, bottom: 3 })
+              Text(group.label).fontSize(9).fontColor('#7FA3BB').fontWeight(FontWeight.Bold).margin({ left: 10, bottom: 3 })
               ForEach(group.items, (item: MenuItem) => {
                 Button(item.label)
                   .type(ButtonType.Normal)
                   .width('100%')
                   .height(38)
                   .fontSize(11)
-                  .fontColor(this.section === item.code ? Theme.blue : Theme.text)
-                  .backgroundColor(this.section === item.code ? '#EAF3F9' : Color.Transparent)
-                  .border({ width: { left: 3 }, color: this.section === item.code ? Theme.blue : Color.Transparent })
+                  .fontColor(this.section === item.code ? '#FFFFFF' : '#C2D3DF')
+                  .backgroundColor(this.section === item.code ? '#0B66B2' : Color.Transparent)
+                  .border({ width: { left: 3 }, color: this.section === item.code ? '#55B7FF' : Color.Transparent })
                   .borderRadius(0)
                   .onClick(() => this.selectSection(item.code))
               }, (item: MenuItem) => item.code)
@@ -642,11 +642,11 @@ struct AdminConsole {
         .type(ButtonType.Normal)
         .width('100%')
         .height(38)
-        .fontColor(Theme.muted)
+        .fontColor('#B4C8D6')
         .backgroundColor(Color.Transparent)
-        .border({ width: 1, color: Theme.line })
+        .border({ width: 1, color: '#2B5876' })
         .onClick(() => void this.logout())
-    }.width(248).height('100%').padding(18).alignItems(HorizontalAlign.Start).backgroundColor(Theme.panel).border({ width: { right: 1 }, color: Theme.line })
+    }.width(248).height('100%').padding(18).alignItems(HorizontalAlign.Start).backgroundColor(Theme.navy).border({ width: { right: 1 }, color: '#2B5876' })
   }
 
   @Builder
@@ -808,18 +808,141 @@ struct AdminConsole {
 
   @Builder
   dashboardView() {
-    Row() {
-      this.metric('累计批次', this.bundle.dashboard.total.toString(), '进入产线', 'NORMAL')
-      this.metric('运行中', this.bundle.dashboard.running.toString(), '连续流水', 'RUNNING')
-      this.metric('完成入库', this.bundle.dashboard.completed.toString(), '箱级库存', 'PASS')
-      this.metric('待处理', this.bundle.dashboard.holding.toString(), '人工待办', 'WAIT')
-      this.metric('开放异常', this.openIncidentCount().toString(), '质量或设备', this.openIncidentCount() > 0 ? 'ALARM' : 'PASS')
-      this.metric('AI 审计', this.bundle.operations.aiAudits.length.toString(), '建议与校验', 'NORMAL')
-    }.width('100%').height(86).margin({ bottom: 18 }).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
-    Row({ space: 12 }) {
-      this.stageSummary()
-      this.todoSummary()
-    }.width('100%').alignItems(VerticalAlign.Top)
+    Column({ space: 12 }) {
+      Row() {
+        this.metric('今日产量', this.bundle.dashboard.total.toString(), '进入产线', 'NORMAL')
+        this.metric('完成率', this.bundle.dashboard.completed.toString(), '完成入库', 'PASS')
+        this.metric('设备在线率', this.bundle.runtime.devices.length > 0 ? Math.round(this.bundle.runtime.devices.filter((item: RuntimeDevice) => item.state !== 'OFFLINE').length / this.bundle.runtime.devices.length * 100).toString() + '%' : '--', '实时设备', 'RUNNING')
+        this.metric('开放异常', this.openIncidentCount().toString(), '质量或设备', this.openIncidentCount() > 0 ? 'ALARM' : 'PASS')
+        this.metric('待审核知识', this.aiReviewCount().toString(), 'RAG 治理', this.aiReviewCount() > 0 ? 'WAIT' : 'PASS')
+        this.metric('待处理 AI 决策', this.bundle.operations.aiAudits.filter((item: AiAudit) => item.validationStatus !== 'PASSED').length.toString(), '建议与校验', 'WAIT')
+      }.width('100%').height(86).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+
+      Row({ space: 12 }) {
+        this.dashboardProductionTable()
+        this.dashboardIncidentTable()
+        this.dashboardContextPanel()
+      }.width('100%').alignItems(VerticalAlign.Top)
+
+      Row({ space: 12 }) {
+        this.dashboardEquipmentPanel()
+        this.dashboardLogisticsPanel()
+        this.dashboardAiPanel()
+      }.width('100%').alignItems(VerticalAlign.Top)
+    }.width('100%')
+  }
+
+  @Builder
+  dashboardProductionTable() {
+    Column() {
+      SectionTitle({ code: 'PRODUCTION TASKS', title: '生产任务', description: '批次、瓶型、完成量和当前工序' })
+      this.tableHeader(['批次 / 瓶型', '目标状态', '当前工序', '完成率'])
+      ForEach(this.filteredRuns().slice(0, 5), (run: FactoryRun) => {
+        Row() {
+          Column() {
+            Text(run.batchCode || run.traceCode).fontSize(10).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+            Text(run.bottleType || '待识别').fontSize(8).fontColor(Theme.muted).margin({ top: 3 })
+          }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+          StateBadge({ status: run.status, label: run.status })
+          Text(this.stageName(run.currentStage)).fontSize(9).fontColor(Theme.text).width(90)
+          Text(run.status === 'COMPLETED' ? '100%' : run.status === 'RUNNING' ? '进行中' : '待处理').fontSize(9).fontColor(statusColor(run.status)).width(58)
+        }.width('100%').padding({ top: 9, bottom: 9 }).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectProduct(run))
+      }, (run: FactoryRun) => run.traceCode)
+      if (this.filteredRuns().length === 0) this.emptyState('暂无生产任务')
+    }.layoutWeight(1).padding(14).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.blue })
+  }
+
+  @Builder
+  dashboardIncidentTable() {
+    Column() {
+      SectionTitle({ code: 'EXCEPTION TODO', title: '异常待办', description: '按严重级别、工位和影响范围处理' })
+      this.tableHeader(['级别 / 异常', '工位 / 设备', '策略', '状态'])
+      ForEach(this.filteredIncidents().slice(0, 5), (incident: FactoryIncident) => {
+        Row() {
+          Column() {
+            Text(incident.strategy).fontSize(10).fontColor(Theme.danger).fontWeight(FontWeight.Bold)
+            Text(incident.message).fontSize(8).fontColor(Theme.muted).margin({ top: 3 }).maxLines(1)
+          }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+          Text(this.stageName(incident.stageCode) + ' · ' + (incident.deviceCode || '--')).fontSize(8).fontColor(Theme.text).width(100).maxLines(2)
+          Text(incident.targetStage || '局部').fontSize(8).fontColor(Theme.muted).width(54)
+          StateBadge({ status: incident.status === 'OPEN' ? 'ALARM' : 'PASS', label: incident.status })
+        }.width('100%').padding({ top: 9, bottom: 9 }).border({ width: { bottom: 1 }, color: Theme.line }).onClick(() => this.selectedDetail = this.incidentDetail(incident))
+      }, (incident: FactoryIncident) => incident.incidentId)
+      if (this.filteredIncidents().length === 0) this.emptyState('当前无开放异常')
+    }.layoutWeight(1).padding(14).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.warning })
+  }
+
+  @Builder
+  dashboardContextPanel() {
+    Column() {
+      Row() {
+        Column() {
+          Text('CONTEXT').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+          Text('异常详情').fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        if (this.selectedDetail !== '请选择一条记录查看详情。') {
+          Button('关闭').type(ButtonType.Normal).height(28).fontSize(9).fontColor(Theme.muted).backgroundColor(Color.Transparent).border({ width: 1, color: Theme.line }).onClick(() => this.selectedDetail = '请选择一条记录查看详情。')
+        }
+      }.width('100%').padding({ bottom: 10 }).border({ width: { bottom: 1 }, color: Theme.line })
+      Text(this.selectedDetail === '请选择一条记录查看详情。' ? '点击生产任务或异常待办查看完整上下文。' : this.selectedDetail).fontSize(10).fontColor(Theme.text).lineHeight(17).width('100%').margin({ top: 12 })
+      Blank()
+      Text('数据来自后端实时快照；演示数据会明确标记，不替代服务端状态。').fontSize(8).fontColor(Theme.muted).width('100%').padding(9).backgroundColor(Theme.panelSoft)
+    }.width(280).height(330).padding(14).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.danger })
+  }
+
+  @Builder
+  dashboardEquipmentPanel() {
+    Column() {
+      SectionTitle({ code: 'EQUIPMENT HEALTH', title: '设备健康与维护', description: '在线、关注、故障和离线设备' })
+      Row() {
+        Column() {
+          Text(this.bundle.runtime.devices.length.toString()).fontSize(28).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+          Text('总设备数').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
+        }.layoutWeight(1)
+        Column() {
+          Text(this.offlineDeviceCount().toString()).fontSize(22).fontColor(this.offlineDeviceCount() > 0 ? Theme.danger : Theme.success).fontWeight(FontWeight.Bold)
+          Text('离线').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
+        }.layoutWeight(1)
+        Column() {
+          Text(this.openAlarmCount().toString()).fontSize(22).fontColor(this.openAlarmCount() > 0 ? Theme.warning : Theme.success).fontWeight(FontWeight.Bold)
+          Text('报警').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
+        }.layoutWeight(1)
+      }.width('100%').padding({ top: 12, bottom: 12 }).border({ width: { bottom: 1 }, color: Theme.line })
+      ForEach(this.bundle.runtime.devices.slice(0, 3), (device: RuntimeDevice) => {
+        Row() { Circle().width(7).height(7).fill(statusColor(device.state)); Text(device.deviceCode).fontSize(9).fontColor(Theme.text).margin({ left: 7 }).layoutWeight(1); Text(this.stageName(device.stageCode)).fontSize(8).fontColor(Theme.muted) }.width('100%').padding({ top: 7, bottom: 7 })
+      }, (device: RuntimeDevice) => device.deviceCode)
+    }.layoutWeight(1).padding(14).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  dashboardLogisticsPanel() {
+    Column() {
+      SectionTitle({ code: 'AGV & WAREHOUSE', title: 'AGV 与仓储任务', description: '运输状态、库位安全和当前任务' })
+      Row() {
+        this.miniDashboardValue('运输中', this.bundle.logistics.tasks.filter((item: AgvTask) => item.status === 'RUNNING').length.toString(), 'RUNNING')
+        this.miniDashboardValue('待调度', this.bundle.logistics.tasks.filter((item: AgvTask) => item.status === 'PENDING').length.toString(), 'WAIT')
+        this.miniDashboardValue('仓区风险', this.unsafeZoneCount().toString(), this.unsafeZoneCount() > 0 ? 'ALARM' : 'PASS')
+      }.width('100%').padding({ top: 12, bottom: 10 }).border({ width: { bottom: 1 }, color: Theme.line })
+      ForEach(this.bundle.logistics.tasks.slice(0, 3), (task: AgvTask) => {
+        Row() { Text(task.agvCode).fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold).width(70); Text(task.source + ' → ' + task.destination).fontSize(8).fontColor(Theme.text).layoutWeight(1); StateBadge({ status: task.status, label: task.status }) }.width('100%').padding({ top: 7, bottom: 7 })
+      }, (task: AgvTask) => task.taskId)
+    }.layoutWeight(1).padding(14).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  dashboardAiPanel() {
+    Column() {
+      SectionTitle({ code: 'AI GOVERNANCE', title: 'AI 决策与知识审核', description: '模型状态、RAG 版本和待复核建议' })
+      Row() { this.miniDashboardValue('待复核', this.aiReviewCount().toString(), this.aiReviewCount() > 0 ? 'WAIT' : 'PASS'); this.miniDashboardValue('知识版本', this.aiKnowledgeVersion.length > 0 ? this.aiKnowledgeVersion : '--', 'NORMAL') }.width('100%').padding({ top: 12, bottom: 10 }).border({ width: { bottom: 1 }, color: Theme.line })
+      ForEach(this.bundle.operations.aiAudits.slice(0, 3), (audit: AiAudit) => {
+        Row() { Text(audit.auditId).fontSize(8).fontColor(Theme.blue).width(82); Text(audit.decision).fontSize(8).fontColor(Theme.text).layoutWeight(1).maxLines(1); StateBadge({ status: audit.validationStatus, label: audit.validationStatus }) }.width('100%').padding({ top: 7, bottom: 7 })
+      }, (audit: AiAudit) => audit.auditId)
+    }.layoutWeight(1).padding(14).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+  }
+
+  @Builder
+  miniDashboardValue(label: string, value: string, tone: string) {
+    Column() { Text(label).fontSize(8).fontColor(Theme.muted); Text(value).fontSize(17).fontColor(tone === 'NORMAL' ? Theme.navy : statusColor(tone)).fontWeight(FontWeight.Bold).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1)
   }
 
   @Builder
