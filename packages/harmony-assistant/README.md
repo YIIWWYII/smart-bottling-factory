@@ -2,7 +2,7 @@
 
 `@bottling/harmony-assistant` is the only ArkUI assistant implementation used by the digital display, workstation terminal, and admin console. It is a HAR, not a standalone HAP.
 
-This package follows `contracts/assistant-host-contract.md` from `codex/ai-architecture@53b375b`.
+This package follows the shared host contract in [`contracts/assistant-host-contract.md`](../../contracts/assistant-host-contract.md).
 
 ## Local dependency
 

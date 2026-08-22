@@ -22,13 +22,6 @@ entry/src/main/resources/rawfile/factory3d  立体设备场景和 Three.js 固�
 
 设备布局按“工序 + 视图模式 + 设备编号”保存在 ArkWeb 本地偏好中。设备、产品和工位点击只上报 `deviceCode`、`traceCode`、`stageCode` 等稳定业务 ID，再由 ArkTS 发布共享助手选择；不使用 Three.js UUID、显示名称或列表下标。
 
-## 本机开发
+## 配置与运行
 
-- 工作区：`D:\HarmonyOS-Dev\Workspaces\bottling-display`
-- 分支：`codex/display`
-- DevEco CLI：`D:\HarmonyOS-Dev\npm-global\devecocli.cmd`
-- SDK、模拟器、缓存、构建目录和日志全部位于 `D:\HarmonyOS-Dev`，不得写入 C 盘。
-
-后端和 AI 中枢地址在 `entry/src/main/ets/service/ApiConfig.ets`。模拟器/真机不能使用 `localhost`，应填写运行服务电脑可访问的局域网地址。
-
-构建和验收命令见 `BUILD-AND-VERIFY.md`。
+后端和 AI 中枢地址在 `entry/src/main/ets/service/ApiConfig.ets`。模拟器或真机不能使用 `localhost`，应填写运行服务电脑可访问的局域网地址。构建、安装和网络联调步骤见仓库根目录 [ONBOARDING-DEPLOYMENT.md](../../../ONBOARDING-DEPLOYMENT.md)。

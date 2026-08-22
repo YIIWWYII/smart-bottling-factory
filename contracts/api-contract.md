@@ -4,7 +4,7 @@
 
 - 生产后端基地址：`http://<backend-host>:8088/hdc/api`；AI 中枢基地址：`http://<ai-host>:8091/api`。真机和模拟器不能写 `localhost`。
 - 默认编码：`application/json;charset=UTF-8`；文件上传使用 `multipart/form-data`。鉴权头：`Authorization: <token>`。
-- 统一响应：`{ "code": 0, "message": "", "data": ..., "success": true }`。当前兼容成功码 0/1，融合阶段统一。
+- 统一响应：`{ "code": 0, "message": "", "data": ..., "success": true }`。当前兼容成功码 0/1，后续版本统一。
 - 非 2xx、业务失败码、超时、解析失败都是真实失败，UI 不得显示“操作成功”。
 
 ## 当前核心端点
@@ -28,7 +28,7 @@
 | POST | `/operations/alarms/{id}/ack` | 管理 | 报警确认 |
 | POST/GET | `/operations/commands` | 终端、管理 | 创建设备命令、查询状态 |
 | POST | `/operations/commands/{id}/ack` | 外部控制接口 | 边缘层回执命令 |
-| POST/GET | `/operations/ai/decide`、`/operations/ai/audits` | 旧兼容接口 | 迁移到独立 AI 中枢后废弃，不再扩展 |
+| POST/GET | `/operations/ai/decide`、`/operations/ai/audits` | 旧兼容接口 | 独立 AI 中枢启用后逐步废弃，不再扩展 |
 | GET | `/logistics/overview` | 展板、终端、管理 | AGV、仓区安全和库存 |
 | POST | `/logistics/agv/tasks` | 后端/管理 | 创建物流任务 |
 | POST | `/logistics/agv/tasks/{id}/telemetry` | 外部设备接口 | AGV 速度、路程、负载、避障 |
@@ -37,7 +37,7 @@
 
 ## P0 目标端点
 
-下表是五个业务工程最终对齐所需的目标契约。标记为目标不代表当前已经实现；后端对话负责逐项落地并提供迁移说明，前端在端点可用前只能显示明确的不可用/只读状态，不能伪造数据或成功。
+下表是前端、生产后端和 AI 中枢对齐所需的目标契约。标记为目标不代表当前已经实现；相关服务需要逐项落地并提供迁移说明，前端在端点可用前只能显示明确的不可用/只读状态，不能伪造数据或成功。
 
 | 方法 | 路径 | 使用端 | 用途 |
 | --- | --- | --- | --- |
@@ -97,7 +97,7 @@
 | GET | `/ai-integration/commands/{id}` | AI 中枢 | 查询后端安全校验、命令状态和边缘 ACK |
 | POST | `/auth/introspect` | AI 中枢 | 校验三端用户令牌和权限；生产环境也可使用共享 JWT 公钥 |
 
-目标快照字段遵循 `shared-snapshot-contract.md`，控制权限与命令遵循 `control-security-contract.md`，AI 与资料流程分别遵循 `ai-decision-contract.md` 和 `knowledge-governance-contract.md`。AI 中枢和生产后端必须使用独立客户端、配置、数据库和部署进程；若旧组合接口暂时承载同等数据，必须记录迁移和废弃计划。
+目标快照字段遵循 `shared-snapshot-contract.md`，控制权限与命令遵循 `control-security-contract.md`，AI 与资料流程分别遵循 `ai-decision-contract.md` 和 `knowledge-governance-contract.md`。AI 中枢和生产后端必须使用独立客户端、配置、数据库和部署进程；若旧组合接口暂时承载同等数据，必须记录兼容和废弃计划。
 
 助手端点只由 `@bottling/harmony-assistant` 调用，三个宿主 App 不分别实现客户端。发送、取消和重试都携带幂等请求 ID；令牌只放 `Authorization`，`sourceApp` 和 `userRoleHint` 不能替代服务端鉴权。问答端点没有设备命令副作用。
 

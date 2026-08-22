@@ -11,12 +11,11 @@
 - [ai-decision-contract.md](ai-decision-contract.md)：瓶型识别、RAG、数据库校验、字段级参数建议和人工覆盖规则。
 - [knowledge-governance-contract.md](knowledge-governance-contract.md)：资料上传、后台审核、正式入库和向量索引闭环。
 - [client-capability-matrix.md](client-capability-matrix.md)：每项业务在三前端、生产后端和 AI 中枢的对应关系。
-- [ownership.md](ownership.md)：总架构、五个开发对话与融合对话的文件所有权。
-- [TESTING_TOOLCHAIN.md](../docs/engineering/TESTING_TOOLCHAIN.md)：五个业务工程、共享助手包的测试工具、分层验证和交付证据。
+- 本目录只保留跨模块业务契约；部署和运行流程见仓库根目录的交接说明。
 
 ## 变更规则
 
-1. 字段删除、重命名、类型或状态语义变化必须先改契约并由融合对话审核。
+1. 字段删除、重命名、类型或状态语义变化必须先改契约，并在跨模块发布前完成审核。
 2. 新增可选字段应向后兼容；前端遇到缺失字段显示 `--` 或“等待数据”，不能崩溃。
 3. 时间使用 ISO-8601，默认 `Asia/Shanghai`；标识符使用稳定字符串。
 4. 数值同时给出单位；阈值由后端或配置返回，不能在多端写不同版本。

@@ -2,6 +2,7 @@
 .runtime/
 .playwright-cli/
 output/
+**/artifacts/test/
 
 # Dependencies
 **/node_modules/

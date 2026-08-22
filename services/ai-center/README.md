@@ -12,7 +12,7 @@
 ## Run
 
 ```powershell
-cd D:\HarmonyOS-Dev\Workspaces\bottling-ai-center\services\ai-center
+cd <仓库目录>\services\ai-center
 python -m ai_center --host 0.0.0.0 --port 8091
 ```
 
@@ -36,7 +36,7 @@ $env:PRODUCTION_BACKEND_SERVICE_TOKEN='dev-ai-service-token'
 ## Smoke Test
 
 ```powershell
-cd D:\HarmonyOS-Dev\Workspaces\bottling-ai-center\services\ai-center
+cd <仓库目录>\services\ai-center
 python .\scripts\smoke_test.py
 ```
 

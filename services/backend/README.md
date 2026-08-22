@@ -1,5 +1,9 @@
 # Spring Boot 后端
 
-工程入口：`hdc_server`。这是三个鸿蒙 App 的唯一业务后端，不是鸿蒙工程，不使用 ArkTS 或 `devecocli`。
+工程入口：`hdc_server`。这是三个鸿蒙 App 共享的生产业务后端，不是鸿蒙工程，不使用 ArkTS 或 `devecocli`。
 
-负责业务状态、MySQL 持久化、可选 Redis、HTTP、WebSocket、MQTT/外部设备接入和 AI 外部端口。开发与验收以 `docs/ai-prompts/04-backend.md` 和 `contracts/` 为准。
+后端负责认证与权限、生产和工位状态、设备与产品追踪、质量、异常、物流仓储、命令安全闸口、持久化、实时推送以及外部设备数据和回执的接入。HTTP 用于查询和明确的业务操作，WebSocket 用于实时状态和事件推送；设备接入协议由边缘层负责，后端只消费标准化数据并向外提供业务接口。
+
+AI 中枢是独立服务，通过 AI 集成接口读取生产事实、提交视觉识别结果和字段级命令意图。普通助手问答不会直接创建设备命令；正式命令必须经过后端的身份、权限、参数范围、联锁、幂等和审计校验。
+
+接口字段和状态语义见根目录 `contracts/`。构建、配置、数据库初始化和联调步骤见根目录 [ONBOARDING-DEPLOYMENT.md](../../ONBOARDING-DEPLOYMENT.md)。
