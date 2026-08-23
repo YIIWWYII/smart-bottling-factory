@@ -2,7 +2,6 @@ import { router } from '@kit.ArkUI'
 import { Theme, statusColor } from '../common/Theme'
 import { SectionTitle, MetricTile, StateBadge } from '../components/IndustrialComponents'
 import { FactoryPlanScene } from '../components/FactoryPlanScene'
-import { FactoryOverviewScene } from '../components/FactoryOverviewScene'
 import { FACTORY_STAGES } from '../config/FactoryStages'
 import { FactoryRepository } from '../service/FactoryRepository'
 import { createMockBundle } from '../service/MockFactoryData'
@@ -231,6 +230,22 @@ struct FactoryOverview {
     return value
   }
 
+  private deviceShortName(name: string): string {
+    return name.length > 4 ? name.substring(0, 4) : name
+  }
+
+  private stageKeyValue(code: string): string {
+    if (code === 'GAS_INSPECTION') return 'VOC 4.6 ppm'
+    if (code === 'APPEARANCE_INSPECTION') return '缺陷率 0.02%'
+    if (code === 'BEVERAGE_READY') return '温度 25.1 °C'
+    if (code === 'FILLING') return '流量 358.7 L/min'
+    if (code === 'SECONDARY_INSPECTION') return '通过率 99.2%'
+    if (code === 'PACKING') return '节拍 12.4 箱/分'
+    if (code === 'AGV_TRANSPORT') return '避障 42 cm'
+    if (code === 'WAREHOUSE_INBOUND') return '库位 96.3%'
+    return '速度 120 mm/s'
+  }
+
   private overviewScenePayload(): string {
     const payload = new OverviewScenePayload()
     payload.stateVersion = this.bundle.stateVersion
@@ -349,50 +364,8 @@ struct FactoryOverview {
             }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Auto).width('100%')
           }.width('100%').padding({ left: 14, right: 14, top: 13, bottom: 8 }).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
 
+          this.lineHeroPanel()
           this.parallelPrepPanel()
-
-          Column() {
-            Row() {
-              Column() {
-                Text('02  LINE SYNOPTIC').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-                Text('整线设备与物料动态平面图').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
-                Text('设备、输送带、瓶子和工位状态按同一实时快照运动；点击对象查看上下文。').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
-              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              StateBadge({ status: this.bundle.source === 'MQTT' ? 'RUNNING' : 'WAIT', label: this.bundle.source })
-            }.width('100%').padding({ bottom: 10 })
-            FactoryPlanScene({
-              payload: this.overviewScenePayload(),
-              caption: '整线二维工艺图',
-              heightValue: 430,
-              selectionSource: 'THREE_2D',
-              selectedDeviceCode: $overviewSelectedDeviceCode,
-              selectedTraceCode: $overviewSelectedTraceCode,
-              onStageSelected: (stageCode: string, source: string): void => this.openStageFromPlan(stageCode),
-              onDeviceSelected: (deviceCode: string, source: string): void => this.selectOverviewDevice(deviceCode, source),
-              onProductSelected: (traceCode: string, source: string): void => this.selectOverviewProduct(traceCode, source),
-              onSelectionCleared: (source: string): void => {
-                this.overviewSelectedDeviceCode = ''
-                this.overviewSelectedTraceCode = ''
-                displayAssistantHost.clearSelection('THREE_2D')
-              }
-            })
-          }.width('100%').padding({ left: 14, right: 14, top: 13, bottom: 14 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.blue })
-
-          Column() {
-            Row() {
-              Column() {
-                Text('03  DIGITAL TWIN').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-                Text('三维整线数字孪生').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
-                Text('保留整线空间关系与设备作业动画；点击工位进入对应作业页。').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
-              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              Text('STATE v' + this.bundle.stateVersion).fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-            }.width('100%').padding({ bottom: 10 })
-            FactoryOverviewScene({
-              payload: this.overviewScenePayload(),
-              heightValue: 430,
-              onStageSelected: (stageCode: string): void => this.openStageFromPlan(stageCode)
-            })
-          }.width('100%').padding({ left: 14, right: 14, top: 13, bottom: 14 }).backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
 
           Scroll() {
             Row({ space: 8 }) {
@@ -476,6 +449,49 @@ struct FactoryOverview {
   }
 
   @Builder
+  lineHeroPanel() {
+    Column() {
+      Row() {
+        Column() {
+          Text('02  LIVE PRODUCTION LINE').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+          Text('整线设备实况').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+          Text('输送、设备、瓶体和状态灯使用同一份实时快照；点击设备或工位进入详情。').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        Row({ space: 12 }) {
+          this.inlineLegend('运行', Theme.success)
+          this.inlineLegend('待处理', Theme.warning)
+          this.inlineLegend('异常', Theme.danger)
+          Text('STATE v' + this.bundle.stateVersion).fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
+        }
+      }.width('100%').padding({ bottom: 10 }).border({ width: { bottom: 1 }, color: Theme.line })
+      FactoryPlanScene({
+        payload: this.overviewScenePayload(),
+        heightValue: 286,
+        caption: '整线二维设备工艺图',
+        selectionSource: 'THREE_2D',
+        selectedDeviceCode: $overviewSelectedDeviceCode,
+        selectedTraceCode: $overviewSelectedTraceCode,
+        onStageSelected: (stageCode: string, source: string): void => this.openStageFromPlan(stageCode),
+        onDeviceSelected: (deviceCode: string, source: string): void => this.selectOverviewDevice(deviceCode, source),
+        onProductSelected: (traceCode: string, source: string): void => this.selectOverviewProduct(traceCode, source),
+        onSelectionCleared: (source: string): void => {
+          this.overviewSelectedDeviceCode = ''
+          this.overviewSelectedTraceCode = ''
+          displayAssistantHost.clearSelection('THREE_2D')
+        }
+      })
+    }.width('100%').padding({ left: 14, right: 14, top: 13, bottom: 14 }).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.blue })
+  }
+
+  @Builder
+  inlineLegend(label: string, color: string) {
+    Row({ space: 5 }) {
+      Circle().width(7).height(7).fill(color)
+      Text(label).fontSize(8).fontColor(Theme.onDarkMuted)
+    }
+  }
+
+  @Builder
   stageCard(stage: StageDefinition, index: number) {
     Column() {
       Row() {
@@ -485,24 +501,72 @@ struct FactoryOverview {
       }.width('100%')
       Text(stage.name).fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 12 })
       Text(stage.description).fontSize(9).fontColor(Theme.muted).maxLines(2).lineHeight(14).margin({ top: 6 })
+      this.stageMachinePreview(stage)
+      Row({ space: 4 }) {
+        ForEach(stage.devices.slice(0, 3), (device: DeviceDefinition) => {
+          Column({ space: 3 }) {
+            Circle().width(11).height(11).fill(statusColor(this.deviceRuntime(device.code)))
+            Text(this.deviceShortName(device.name)).fontSize(7).fontColor(Theme.text).maxLines(1)
+          }
+          .width(40)
+          .height(38)
+          .justifyContent(FlexAlign.Center)
+          .backgroundColor('#F0F5F8')
+          .border({ width: 1, color: Theme.line })
+          .onClick(() => this.selectOverviewDevice(device.code, 'ARKUI'))
+        }, (device: DeviceDefinition) => device.code)
+      }.width('100%').margin({ top: 8 })
       Row() {
-        Text('设备 ').fontSize(9).fontColor(Theme.muted)
+        Text('在线设备 ').fontSize(9).fontColor(Theme.muted)
         Text(this.runtimeData().devices.filter(item => item.stageCode === stage.code && item.state !== 'OFFLINE').length + '/' + stage.devices.length).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold)
         Blank()
-        Text('缓冲 ').fontSize(9).fontColor(Theme.muted)
-        Text(this.stageRuntime(stage.code).bufferLevel + '/' + this.stageRuntime(stage.code).bufferCapacity).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold)
+        Text('质量门 ').fontSize(9).fontColor(Theme.muted)
+        Circle().width(8).height(8).fill(this.stageStatus(stage) === 'RUNNING' ? Theme.success : statusColor(this.stageStatus(stage)))
       }.width('100%').margin({ top: 12 })
       Row() {
         Text('在制品 ' + this.stageProductCount(stage.code)).fontSize(9).fontColor(Theme.muted)
         Blank()
-        Text('速度 ' + (stage.code === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s')).fontSize(9).fontColor(Theme.blue)
+        Text(this.stageKeyValue(stage.code)).fontSize(8).fontColor(Theme.blue).maxLines(1)
       }.width('100%').margin({ top: 7 })
       Blank()
       Button('进入工位').width('100%').height(34).backgroundColor(Theme.blue).borderRadius(2).onClick(() => {
         this.selectStage(stage)
         router.pushUrl({ url: 'pages/StageDetail', params: { stageCode: stage.code } })
       })
-    }.width(198).height(220).alignItems(HorizontalAlign.Start).padding(13).backgroundColor(Theme.panel).border({ width: { top: 4, left: 1, right: 1, bottom: 2 }, color: statusColor(this.stageStatus(stage)) }).borderRadius(3)
+    }.width(150).height(252).alignItems(HorizontalAlign.Start).padding(10).backgroundColor(Theme.panel).border({ width: { top: 4, left: 1, right: 1, bottom: 2 }, color: statusColor(this.stageStatus(stage)) }).borderRadius(3)
+  }
+
+  @Builder
+  stageMachinePreview(stage: StageDefinition) {
+    Stack({ alignContent: Alignment.Center }) {
+      Row({ space: 4 }) {
+        if (stage.code === 'PACKING') {
+          Column() { Circle().width(12).height(12).fill(Theme.blue); Blank().height(20).width(5).backgroundColor(Theme.blue) }.width(22).height(38).justifyContent(FlexAlign.Center)
+          Column() { Blank().width(30).height(15).backgroundColor('#B18450'); Row({ space: 2 }) { Circle().width(5).height(5).fill(Theme.warning); Circle().width(5).height(5).fill(Theme.warning) } }.width(34).height(28).justifyContent(FlexAlign.Center).backgroundColor('#E1C49A')
+          Column() { Blank().width(26).height(9).backgroundColor(Theme.navy); Blank().width(7).height(18).backgroundColor(Theme.navy) }.width(30).height(28).justifyContent(FlexAlign.Center)
+        } else if (stage.code === 'AGV_TRANSPORT') {
+          Column() { Blank().width(45).height(14).backgroundColor(Theme.blue); Row({ space: 20 }) { Circle().width(7).height(7).fill(Theme.navy); Circle().width(7).height(7).fill(Theme.navy) } }.width(54).height(32).justifyContent(FlexAlign.Center)
+          Column() { Blank().width(4).height(32).backgroundColor(Theme.line); Text('→').fontSize(18).fontColor(Theme.blue) }.width(20).height(32).justifyContent(FlexAlign.Center)
+        } else if (stage.code === 'WAREHOUSE_INBOUND') {
+          Column({ space: 2 }) { Row({ space: 2 }) { Blank().width(6).height(22).backgroundColor(Theme.blue); Blank().width(26).height(3).backgroundColor(Theme.blue); Blank().width(6).height(22).backgroundColor(Theme.blue) }; Row({ space: 2 }) { Blank().width(9).height(7).backgroundColor('#B18450'); Blank().width(9).height(7).backgroundColor('#B18450'); Blank().width(9).height(7).backgroundColor('#B18450') } }.width(42).height(34).justifyContent(FlexAlign.Center)
+          Column() { Blank().width(4).height(29).backgroundColor(Theme.line); Blank().width(24).height(3).backgroundColor(Theme.line) }.width(26).height(34).justifyContent(FlexAlign.Center)
+        } else if (stage.code === 'FILLING' || stage.code === 'BEVERAGE_READY') {
+          Column() { Blank().width(32).height(20).backgroundColor('#B9C9D2'); Row({ space: 6 }) { Circle().width(6).height(6).fill(Theme.blue); Circle().width(6).height(6).fill(Theme.blue); Circle().width(6).height(6).fill(Theme.blue) } }.width(38).height(34).justifyContent(FlexAlign.Center)
+          Column() { Blank().width(7).height(25).backgroundColor(Theme.blue); Blank().width(22).height(5).backgroundColor(Theme.blue) }.width(25).height(34).justifyContent(FlexAlign.Center)
+        } else if (stage.code === 'APPEARANCE_INSPECTION' || stage.code === 'SECONDARY_INSPECTION') {
+          Column() { Blank().width(5).height(32).backgroundColor(Theme.navy); Blank().width(34).height(5).backgroundColor(Theme.navy); Blank().width(5).height(32).backgroundColor(Theme.navy) }.width(42).height(34).justifyContent(FlexAlign.Center)
+          Column() { Circle().width(16).height(16).fill(Theme.blue); Blank().width(5).height(9).backgroundColor(Theme.navy) }.width(20).height(34).justifyContent(FlexAlign.Center)
+        } else {
+          Column() { Blank().width(32).height(26).backgroundColor('#B9C9D2'); Blank().width(38).height(4).backgroundColor(Theme.navy) }.width(42).height(34).justifyContent(FlexAlign.Center)
+          Column() { Circle().width(13).height(13).fill(Theme.blue); Blank().width(5).height(12).backgroundColor(Theme.navy) }.width(20).height(34).justifyContent(FlexAlign.Center)
+        }
+      }
+      Row({ space: 3 }) {
+        Circle().width(5).height(5).fill(statusColor(this.stageStatus(stage)))
+        Blank().width(64).height(3).backgroundColor('#7B99AA')
+        Circle().width(5).height(5).fill(Theme.blue)
+      }.align(Alignment.Bottom)
+    }.width('100%').height(52).margin({ top: 7, bottom: 3 }).backgroundColor('#EAF1F5').border({ width: 1, color: Theme.line })
   }
 
   @Builder

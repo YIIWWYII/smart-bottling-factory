@@ -143,8 +143,9 @@
   }
 
   function showCompatibilityPlanIfNeeded() {
-    if (!state.overview || !compatPlan) return;
-    renderCompatibilityPlan();
+    if (!compatPlan) return;
+    if (state.overview) renderCompatibilityPlan();
+    else renderStageCompatibilityPlan();
     compatPlan.classList.remove('hidden');
   }
 
@@ -172,6 +173,19 @@
     compatProductNodes.forEach(function (token, index) {
       token.style.left = (8 + ((motionPhase + index * 0.13) % 1) * 84) + '%';
     });
+  }
+
+  function compatibilityDeviceClass(deviceCode) {
+    if (deviceCode.indexOf('CAM') >= 0 || deviceCode.indexOf('LIGHT') >= 0 || deviceCode.indexOf('VIS-') === 0) return 'camera';
+    if (deviceCode.indexOf('ARM') >= 0 || deviceCode.indexOf('GRIP') >= 0) return 'robot';
+    if (deviceCode.indexOf('REJECT') >= 0) return 'reject';
+    if (deviceCode.indexOf('AGV') >= 0) return 'agv';
+    if (deviceCode.indexOf('PUMP') >= 0 || deviceCode.indexOf('FLOW') >= 0 || deviceCode.indexOf('HEAD') >= 0) return 'filling';
+    if (deviceCode.indexOf('MIX') >= 0 || deviceCode.indexOf('HT') >= 0 || deviceCode.indexOf('WASH') >= 0) return 'tank';
+    if (deviceCode.indexOf('VOC') >= 0 || deviceCode.indexOf('VERIFY') >= 0 ||
+      deviceCode.indexOf('TEMP') >= 0 || deviceCode.indexOf('HUM') >= 0 ||
+      deviceCode.indexOf('LEVEL') >= 0 || deviceCode.indexOf('US-') >= 0) return 'sensor';
+    return 'machine';
   }
 
   function renderCompatibilityPlan() {
@@ -250,6 +264,94 @@
     updateCompatibilityProductPositions();
   }
 
+  function renderStageCompatibilityPlan() {
+    if (!compatPlan) return;
+    var devices = state.devices && state.devices.length ? state.devices : demoDevices(state.stageCode);
+    var products = state.products && state.products.length ? state.products : demoProducts();
+    var nextSignature = 'stage:' + JSON.stringify({
+      stageCode: state.stageCode,
+      statusColors: state.statusColors,
+      devices: devices.map(function (device) { return device.code + ':' + device.state + ':' + device.reading; }),
+      products: products.map(function (product) { return product.traceCode + ':' + product.status; })
+    });
+    if (nextSignature === compatPlanSignature && compatProductNodes.length > 0) {
+      updateCompatibilityProductPositions();
+      return;
+    }
+    compatPlanSignature = nextSignature;
+    compatProductNodes = [];
+    var track = document.createElement('div');
+    track.className = 'stage-plan-track';
+
+    var upstream = document.createElement('div');
+    upstream.className = 'stage-plan-endpoint upstream';
+    upstream.textContent = '来自上游';
+    track.appendChild(upstream);
+
+    var lane = document.createElement('div');
+    lane.className = 'stage-plan-lane';
+    var conveyor = document.createElement('div');
+    conveyor.className = 'stage-plan-conveyor';
+    lane.appendChild(conveyor);
+
+    devices.forEach(function (device, index) {
+      var card = document.createElement('button');
+      card.type = 'button';
+      var stateClass = state.statusColors && (device.state === 'ALARM' || device.state === 'FAIL' ? 'alarm' : device.state === 'WAIT' || device.state === 'HOLD' ? 'wait' : 'running');
+      card.className = 'stage-device ' + stateClass;
+      card.style.left = (8 + index * (84 / Math.max(1, devices.length - 1))) + '%';
+      card.style.top = index % 2 === 0 ? '15%' : '54%';
+      card.setAttribute('aria-label', device.name || device.code || '设备');
+      card.addEventListener('click', function (event) {
+        event.stopPropagation();
+        markCompatibilitySelection('DEVICE', device.code || 'DEVICE', device.name || device.code || '设备');
+        compatibilityNavigate('factory://device/' + encodeURIComponent(device.code || 'DEVICE'));
+      });
+      var icon = document.createElement('span');
+      icon.className = 'stage-device-icon ' + compatibilityDeviceClass(device.code || '');
+      icon.textContent = '';
+      card.appendChild(icon);
+      var name = document.createElement('strong');
+      name.textContent = device.name || device.code || '设备';
+      card.appendChild(name);
+      var code = document.createElement('small');
+      code.textContent = device.code || '--';
+      card.appendChild(code);
+      var reading = document.createElement('em');
+      reading.textContent = device.reading || device.actionCode || (device.state || 'RUNNING');
+      card.appendChild(reading);
+      lane.appendChild(card);
+    });
+
+    products.slice(0, 10).forEach(function (product, index) {
+      var token = document.createElement('button');
+      token.type = 'button';
+      token.className = 'compat-product stage-product ' + (state.statusColors && (product.status === 'HOLD' ? 'hold' : product.status === 'REJECTED' ? 'rejected' : ''));
+      token.setAttribute('aria-label', product.traceCode || 'PRODUCT');
+      token.title = (product.traceCode || 'PRODUCT') + ' · ' + (product.bottleType || 'PLA');
+      token.style.top = index % 2 === 0 ? '48%' : '53%';
+      token.addEventListener('click', function (event) {
+        event.stopPropagation();
+        markCompatibilitySelection('PRODUCT', product.traceCode || 'PRODUCT', product.traceCode || 'PRODUCT');
+        compatibilityNavigate('factory://product/' + encodeURIComponent(product.traceCode || 'PRODUCT'));
+      });
+      compatProductNodes.push(token);
+      lane.appendChild(token);
+    });
+
+    track.appendChild(lane);
+    var downstream = document.createElement('div');
+    downstream.className = 'stage-plan-endpoint downstream';
+    downstream.textContent = '至下游';
+    track.appendChild(downstream);
+    var footer = document.createElement('div');
+    footer.className = 'stage-plan-footer';
+    footer.textContent = 'PROCESS FLOW  ·  ' + (state.stageName || state.stageCode) + '  ·  ' + devices.length + ' 台设备  ·  ' + products.length + ' 个物料';
+    track.appendChild(footer);
+    compatPlan.replaceChildren(track);
+    updateCompatibilityProductPositions();
+  }
+
   function clearObject(object) {
     if (!object) return;
     scene.remove(object);
@@ -314,6 +416,18 @@
     var center = rect(16.7, 0.16, state.stageCode === 'AGV_TRANSPORT' ? 0x697f8f : COLORS.accent, 0.95);
     setXY(center, 0, 0, 0.02);
     root.add(center);
+
+    var upperRail = rect(17.1, 0.055, COLORS.navy, 0.88);
+    var lowerRail = rect(17.1, 0.055, COLORS.navy, 0.88);
+    setXY(upperRail, 0, 0.42, 0.025);
+    setXY(lowerRail, 0, -0.42, 0.025);
+    root.add(upperRail);
+    root.add(lowerRail);
+    for (var rollerX = -8.1; rollerX <= 8.1; rollerX += 0.58) {
+      var roller = rect(0.035, 0.72, 0x9eb4c1, 0.8);
+      setXY(roller, rollerX, 0, 0.03);
+      root.add(roller);
+    }
 
     var leftGate = rect(0.18, laneHeight + 0.6, COLORS.navy, 0.9);
     var rightGate = rect(0.18, laneHeight + 0.6, COLORS.navy, 0.9);
@@ -545,10 +659,15 @@
 
     var kind = kindForDevice(device.code);
     var statusColor = colorForState(device.state || 'STANDBY', COLORS.blue);
-    var base = rect(kind === 'agv' ? 1.45 : 1.25, kind === 'sensor' ? 0.78 : 0.9, state.statusColors ? statusColor : COLORS.panel, 0.98);
+    var base = rect(kind === 'agv' ? 1.58 : 1.48, kind === 'sensor' ? 0.9 : 1.08, COLORS.panel, 0.98);
     base.userData.deviceOwner = group;
     setXY(base, 0, 0, 0.12);
     group.add(base);
+
+    var statusBand = rect(kind === 'agv' ? 1.46 : 1.35, 0.075, state.statusColors ? statusColor : COLORS.accent, 0.98);
+    statusBand.userData.deviceOwner = group;
+    setXY(statusBand, 0, 0.5, 0.17);
+    group.add(statusBand);
 
     var border = ring(0.58, 0.04, state.statusColors ? statusColor : COLORS.accent, 1);
     border.scale.x = kind === 'agv' ? 1.45 : 1.15;
@@ -563,40 +682,50 @@
     else if (kind === 'reject') addRejectIcon(group);
     else if (kind === 'agv') addAgvIcon(group);
     else if (kind === 'tank') addTankIcon(group);
-    else addMachineIcon(group);
+    else addMachineIcon(group, kind);
 
     var label = createLabel(device.name || device.code, '#173247');
     label.userData.deviceOwner = group;
-    setXY(label, 0, -0.72, 0.22);
+    setXY(label, 0, -0.84, 0.22);
     group.add(label);
     var stateLabel = createLabel(device.state || 'STANDBY', '#476276');
     stateLabel.scale.set(0.92, 0.23, 1);
     stateLabel.userData.deviceOwner = group;
-    setXY(stateLabel, 0, -1.03, 0.22);
+    setXY(stateLabel, 0, -1.16, 0.22);
     group.add(stateLabel);
     return group;
   }
 
-  function addMachineIcon(group) {
-    group.add(setXY(rect(0.65, 0.28, COLORS.navy, 1), 0, 0.08, 0.18));
-    group.add(setXY(rect(0.42, 0.1, COLORS.accent, 1), 0, -0.18, 0.19));
+  function addMachineIcon(group, kind) {
+    if (kind === 'machine') {
+      group.add(setXY(rect(0.72, 0.42, COLORS.navy, 1), 0, 0.04, 0.18));
+      group.add(setXY(rect(0.45, 0.16, COLORS.steelLight, 1), 0, -0.24, 0.19));
+      group.add(setXY(circle(0.09, COLORS.accent, 1), -0.22, 0.04, 0.2));
+      group.add(setXY(circle(0.09, COLORS.accent, 1), 0.22, 0.04, 0.2));
+      return;
+    }
+    group.add(setXY(rect(0.65, 0.32, COLORS.navy, 1), 0, 0.07, 0.18));
+    group.add(setXY(rect(0.38, 0.12, COLORS.accent, 1), 0, -0.2, 0.19));
   }
 
   function addCameraIcon(group) {
-    group.add(setXY(rect(0.56, 0.28, COLORS.navy, 1), -0.08, 0.02, 0.18));
-    group.add(setXY(circle(0.15, COLORS.accent, 1), 0.24, 0.02, 0.19));
+    group.add(setXY(rect(0.62, 0.34, COLORS.navy, 1), -0.1, 0.02, 0.18));
+    group.add(setXY(circle(0.17, COLORS.accent, 1), 0.25, 0.02, 0.19));
+    group.add(setXY(rect(0.16, 0.05, COLORS.steelLight, 1), -0.1, -0.22, 0.19));
   }
 
   function addSensorIcon(group) {
-    group.add(setXY(circle(0.22, COLORS.accent, 1), 0, 0, 0.18));
-    group.add(setXY(ring(0.38, 0.035, COLORS.accent, 0.7), 0, 0, 0.19));
+    group.add(setXY(circle(0.24, COLORS.accent, 1), 0, 0.02, 0.18));
+    group.add(setXY(ring(0.43, 0.045, COLORS.accent, 0.72), 0, 0.02, 0.19));
+    group.add(setXY(rect(0.62, 0.05, COLORS.navy, 1), 0, -0.28, 0.19));
   }
 
   function addRobotIcon(group) {
-    group.add(setXY(circle(0.2, COLORS.navy, 1), -0.28, 0, 0.18));
-    var arm = rect(0.72, 0.12, COLORS.accent, 1);
+    group.add(setXY(circle(0.22, COLORS.navy, 1), -0.3, -0.08, 0.18));
+    var arm = rect(0.78, 0.13, COLORS.accent, 1);
     arm.rotation.z = 0.42;
     group.add(setXY(arm, 0.12, 0.08, 0.19));
+    group.add(setXY(circle(0.12, COLORS.navy, 1), 0.42, 0.22, 0.2));
   }
 
   function addRejectIcon(group) {
@@ -606,7 +735,8 @@
   }
 
   function addAgvIcon(group) {
-    group.add(setXY(rect(0.82, 0.42, COLORS.navy, 1), 0, 0, 0.18));
+    group.add(setXY(rect(0.9, 0.46, COLORS.navy, 1), 0, 0, 0.18));
+    group.add(setXY(rect(0.46, 0.08, COLORS.steelLight, 1), 0, 0.22, 0.19));
     group.add(setXY(circle(0.08, COLORS.arrow, 1), -0.42, -0.28, 0.19));
     group.add(setXY(circle(0.08, COLORS.arrow, 1), 0.42, -0.28, 0.19));
     group.add(setXY(circle(0.08, COLORS.arrow, 1), -0.42, 0.28, 0.19));
@@ -614,8 +744,9 @@
   }
 
   function addTankIcon(group) {
-    group.add(setXY(circle(0.35, COLORS.navy, 1), 0, 0.02, 0.18));
-    group.add(setXY(rect(0.58, 0.08, COLORS.accent, 1), 0, -0.28, 0.19));
+    group.add(setXY(circle(0.38, COLORS.navy, 1), 0, 0.02, 0.18));
+    group.add(setXY(circle(0.25, COLORS.steelLight, 1), 0, 0.02, 0.19));
+    group.add(setXY(rect(0.64, 0.08, COLORS.accent, 1), 0, -0.3, 0.19));
   }
 
   function createLabel(text, color) {
@@ -752,12 +883,7 @@
   function renderSnapshotFrame() {
     animateFlow(motionPhase);
     positionProducts(motionPhase);
-    if (state.overview) {
-      renderCompatibilityPlan();
-      compatPlan.classList.remove('hidden');
-    } else if (!compatPlan.classList.contains('hidden')) {
-      compatPlan.classList.add('hidden');
-    }
+    showCompatibilityPlanIfNeeded();
     if (renderer && scene && camera) renderer.render(scene, camera);
     updateProbe();
   }
@@ -920,11 +1046,8 @@
     }
     animateFlow(motionPhase);
     positionProducts(motionPhase);
-    if (state.overview) {
-      if (compatProductNodes.length === 0) renderCompatibilityPlan();
-      else updateCompatibilityProductPositions();
-      compatPlan.classList.remove('hidden');
-    }
+    if (compatProductNodes.length === 0) showCompatibilityPlanIfNeeded();
+    else updateCompatibilityProductPositions();
     renderer.render(scene, camera);
     updateProbe();
   }
@@ -985,6 +1108,3 @@
 
   init();
 }());
-
-
-

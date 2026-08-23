@@ -173,6 +173,22 @@ struct StageDetail {
     return dashboard.runs === undefined ? [] : dashboard.runs
   }
 
+  private currentStageRun(): FactoryRun | undefined {
+    return this.dashboardRuns().find(item => item.currentStage === this.stageCode)
+  }
+
+  private currentBottleType(): string {
+    const run = this.currentStageRun()
+    return run === undefined || run.bottleType === undefined ? 'PLA 500 ml' : run.bottleType
+  }
+
+  private currentBatchCode(): string {
+    const run = this.currentStageRun()
+    if (run === undefined) return '--'
+    if (run.batchCode !== undefined && run.batchCode.length > 0) return run.batchCode
+    return run.traceCode
+  }
+
   private pageRoute(): string {
     return 'pages/StageDetail?stageCode=' + this.stageCode
   }
@@ -562,12 +578,15 @@ struct StageDetail {
 
         Scroll() {
           Row({ space: 8 }) {
-            this.metric('当前速度', this.stageCode === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s', '数据驱动画面')
-            this.metric('缓冲占用', this.runtimeStageValue().bufferLevel + '/' + this.runtimeStageValue().bufferCapacity, '工位间解耦缓冲')
-            this.metric('本站在制品', String(this.wipCountValue()), '运行或待处理')
-            this.metric('设备在线', this.runtimeData().devices.filter(item => item.stageCode === this.stageCode && item.state !== 'OFFLINE').length + '/' + this.stageData().devices.length, this.bundle.source)
+            this.metric('当前瓶型', this.currentBottleType(), '视觉识别结果')
+            this.metric('当前批次', this.currentBatchCode(), '本站追踪批次')
+            this.metric('生产节拍', this.stageCode === 'AGV_TRANSPORT' ? '1.00 m/s' : '120 mm/s', '实时设备快照')
+            this.metric('累计处理', this.dashboardData().completed.toString(), '当前生产日')
+            this.metric('质量门', this.qualitySummary() === '满足放行条件' ? '通过' : '待判定', '本站放行条件')
+            this.metric('在线设备', this.runtimeData().devices.filter(item => item.stageCode === this.stageCode && item.state !== 'OFFLINE').length + '/' + this.stageData().devices.length, this.bundle.source)
+            this.metric('开放报警', this.stageAlarms.toString(), '需关注事件')
           }
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 18, left: 38, right: 38 })
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').margin({ top: 18, left: 28, right: 28 })
 
         this.detailWorkspace()
         }.width('100%').alignItems(HorizontalAlign.Start).padding({ bottom: 28 })
@@ -802,7 +821,7 @@ struct StageDetail {
       Text(label).fontSize(9).fontColor(Theme.muted)
       Text(value).fontSize(18).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 5 })
       Text(note).fontSize(8).fontColor(Theme.muted).margin({ top: 3 })
-    }.alignItems(HorizontalAlign.Start).width(160).height(78).padding(10).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.accent })
+    }.alignItems(HorizontalAlign.Start).width(150).height(78).padding(10).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.accent })
   }
 
   @Builder

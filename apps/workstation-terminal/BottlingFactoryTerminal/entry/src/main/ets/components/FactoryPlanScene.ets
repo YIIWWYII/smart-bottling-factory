@@ -21,6 +21,7 @@ export struct FactoryPlanScene {
     (source: string): void => {}
   private controller: webview.WebviewController = new webview.WebviewController()
   private syncTimer: number = -1
+  private probeTimer: number = -1
 
   aboutToAppear(): void {
     this.syncTimer = setInterval(() => this.pushPayload(), 350)
@@ -28,7 +29,9 @@ export struct FactoryPlanScene {
 
   aboutToDisappear(): void {
     if (this.syncTimer >= 0) clearInterval(this.syncTimer)
+    if (this.probeTimer >= 0) clearTimeout(this.probeTimer)
     this.syncTimer = -1
+    this.probeTimer = -1
     if (this.webReady) {
       this.controller.runJavaScript('window.FactoryPlan && window.FactoryPlan.dispose && window.FactoryPlan.dispose()')
         .catch((error: BusinessError) => console.error(`Factory 2D dispose failed: ${error.code} ${error.message}`))
@@ -46,6 +49,13 @@ export struct FactoryPlanScene {
     return decodeURIComponent(url.substring(prefix.length))
   }
 
+  private logTestProbe(): void {
+    if (!this.webReady) return
+    this.controller.runJavaScript('JSON.stringify(window.__factoryPlanTest__)')
+      .then((result: string) => console.info('[BottlingFactory][ArkWebProbe][2D] ' + result))
+      .catch((error: BusinessError) => console.error(`Factory 2D probe failed: ${error.code} ${error.message}`))
+  }
+
   build() {
     Stack({ alignContent: Alignment.Center }) {
       Web({ src: $rawfile('factory2d/index.html'), controller: this.controller })
@@ -55,6 +65,7 @@ export struct FactoryPlanScene {
         .onPageEnd(() => {
           this.webReady = true
           this.pushPayload()
+          this.probeTimer = setTimeout(() => this.logTestProbe(), 1800)
         })
         .onLoadIntercept((event) => {
           if (event === undefined) return false
@@ -105,5 +116,4 @@ export struct FactoryPlanScene {
     .border({ width: 1, color: Theme.line })
   }
 }
-
 

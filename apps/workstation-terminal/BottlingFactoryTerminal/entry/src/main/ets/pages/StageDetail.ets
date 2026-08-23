@@ -155,7 +155,7 @@ struct StageDetail {
   @State selectedDeviceCode: string = ''
   @State selectedTraceCode: string = ''
   @State planarEnabled: boolean = true
-  @State threeEnabled: boolean = false
+  @State threeEnabled: boolean = true
   @State activeVisual: string = 'PLANAR'
   @State detailTab: string = 'DEVICES'
   @State statusColorsEnabled: boolean = true

@@ -160,6 +160,11 @@ struct AdminConsole {
       router.replaceUrl({ url: 'pages/Login' })
       return
     }
+    this.section = 'DASHBOARD'
+    this.selectedDetail = '请选择一条记录查看详情。'
+    this.query = ''
+    this.filter = 'ALL'
+    this.pageIndex = 0
     this.assistantAdapter.setNavigator((entity: AssistantEntityRef) => this.navigateAssistantEntity(entity))
     this.assistantAdapter.setHostContext(this.assistantPageRoute(), this.currentStateVersion(), this.bundle.updatedAt)
     this.assistantAdapter.setVisibility(SessionStore.isDemo ? 'HIDDEN' : 'VISIBLE')
