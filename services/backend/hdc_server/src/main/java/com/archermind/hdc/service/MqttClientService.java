@@ -153,7 +153,7 @@ public class MqttClientService implements MqttCallbackExtended {
             client = new MqttClient(url + ":" + port, mqttClientId, new MemoryPersistence());
             conn();
         } catch (MqttException e) {
-            throw new RuntimeException(e);
+            XLog.warn(tag + "连接失败，继续使用中央模拟数据：" + e.getMessage());
         }
     }
 }

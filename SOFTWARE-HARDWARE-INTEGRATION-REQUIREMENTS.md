@@ -128,7 +128,15 @@ MQTT 是消息载体，不是业务数据本身。Topic、消息体、时间、�
 
 ```text
 factory/{lineId}/{stageCode}/{deviceCode}/telemetry
+factory/{lineId}/{stageCode}/{deviceCode}/sensor
 factory/{lineId}/{stageCode}/{deviceCode}/event
+factory/{lineId}/{stageCode}/{deviceCode}/command-ack
+```
+
+后端向边缘层下发：
+
+```text
+factory/{lineId}/{stageCode}/{deviceCode}/command
 ```
 
 当前实现使用 QoS 1 接收消息，并将消息中的 `stageCode`、`deviceCode` 与 Topic 互相补充。建议企业在消息体中仍然完整携带这些字段，避免网关转发后丢失上下文。
@@ -186,7 +194,22 @@ factory/{lineId}/{stageCode}/{deviceCode}/event
 
 最终 Topic 和字段要以企业实际网关能力为准。如果企业已有 OPC UA、Modbus TCP、厂商 REST API 或其他协议，优先由企业网关统一转换，不要求三个鸿蒙应用理解这些协议。
 
-### 5.3 控制和回执
+### 5.3 企业现有 PLC 兼容协议
+
+当前 Spring Boot 已兼容企业可运行项目的既有 Topic，不要求先改企业 PLC 适配器：
+
+```text
+order/adapter/sync   后端 -> PLC，申请全量同步
+order/service/sync   PLC -> 后端，四路全量状态
+order/service/switch PLC -> 后端，单路状态变化
+order/service/lamps  PLC -> 后端，指示灯状态
+```
+
+四路默认顺序为机械臂、机床、输送线、巡检车，并映射到 `PK-ARM-01`、`FIL-HEAD-01`、`PT-CV-01`、`AGV-01`。现场对应关系变化时通过 `factory.enterprise.plc.switch-devices` 配置覆盖，禁止在鸿蒙前端硬编码。
+
+该兼容协议当前只表达设备开关/运行状态，不能替代传感器数值、产品追踪、故障码和完整命令 ACK。新增数据优先使用 5.2 的标准 Topic；企业网关暂时无法改造时，再增加独立后端适配器。
+
+### 5.4 控制和回执
 
 控制链路必须是：
 

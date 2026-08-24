@@ -21,7 +21,8 @@
 
 在项目组验证环境执行过：
 
-- 后端 `mvn test`：`Tests run: 32, Failures: 0, Errors: 0`。
+- 后端 `mvn test`：`Tests run: 36, Failures: 0, Errors: 0`。
+- 后端 `factory-demo-smoke.ps1`：HTTP、WebSocket、MySQL 登录、模拟传感器和模拟命令 ACK 全部通过。
 - AI 中枢 `scripts/smoke_test.py`：`SMOKE TEST PASSED`。
 - 三个 App 的 `tools/validate-project.ps1`：均通过。
 - 共享 HAR 和三个 HAP：均出现 `BUILD SUCCESSFUL`。
@@ -41,9 +42,9 @@
 
 1. 本次验证没有在线鸿蒙模拟器或真机，因此没有在本次交接前重新做安装、点击、ArkWeb WebGL 和长时间运行验收。
 2. 后端默认配置使用 MySQL `127.0.0.1:3307`。如果本机 MySQL 是 `3306`，必须按本文修改配置或启动参数。
-3. 后端登录、MySQL 持久化和真实 WebSocket 需要先启动 Spring Boot 并连接可用数据库；单元测试不等于真实数据库联调。
+3. 后端登录、MySQL 持久化和 WebSocket 已在项目组环境完成联调；换电脑后仍必须按本文重新执行 smoke，不能只看单元测试。
 4. AI 默认是 `LOCAL_DEMO`。真实大模型需要在后台 AI 配置中填写兼容接口、模型和 API Key；本地 RAG 当前是演示型内存检索，不是生产向量数据库。
-5. 真实传感器/MQTT、真实视觉模型、MCP 工具链和“视觉识别后自动生成命令意图”的生产闭环仍需现场设备和正式服务配置后验证。
+5. 企业 PLC Topic 和 DOBOT TCP 已有兼容适配入口，但真实设备、真实视觉模型、MCP 工具链和“视觉识别后自动生成命令意图”的生产闭环仍需现场配置和验收。
 
 因此，当前版本适合：代码评审、界面演示、模拟数据联调和后续硬件接入；不应直接作为真实产线控制软件使用。
 
@@ -166,7 +167,65 @@ Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\services\backen
 .\scripts\factory-demo-smoke.ps1 -BaseUrl 'http://127.0.0.1:8088/hdc/api'
 ```
 
-该脚本会检查 HTTP 快照、WebSocket、模拟传感器、登录、命令受理、九工序拓扑、设备能力和 StageSnapshot。
+该脚本会检查 HTTP 快照、WebSocket、模拟传感器、登录、模拟设备命令 ACK、九工序拓扑、设备能力和 StageSnapshot。
+
+### 6.1 全模拟与真实/模拟混合模式
+
+三个鸿蒙应用始终只连接 Spring Boot，不直接连接 PLC、MQTT Broker 或机械臂。是否使用真实设备由后端按设备运行态决定：
+
+```text
+设备有新鲜 MQTT 遥测 -> 真实设备模式
+设备没有遥测或超过 30 秒 -> 只对该设备使用模拟数据
+模拟设备命令 -> 模拟适配器立即 ACKNOWLEDGED
+真实 MQTT 设备命令 -> SENT，等待 command-ack
+真实设备通道不可用 -> FAILED，不显示假成功
+```
+
+没有现场硬件时继续使用 `factory-demo`。接入企业 Broker 时改用 `factory-mqtt-demo`，并通过启动参数填写现场地址：
+
+```powershell
+mvn spring-boot:run `
+  "-Dspring-boot.run.profiles=factory-mqtt-demo" `
+  "-Dspring-boot.run.arguments=--mqtt.url=tcp://192.168.1.10 --mqtt.port=1883 --factory.enterprise.plc.switch-devices=PK-ARM-01,FIL-HEAD-01,PT-CV-01,AGV-01"
+```
+
+企业 PLC 兼容 Topic：
+
+```text
+后端请求全量同步：order/adapter/sync
+PLC 全量状态：     order/service/sync
+PLC 单路状态：     order/service/switch
+PLC 指示灯状态：   order/service/lamps
+```
+
+`device` 数组或 `index` 默认按以下顺序映射，可用 `factory.enterprise.plc.switch-devices` 覆盖：
+
+```text
+0 机械臂 -> PK-ARM-01
+1 机床   -> FIL-HEAD-01
+2 输送线 -> PT-CV-01
+3 巡检车 -> AGV-01
+```
+
+标准设备 Topic 为：
+
+```text
+上报：factory/{lineId}/{stageCode}/{deviceCode}/telemetry
+上报：factory/{lineId}/{stageCode}/{deviceCode}/sensor
+上报：factory/{lineId}/{stageCode}/{deviceCode}/event
+上报：factory/{lineId}/{stageCode}/{deviceCode}/command-ack
+下发：factory/{lineId}/{stageCode}/{deviceCode}/command
+```
+
+DOBOT 当前只接管 `PK-ARM-01 + START_PACKING_PLAN`。确认机械臂已切到 TCP/IP 二次开发模式、点位和物理安全已验收后，才能启用：
+
+```powershell
+mvn spring-boot:run `
+  "-Dspring-boot.run.profiles=factory-mqtt-demo" `
+  "-Dspring-boot.run.arguments=--factory.enterprise.dobot.enabled=true --factory.enterprise.dobot.host=192.168.1.6 --factory.enterprise.dobot.port=29999 --factory.enterprise.dobot.packing-script=blockly_hdc2024"
+```
+
+企业资料中的 `hdc2024` 是 DobotStudio Pro 中的工程名称；企业可运行 ArkTS 源码实际发送的是 `runscript(blockly_hdc2024)`。如果现场控制器中的脚本名不同，只覆盖 `factory.enterprise.dobot.packing-script`，不要修改 Java 代码。
 
 ## 7. 启动 AI 中枢
 
@@ -290,7 +349,7 @@ Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\apps\admin-cons
 1. `mvn test`：确认后端代码测试通过。
 2. 启动 MySQL，确认数据库 `hdc` 可连接。
 3. 启动 Spring Boot，检查 `factory/health` 和 `factory/topology`。
-4. 运行 `factory-demo-smoke.ps1`，确认 HTTP、WebSocket、模拟传感器和登录。
+4. 运行 `factory-demo-smoke.ps1`，确认 HTTP、WebSocket、模拟传感器、登录和模拟命令 ACK。
 5. 启动 AI 中枢，运行 `smoke_test.py`。
 6. 启动模拟器，安装并运行数字展板：确认总览、九工序、2D、3D、滚动、暂停/恢复和对象选择。
 7. 运行工位端：使用对应工位账号，确认本站数据、设备能力、只读/可控边界和命令回执。

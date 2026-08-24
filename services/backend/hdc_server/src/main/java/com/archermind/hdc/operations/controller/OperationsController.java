@@ -13,6 +13,7 @@ import com.archermind.hdc.operations.model.AlarmRecord;
 import com.archermind.hdc.operations.model.DeviceCommand;
 import com.archermind.hdc.operations.model.SensorReading;
 import com.archermind.hdc.operations.service.OperationsService;
+import com.archermind.hdc.operations.service.HybridDeviceCommandDispatcher;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,9 +30,12 @@ import javax.servlet.http.HttpServletRequest;
 @RequestMapping("/operations")
 public class OperationsController {
     private final OperationsService service;
+    private final HybridDeviceCommandDispatcher commandDispatcher;
 
-    public OperationsController(OperationsService service) {
+    public OperationsController(OperationsService service,
+                                HybridDeviceCommandDispatcher commandDispatcher) {
         this.service = service;
+        this.commandDispatcher = commandDispatcher;
     }
 
     @GetMapping("/overview")
@@ -69,7 +73,7 @@ public class OperationsController {
             request.setOperator(user.getUsername());
             request.setOperatorRole(user.getRole());
         }
-        return call(() -> service.createCommand(request));
+        return call(() -> commandDispatcher.dispatch(service.createCommand(request)));
     }
 
     @GetMapping("/commands")

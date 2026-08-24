@@ -151,23 +151,24 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 $headers = @{ Authorization = "Bearer $token" }
 $command = Invoke-Json POST '/operations/commands' @{
   clientRequestId = "SMOKE-$([Guid]::NewGuid().ToString('N'))"
-  deviceCode = 'LINE-CONTROL-01'
-  commandType = 'SET_RECIPE'
+  deviceCode = 'FIL-PUMP-01'
+  commandType = 'SET_PUMP_SPEED'
   source = 'OPERATOR'
   operator = $Username
   operatorRole = 'OPERATOR'
-  reason = 'factory-demo smoke command acceptance'
+  reason = 'factory-demo simulation command acknowledgement'
   traceCode = 'BOT-SMOKE-001'
   timeoutSeconds = 30
   payload = @{
-    recipeCode = 'PLA-500-DEMO-V1'
-    fillingTemperatureC = 25
-    fillVolumeMl = 500
-    capTorqueNm = 0.9
+    value = 60
   }
 } $headers
-if ($command.data.status -ne 'PENDING') {
-  throw "command was not accepted as PENDING: $($command.data.status)"
+if ($command.data.status -ne 'ACKNOWLEDGED') {
+  throw "simulation command was not acknowledged: $($command.data.status)"
+}
+if ([string]::IsNullOrWhiteSpace([string]$command.data.edgeAckId) -or
+    $command.data.message -notlike 'Simulation adapter*') {
+  throw 'simulation command did not return an adapter acknowledgement'
 }
 
 Write-Host 'Contract snapshot smoke'

@@ -7,6 +7,10 @@ import com.archermind.hdc.factory.model.FactoryRun;
 import com.archermind.hdc.factory.runtime.dto.DeviceTelemetryRequest;
 import com.archermind.hdc.factory.runtime.service.FactoryRuntimeService;
 import com.archermind.hdc.log.XLog;
+import com.archermind.hdc.operations.dto.CommandAckRequest;
+import com.archermind.hdc.operations.dto.SensorReadingRequest;
+import com.archermind.hdc.operations.model.DeviceCommand;
+import com.archermind.hdc.operations.service.OperationsService;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
@@ -18,6 +22,8 @@ import org.springframework.stereotype.Service;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -31,11 +37,14 @@ public class FactoryMqttBridge {
 
     private final FactoryService factoryService;
     private final FactoryRuntimeService runtimeService;
+    private final OperationsService operationsService;
     private MqttClient client;
 
-    public FactoryMqttBridge(FactoryService factoryService, FactoryRuntimeService runtimeService) {
+    public FactoryMqttBridge(FactoryService factoryService, FactoryRuntimeService runtimeService,
+                             OperationsService operationsService) {
         this.factoryService = factoryService;
         this.runtimeService = runtimeService;
+        this.operationsService = operationsService;
     }
 
     @PostConstruct
@@ -53,6 +62,8 @@ public class FactoryMqttBridge {
             client.connect(options);
             client.subscribe("factory/+/+/+/telemetry", 1, this::onMessage);
             client.subscribe("factory/+/+/+/event", 1, this::onMessage);
+            client.subscribe("factory/+/+/+/sensor", 1, this::onMessage);
+            client.subscribe("factory/+/+/+/command-ack", 1, this::onMessage);
             XLog.info("factory MQTT bridge connected");
         } catch (Exception exception) {
             XLog.error("factory MQTT bridge unavailable: " + exception.getMessage());
@@ -63,6 +74,28 @@ public class FactoryMqttBridge {
         String payload = new String(mqttMessage.getPayload(), StandardCharsets.UTF_8);
         try {
             JSONObject object = JSON.parseObject(payload);
+            if (topic.endsWith("/command-ack")) {
+                String commandId = object.getString("commandId");
+                if (commandId == null || commandId.trim().isEmpty()) {
+                    throw new IllegalArgumentException("command ACK missing commandId");
+                }
+                CommandAckRequest ack = object.toJavaObject(CommandAckRequest.class);
+                operationsService.acknowledgeCommand(commandId, ack);
+                XLog.info("factory MQTT command ACK applied: " + commandId);
+                return;
+            }
+            if (topic.endsWith("/sensor")) {
+                String[] parts = topic.split("/");
+                SensorReadingRequest reading = object.toJavaObject(SensorReadingRequest.class);
+                if (parts.length >= 5) {
+                    if (reading.getStage() == null) reading.setStage(parts[2]);
+                    if (reading.getDeviceCode() == null) reading.setDeviceCode(parts[3]);
+                }
+                reading.setMode("MQTT");
+                operationsService.recordSensor(reading);
+                XLog.info("factory MQTT sensor applied: " + reading.getDeviceCode());
+                return;
+            }
             if (topic.endsWith("/telemetry")) {
                 String[] parts = topic.split("/");
                 DeviceTelemetryRequest telemetry = object.toJavaObject(DeviceTelemetryRequest.class);
@@ -99,6 +132,23 @@ public class FactoryMqttBridge {
         } catch (MqttException exception) {
             throw new IllegalStateException("factory MQTT publish failed", exception);
         }
+    }
+
+    public boolean isConnected() {
+        return client != null && client.isConnected();
+    }
+
+    public void publishDeviceCommand(DeviceCommand command) {
+        String topic = "factory/" + command.getLineId() + "/" + command.getStageCode()
+                + "/" + command.getDeviceCode() + "/command";
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("commandId", command.getCommandId());
+        payload.put("clientRequestId", command.getClientRequestId());
+        payload.put("commandType", command.getCommandType());
+        payload.put("parameters", JSON.parseObject(command.getPayload()));
+        payload.put("traceCode", command.getTraceCode());
+        payload.put("createdAt", command.getCreatedAt());
+        publishCommand(topic, payload);
     }
 
     @PreDestroy

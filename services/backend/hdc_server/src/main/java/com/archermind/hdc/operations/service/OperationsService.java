@@ -230,6 +230,19 @@ public class OperationsService {
         return value;
     }
 
+    public DeviceCommand markCommandSent(String commandId, String message) {
+        DeviceCommand value = requiredCommand(commandId);
+        synchronized (value) {
+            expireCommandIfNeeded(value, LocalDateTime.now());
+            require("PENDING".equals(value.getStatus()), "command is not pending");
+            value.setStatus("SENT");
+            value.setMessage(normalize(message, "Command sent to device adapter"));
+            persistence.save(value);
+            realtimePublisher.publish("operations.command.changed", value);
+        }
+        return value;
+    }
+
     public List<DeviceCommand> commands(String status) {
         expirePendingCommands(LocalDateTime.now());
         return commands.values().stream()

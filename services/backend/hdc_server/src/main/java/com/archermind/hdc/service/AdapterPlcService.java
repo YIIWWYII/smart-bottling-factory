@@ -6,6 +6,7 @@ import com.archermind.hdc.dto.*;
 import com.archermind.hdc.entity.Device;
 import com.archermind.hdc.entity.GroupDevice;
 import com.archermind.hdc.entity.ProductWebHelperDao;
+import com.archermind.hdc.integration.enterprise.EnterprisePlcRuntimeAdapter;
 import com.archermind.hdc.log.XLog;
 import com.archermind.hdc.mapper.*;
 import com.archermind.hdc.scheduled.Config;
@@ -45,6 +46,8 @@ public class AdapterPlcService implements MqttHelper.RegisterMessage {
 
     @Autowired
     private DeviceService deviceService;
+    @Autowired
+    private EnterprisePlcRuntimeAdapter enterpriseRuntimeAdapter;
 
 
     /**
@@ -141,6 +144,7 @@ public class AdapterPlcService implements MqttHelper.RegisterMessage {
             XLog.warn("解析数据为空");
             return;
         }
+        enterpriseRuntimeAdapter.recordSync(dto);
         // 自动添加设备type
         String sn = dto.getSn();
         GroupDevice groupDevice = getGroupBySn(sn);
@@ -186,6 +190,7 @@ public class AdapterPlcService implements MqttHelper.RegisterMessage {
             XLog.warn("解析数据为空");
             return;
         }
+        enterpriseRuntimeAdapter.recordSwitch(dto);
         String sn = dto.getSn();
         Integer index = dto.getIndex();
         Integer action = dto.getAction();

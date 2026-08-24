@@ -15,8 +15,20 @@ mqtt:
   port: 31883
   enabled: true
 factory:
+  runtime:
+    mqtt-timeout-seconds: 30
+    buffer-capacity: 6
   mqtt:
     enabled: true
+  enterprise:
+    plc:
+      enabled: true
+      switch-devices: PK-ARM-01,FIL-HEAD-01,PT-CV-01,AGV-01
+    dobot:
+      enabled: false
+      host: 192.168.1.6
+      port: 29999
+      packing-script: blockly_hdc2024
   persistence:
     enabled: true
 logging:
