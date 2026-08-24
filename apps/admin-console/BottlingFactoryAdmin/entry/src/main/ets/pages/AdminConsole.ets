@@ -1165,11 +1165,33 @@ struct AdminConsole {
       }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
 
       Row({ space: 12 }) {
-        this.liveFact('Broker', '192.168.1.200:1883', this.livePlc.mqttConnected ? '已连接' : '未连接')
-        this.liveFact('适配器 SN', this.livePlc.adapterSn || '--',
-          this.livePlc.version ? '固件 ' + this.livePlc.version : '等待版本')
-        this.liveFact('适配器地址', this.livePlc.adapterIp || '--', this.livePlc.protocolType || 'MQTT')
-        this.liveFact('最后心跳', this.livePlc.lastSeenAt || '--', this.livePlc.online ? '数据新鲜' : '数据超时')
+        Column() {
+          Text('Broker').fontSize(9).fontColor(Theme.muted)
+          Text('192.168.1.200:1883').fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7 })
+          Text(this.livePlc.mqttConnected ? '已连接' : '未连接').fontSize(9).fontColor(Theme.blue).margin({ top: 6 })
+        }.layoutWeight(1).height(86).padding(12).alignItems(HorizontalAlign.Start)
+          .backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+        Column() {
+          Text('适配器 SN').fontSize(9).fontColor(Theme.muted)
+          Text(this.livePlc.adapterSn || '--').fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7 })
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.livePlc.version ? '固件 ' + this.livePlc.version : '等待版本').fontSize(9).fontColor(Theme.blue).margin({ top: 6 })
+        }.layoutWeight(1).height(86).padding(12).alignItems(HorizontalAlign.Start)
+          .backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+        Column() {
+          Text('适配器地址').fontSize(9).fontColor(Theme.muted)
+          Text(this.livePlc.adapterIp || '--').fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7 })
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.livePlc.protocolType || 'MQTT').fontSize(9).fontColor(Theme.blue).margin({ top: 6 })
+        }.layoutWeight(1).height(86).padding(12).alignItems(HorizontalAlign.Start)
+          .backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+        Column() {
+          Text('最后心跳').fontSize(9).fontColor(Theme.muted)
+          Text(this.livePlc.lastSeenAt || '--').fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7 })
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.livePlc.online ? '数据新鲜' : '数据超时').fontSize(9).fontColor(Theme.blue).margin({ top: 6 })
+        }.layoutWeight(1).height(86).padding(12).alignItems(HorizontalAlign.Start)
+          .backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
       }.width('100%')
 
       Column() {
@@ -1220,17 +1242,6 @@ struct AdminConsole {
           .width('100%').padding(10).backgroundColor(Theme.panelSoft).margin({ top: 4 })
       }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
     }.width('100%')
-  }
-
-  @Builder
-  liveFact(label: string, value: string, note: string) {
-    Column() {
-      Text(label).fontSize(9).fontColor(Theme.muted)
-      Text(value).fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7 })
-        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(note).fontSize(9).fontColor(Theme.blue).margin({ top: 6 })
-    }.layoutWeight(1).height(86).padding(12).alignItems(HorizontalAlign.Start)
-      .backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
   }
 
   private plcSwitchAt(index: number): number {
