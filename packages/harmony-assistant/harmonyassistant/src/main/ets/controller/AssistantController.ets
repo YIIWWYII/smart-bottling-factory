@@ -273,7 +273,8 @@ export class AssistantController {
       const result: AssistantConversationMessagesResult = await this.client.listMessages(this.conversationId)
       if (requestGeneration !== this.requestGeneration || requestGeneration <= this.httpSettledGeneration) return
       const views: AssistantMessageView[] = []
-      result.messages.forEach((message: AssistantMessageResult) => {
+      const messages: AssistantMessageResult[] = result.messages === undefined || result.messages === null ? [] : result.messages
+      messages.forEach((message: AssistantMessageResult) => {
         const view: AssistantMessageView = this.toAssistantMessage(message)
         const currentIndex: number = this.findMessageIndex(view.messageId)
         if (view.content.length === 0 && currentIndex >= 0 && this.messages[currentIndex].content.length > 0) {
@@ -397,7 +398,7 @@ export class AssistantController {
       dataGeneratedAt: result.dataGeneratedAt,
       stateVersion: result.stateVersion,
       knowledgeVersion: result.knowledgeVersion,
-      citations: result.citations === undefined ? [] : result.citations,
+      citations: result.citations === undefined || result.citations === null ? [] : result.citations,
       createdAt: result.createdAt === undefined ? new Date().toISOString() : result.createdAt
     }
   }

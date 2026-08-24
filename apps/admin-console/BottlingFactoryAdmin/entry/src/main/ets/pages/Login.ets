@@ -56,12 +56,12 @@ struct Login {
       Scroll() {
         Column() {
           Text('AUTHENTICATION').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-          Text('登录控制台').fontSize(26).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 8 })
+          Text('登录控制台').fontSize(26).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 8 })
           Text('请输入后端已创建的账号。登录失败时请检查服务地址、账号状态和密码。').fontSize(11).fontColor(Theme.muted).margin({ top: 6, bottom: 24 })
           Text('用户名').fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold).width('100%')
-          TextInput({ text: this.username, placeholder: '请输入用户名' }).onChange((value: string) => this.username = value).height(45).margin({ top: 7, bottom: 15 }).backgroundColor('#FFFFFF')
+          TextInput({ text: this.username, placeholder: '请输入用户名' }).onChange((value: string) => this.username = value).height(45).margin({ top: 7, bottom: 15 }).backgroundColor(Theme.panelSoft)
           Text('密码').fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold).width('100%')
-          TextInput({ text: this.password, placeholder: '请输入密码' }).type(InputType.Password).onChange((value: string) => this.password = value).height(45).margin({ top: 7 }).backgroundColor('#FFFFFF')
+          TextInput({ text: this.password, placeholder: '请输入密码' }).type(InputType.Password).onChange((value: string) => this.password = value).height(45).margin({ top: 7 }).backgroundColor(Theme.panelSoft)
           if (this.message.length > 0) {
             Text(this.message).fontSize(10).fontColor(Theme.danger).width('100%').margin({ top: 10 })
           }

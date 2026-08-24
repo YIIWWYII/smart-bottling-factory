@@ -15,19 +15,19 @@
 
   var THREE = window.THREE;
   var COLORS = {
-    navy: 0x123a5b,
-    blue: 0x145da0,
-    accent: 0x1f7acb,
-    line: 0x6f8fa3,
-    panel: 0xf7fbfd,
-    floor: 0xdfeaf1,
-    belt: 0xb8cad7,
-    running: 0x238b5a,
-    warning: 0xd89016,
-    alarm: 0xc83f49,
-    offline: 0x8397a6,
-    product: 0x2a86cf,
-    arrow: 0xf0b13a
+    navy: 0x0d1e3c,
+    blue: 0x00a8e8,
+    accent: 0x00d4aa,
+    line: 0x2b5f95,
+    panel: 0x0d1e3c,
+    floor: 0x0a1628,
+    belt: 0x16345c,
+    running: 0x00c853,
+    warning: 0xffab00,
+    alarm: 0xff1744,
+    offline: 0x667788,
+    product: 0x00a8e8,
+    arrow: 0x00d4aa
   };
 
   var state = {
@@ -500,12 +500,12 @@
       setXY(stageBorder, x, 0.1, 0.1);
       root.add(stageBorder);
 
-      var label = createLabel(stage.name || stage.code, '#173247');
+      var label = createLabel(stage.name || stage.code, '#e7f1fb');
       label.scale.set(1.1, 0.28, 1);
       setXY(label, x, 1.05, 0.2);
       root.add(label);
 
-      var wip = createLabel('WIP ' + String(stage.wip || 0), '#476276');
+      var wip = createLabel('WIP ' + String(stage.wip || 0), '#8899aa');
       wip.scale.set(0.84, 0.22, 1);
       setXY(wip, x, -0.98, 0.2);
       root.add(wip);
@@ -698,11 +698,11 @@
     else if (kind === 'tank') addTankIcon(group);
     else addMachineIcon(group, kind);
 
-    var label = createLabel(device.name || device.code, '#173247');
+    var label = createLabel(device.name || device.code, '#e7f1fb');
     label.userData.deviceOwner = group;
     setXY(label, 0, -0.84, 0.22);
     group.add(label);
-    var stateLabel = createLabel(device.state || 'STANDBY', '#476276');
+    var stateLabel = createLabel(device.state || 'STANDBY', '#8899aa');
     stateLabel.scale.set(0.92, 0.23, 1);
     stateLabel.userData.deviceOwner = group;
     setXY(stateLabel, 0, -1.16, 0.22);
@@ -768,12 +768,12 @@
     canvas.width = 256;
     canvas.height = 64;
     var context = canvas.getContext('2d');
-    context.fillStyle = 'rgba(249,251,253,.94)';
+    context.fillStyle = 'rgba(13,30,60,.96)';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.strokeStyle = 'rgba(21,94,149,.5)';
     context.lineWidth = 4;
     context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-    context.fillStyle = color || '#173247';
+    context.fillStyle = color || '#e7f1fb';
     context.font = '24px Microsoft YaHei, sans-serif';
     context.textAlign = 'center';
     context.textBaseline = 'middle';

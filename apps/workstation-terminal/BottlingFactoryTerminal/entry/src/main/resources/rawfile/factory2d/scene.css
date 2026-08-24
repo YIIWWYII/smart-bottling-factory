@@ -538,3 +538,38 @@ canvas {
   .hud-right { top: auto; right: 10px; bottom: 10px; }
   .selection { right: 10px; bottom: 48px; }
 }
+
+/* SCADA visual layer: the canvas remains data-driven, only its presentation changes. */
+:root { color: #e7f1fb; background: #0a1628; }
+body {
+  background:
+    linear-gradient(rgba(0, 168, 232, .08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 168, 232, .08) 1px, transparent 1px),
+    #0a1628;
+  background-size: 22px 22px;
+}
+.hud { border-color: #1a3a6a; border-top-color: #00a8e8; background: rgba(13, 30, 60, .96); box-shadow: 0 6px 20px rgba(0, 0, 0, .3); }
+.hud-left > span:last-child { color: #8899aa; }
+.selection { border-left-color: #00d4aa; background: rgba(13, 30, 60, .97); box-shadow: 0 6px 20px rgba(0, 0, 0, .32); }
+.compat-plan { border-color: #1a3a6a; background: linear-gradient(rgba(0, 168, 232, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 168, 232, .06) 1px, transparent 1px), #0b1a36; background-size: 22px 22px; }
+.compat-plan-track { background: rgba(18, 50, 90, .8); border-color: #1a3a6a; box-shadow: inset 0 0 0 1px rgba(0, 168, 232, .16); }
+.compat-stage { border-color: #00c853; background: rgba(13, 30, 60, .96); color: #f4f8ff; box-shadow: 0 5px 16px rgba(0, 0, 0, .26); }
+.compat-stage.wait { border-color: #ffab00; } .compat-stage.alarm { border-color: #ff1744; }
+.compat-stage small { color: #8899aa; }
+.compat-device { border-color: #1a3a6a; background: #102b49; color: #dcecff; }
+.compat-device:hover, .compat-device:focus-visible { background: #163e68; }
+.compat-product { border-color: #dcecff; background: #00a8e8; box-shadow: 0 0 0 2px rgba(0, 168, 232, .28); }
+.compat-product.hold { background: #ffab00; } .compat-product.rejected { background: #ff1744; }
+.stage-plan-track { border-color: #1a3a6a; background: linear-gradient(rgba(0, 168, 232, .06) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 168, 232, .06) 1px, transparent 1px), #0b1a36; background-size: 24px 24px; }
+.stage-plan-lane { border-color: rgba(43, 95, 149, .7); background: rgba(13, 30, 60, .54); }
+.stage-plan-conveyor { border-color: #00a8e8; background: repeating-linear-gradient(90deg, #16345c 0, #16345c 18px, #234b78 19px, #234b78 21px); box-shadow: 0 4px 0 rgba(0, 0, 0, .3); }
+.stage-plan-endpoint { color: #dcecff; } .stage-plan-endpoint::after { color: #00d4aa; }
+.stage-device { border-color: #00c853; background: rgba(13, 30, 60, .97); color: #f4f8ff; box-shadow: 0 5px 16px rgba(0, 0, 0, .3); }
+.stage-device.wait { border-color: #ffab00; } .stage-device.alarm { border-color: #ff1744; }
+.stage-device-icon { border-color: #2b5f95; background: linear-gradient(#12325a, #0b1a36); color: #00a8e8; }
+.stage-device strong { color: #f4f8ff; } .stage-device small { color: #8899aa; }
+.stage-device em { color: #00c853; } .stage-device.wait em { color: #ffab00; } .stage-device.alarm em { color: #ff1744; }
+.stage-product { border-color: #e7f1fb; background: linear-gradient(90deg, #6ad6f5 0 18%, #00a8e8 20% 80%, #6ad6f5 82%); box-shadow: 0 0 0 2px rgba(0, 168, 232, .28); }
+.stage-product.hold { background: linear-gradient(90deg, #ffdc77 0 18%, #ffab00 20% 80%, #ffdc77 82%); } .stage-product.rejected { background: linear-gradient(90deg, #ff8aa0 0 18%, #ff1744 20% 80%, #ff8aa0 82%); }
+.stage-plan-footer { border-color: #1a3a6a; color: #8899aa; }
+.fallback { background: #0a1628; color: #f4f8ff; } .fallback span { color: #8899aa; }

@@ -589,7 +589,7 @@ struct AdminConsole {
                 if (this.section === 'AUDIT') this.auditView()
               }
               if (this.message.length > 0) {
-                Text(this.message).fontSize(11).fontColor(Theme.danger).padding(12).width('100%').backgroundColor('#FFF1F2').margin({ top: 12 })
+                Text(this.message).fontSize(11).fontColor(Theme.danger).padding(12).width('100%').backgroundColor(Theme.dangerSoft).margin({ top: 12 })
               }
             }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 24, right: 24, top: 20, bottom: 28 })
           }.width('100%').layoutWeight(1).backgroundColor(Theme.page)
@@ -658,7 +658,7 @@ struct AdminConsole {
   topbar() {
     Row() {
       Column() {
-        Text('后台管理 / ' + this.currentMenu().label).fontSize(20).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+        Text('后台管理 / ' + this.currentMenu().label).fontSize(20).fontColor(Theme.text).fontWeight(FontWeight.Bold)
         Text(this.currentMenu().description).fontSize(10).fontColor(Theme.muted).margin({ top: 5 })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Text('数据源').fontSize(9).fontColor(Theme.muted).margin({ right: 6 })
@@ -686,7 +686,7 @@ struct AdminConsole {
         Circle().width(8).height(8).fill(Theme.warning)
         Text((SessionStore.isDemo ? '演示账号只读。' : '') + (this.bundle.errorMessage.length > 0 ? this.bundle.errorMessage : '后端不可达，当前显示本地演示数据。'))
           .fontSize(10).fontColor(Theme.warning).layoutWeight(1)
-      }.padding(10).width('100%').backgroundColor('#FFF8EA').border({ width: { left: 3 }, color: Theme.warning }).margin({ bottom: 14 })
+      }.padding(10).width('100%').backgroundColor(Theme.warningSoft).border({ width: { left: 3 }, color: Theme.warning }).margin({ bottom: 14 })
     }
   }
 
@@ -776,7 +776,7 @@ struct AdminConsole {
       Row() {
         Column() {
           Text('CONTEXT').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold).letterSpacing(0.8)
-          Text('详情抽屉').fontSize(17).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+          Text('详情抽屉').fontSize(17).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Button('关闭')
           .type(ButtonType.Normal)
@@ -883,7 +883,7 @@ struct AdminConsole {
       Row() {
         Column() {
           Text('CONTEXT').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-          Text('异常详情').fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+          Text('异常详情').fontSize(16).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         if (this.selectedDetail !== '请选择一条记录查看详情。') {
           Button('关闭').type(ButtonType.Normal).height(28).fontSize(9).fontColor(Theme.muted).backgroundColor(Color.Transparent).border({ width: 1, color: Theme.line }).onClick(() => this.selectedDetail = '请选择一条记录查看详情。')
@@ -901,7 +901,7 @@ struct AdminConsole {
       SectionTitle({ code: 'EQUIPMENT HEALTH', title: '设备健康与维护', description: '在线、关注、故障和离线设备' })
       Row() {
         Column() {
-          Text(this.bundle.runtime.devices.length.toString()).fontSize(28).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+          Text(this.bundle.runtime.devices.length.toString()).fontSize(28).fontColor(Theme.text).fontWeight(FontWeight.Bold)
           Text('总设备数').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
         }.layoutWeight(1)
         Column() {
@@ -947,14 +947,14 @@ struct AdminConsole {
 
   @Builder
   miniDashboardValue(label: string, value: string, tone: string) {
-    Column() { Text(label).fontSize(8).fontColor(Theme.muted); Text(value).fontSize(17).fontColor(tone === 'NORMAL' ? Theme.navy : statusColor(tone)).fontWeight(FontWeight.Bold).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+    Column() { Text(label).fontSize(8).fontColor(Theme.muted); Text(value).fontSize(17).fontColor(tone === 'NORMAL' ? Theme.text : statusColor(tone)).fontWeight(FontWeight.Bold).margin({ top: 4 }) }.alignItems(HorizontalAlign.Start).layoutWeight(1)
   }
 
   @Builder
   metric(label: string, value: string, note: string, tone: string) {
     Column() {
       Text(label).fontSize(10).fontColor(Theme.muted)
-      Text(value).fontSize(24).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7 })
+      Text(value).fontSize(24).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7 })
       Text(note).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
     }.layoutWeight(1).height('100%').padding(13).alignItems(HorizontalAlign.Start).border({ width: { right: 1 }, color: Theme.line })
   }
@@ -1046,7 +1046,7 @@ struct AdminConsole {
         }, (incident: FactoryIncident) => incident.incidentId)
         this.pager(this.filteredIncidents().length)
       }
-      Text('开放报警').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 18, bottom: 8 })
+      Text('开放报警').fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 18, bottom: 8 })
       this.tableHeader(['报警 / 设备', '状态', '内容', '操作'])
       if (this.bundle.operations.alarms.filter((alarm: AlarmRecord) => alarm.status === 'OPEN').length === 0) {
         this.emptyState('当前没有开放报警。')
@@ -1125,7 +1125,7 @@ struct AdminConsole {
         Button('新建 AGV 调度').enabled(false).fontColor('#FFFFFF').backgroundColor(Theme.neutral)
         Text('不可用：当前端点仅支持创建任务，尚缺车辆候选、优先级、冲突校验和服务端审计字段。').fontSize(10).fontColor(Theme.warning)
       }.width('100%').margin({ top: 8 })
-      Text('AGV 任务').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 10, bottom: 8 })
+        Text('AGV 任务').fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 10, bottom: 8 })
       this.tableHeader(['任务 / 车辆 / 箱码', '状态', '速度 / 避障', '操作'])
       if (this.filteredAgvTasks().length === 0) {
         this.emptyState('没有匹配的 AGV 任务。')
@@ -1141,7 +1141,7 @@ struct AdminConsole {
         }, (task: AgvTask) => task.taskId)
         this.pager(this.filteredAgvTasks().length)
       }
-      Text('仓区安全与库存').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 18, bottom: 8 })
+      Text('仓区安全与库存').fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 18, bottom: 8 })
       this.tableHeader(['仓区', '状态', '环境读数'])
       if (this.bundle.logistics.zones.length === 0 && this.bundle.logistics.stock.length === 0) {
         this.emptyState('当前没有仓区安全或箱级库存数据。')
@@ -1180,7 +1180,7 @@ struct AdminConsole {
       this.aiConnectionTestPanel()
       this.aiRagStatusPanel()
       if (this.aiConfigMessage.length > 0) {
-        Text(this.aiConfigMessage).fontSize(10).fontColor(this.aiConfigAvailable ? Theme.warning : Theme.danger).width('100%').padding(10).backgroundColor(this.aiConfigAvailable ? '#FFF7E6' : '#FFF1F2')
+        Text(this.aiConfigMessage).fontSize(10).fontColor(this.aiConfigAvailable ? Theme.warning : Theme.danger).width('100%').padding(10).backgroundColor(this.aiConfigAvailable ? Theme.warningSoft : Theme.dangerSoft)
       }
     }.width('100%').alignItems(HorizontalAlign.Start).padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
   }
@@ -1204,7 +1204,7 @@ struct AdminConsole {
   @Builder
   aiModelForm() {
     Column({ space: 10 }) {
-      Text('模型配置').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text('模型配置').fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       Row({ space: 8 }) {
         TextInput({ text: this.aiProvider, placeholder: '供应商，例如 OpenAI / DeepSeek / 本地模型' }).layoutWeight(1).onChange((value: string) => this.aiProvider = value)
         TextInput({ text: this.aiModelName, placeholder: '模型名称，例如 gpt-4.1 / deepseek-chat' }).layoutWeight(1).onChange((value: string) => this.aiModelName = value)
@@ -1247,21 +1247,21 @@ struct AdminConsole {
   @Builder
   aiConnectionTestPanel() {
     Column({ space: 8 }) {
-      Text('测试连接 / 测试问答').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text('测试连接 / 测试问答').fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       TextArea({ text: this.aiTestQuestion, placeholder: '输入一条用于诊断的测试问题' }).height(68).width('100%').onChange((value: string) => this.aiTestQuestion = value)
       Row({ space: 10 }) {
         Button('测试连接').enabled(this.canManageAiConfig() && !this.aiConfigLoading).fontColor('#FFFFFF').backgroundColor(this.canManageAiConfig() ? Theme.blue : Theme.neutral).onClick(() => void this.testAiConnection())
         StateBadge({ status: this.aiTestStatus, label: this.aiTestStatus })
         Text('失败会明确区分鉴权、超时、模型不可用、速率限制、RAG 未就绪或接口未实现。').fontSize(10).fontColor(Theme.muted).layoutWeight(1)
       }.width('100%')
-      Text(this.aiTestResult).fontSize(10).fontColor(this.aiTestStatus === 'PASS' ? Theme.success : this.aiTestStatus === 'WAIT' ? Theme.muted : Theme.danger).width('100%').padding(10).backgroundColor('#FFFFFF').border({ width: 1, color: Theme.line })
+      Text(this.aiTestResult).fontSize(10).fontColor(this.aiTestStatus === 'PASS' ? Theme.success : this.aiTestStatus === 'WAIT' ? Theme.muted : Theme.danger).width('100%').padding(10).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
     }.width('100%').padding(12).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
   }
 
   @Builder
   aiRagStatusPanel() {
     Column({ space: 8 }) {
-      Text('文档 / RAG 运维状态').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text('文档 / RAG 运维状态').fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       Row() {
         Text('RAG 开关').fontSize(10).fontColor(Theme.muted).width(120)
         StateBadge({ status: this.aiRagEnabled ? 'PASS' : 'WAIT', label: this.aiRagEnabled ? 'ENABLED' : 'DISABLED' })
@@ -1324,7 +1324,7 @@ struct AdminConsole {
             Text(policy.name).fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold)
             Text(policy.policyCode + ' · ' + policy.version + ' · ' + policy.updatedAt).fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
           }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-          Text(policy.value + ' ' + policy.unit).fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).width(100)
+          Text(policy.value + ' ' + policy.unit).fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).width(100)
           StateBadge({ status: policy.status === 'ACTIVE' ? 'PASS' : 'WAIT', label: policy.status })
           Button('查看').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).onClick(() => this.selectPolicy(policy))
         }.width('100%').padding(11).border({ width: { bottom: 1 }, color: Theme.line })
@@ -1342,7 +1342,7 @@ struct AdminConsole {
     Column() {
       SectionTitle({ code: 'OPERATION AUDIT', title: '操作审计', description: '记录谁在何时做了什么、目标、结果和失败原因。' })
       if (this.auditError.length > 0) {
-        Text('服务端审计不可用：' + this.auditError + '。目标端点为 GET /audit/operations。').fontSize(10).fontColor(Theme.warning).width('100%').padding(10).backgroundColor('#FFF7E6').margin({ bottom: 10 })
+        Text('服务端审计不可用：' + this.auditError + '。目标端点为 GET /audit/operations。').fontSize(10).fontColor(Theme.warning).width('100%').padding(10).backgroundColor(Theme.warningSoft).margin({ bottom: 10 })
       }
       this.tableHeader(['动作 / 时间', '操作者', '目标', '结果', '操作'])
       if (this.filteredAuditRecords().length === 0) {
@@ -1362,7 +1362,7 @@ struct AdminConsole {
         }, (record: AdminAuditRecord) => record.auditId)
         this.pager(this.filteredAuditRecords().length)
       }
-      Text('本机操作尝试（不是服务端审计）').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 16, bottom: 8 })
+      Text('本机操作尝试（不是服务端审计）').fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 16, bottom: 8 })
       if (this.clientActivity.length === 0) {
         this.emptyState('本次会话尚无写操作尝试。')
       } else {

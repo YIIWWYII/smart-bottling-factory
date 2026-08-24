@@ -1172,7 +1172,7 @@ struct StageDetail {
       Row() {
         Column() {
           Text('WORK SURFACE').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-          Text('设备作业台').fontSize(22).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+          Text('设备作业台').fontSize(22).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 3 })
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
@@ -1203,7 +1203,7 @@ struct StageDetail {
             }
             if (!this.planarEnabled && !this.threeEnabled) {
               Column() {
-                Text('视图已关闭').fontSize(18).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+                Text('视图已关闭').fontSize(18).fontColor(Theme.text).fontWeight(FontWeight.Bold)
                 Text('实时数据仍继续刷新，开启 2D 或 3D 查看当前作业。').fontSize(10).fontColor(Theme.muted).margin({ top: 8 })
               }
               .layoutWeight(1)
@@ -1250,7 +1250,7 @@ struct StageDetail {
   hmiDeviceNav() {
     Column() {
       Row() {
-        Text('设备').fontSize(12).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+        Text('设备').fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold)
         Blank()
         Text(this.currentStage().devices.length.toString()).fontSize(10).fontColor(Theme.muted)
       }
@@ -1316,14 +1316,14 @@ struct StageDetail {
       }
     }
     .layoutWeight(1)
-    .backgroundColor('#E8EEF0')
+    .backgroundColor(Theme.panelSoft)
     .border({ width: 1, color: Theme.line })
   }
 
   @Builder
   hmiDeviceDetail() {
     Column() {
-      Text('设备详情').fontSize(12).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text('设备详情').fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       if (this.selectedDeviceCode.length === 0) {
         Text('从左侧设备树或作业画面选择设备').fontSize(10).fontColor(Theme.muted).margin({ top: 18 })
       } else {
@@ -1340,7 +1340,7 @@ struct StageDetail {
         .padding({ top: 9, bottom: 9 })
         .border({ width: { top: 1, bottom: 1 }, color: Theme.line })
         Text('关键读数').fontSize(9).fontColor(Theme.muted).margin({ top: 14 })
-        Text(this.deviceReading(this.selectedDeviceCode)).fontSize(22).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+        Text(this.deviceReading(this.selectedDeviceCode)).fontSize(22).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 4 })
         Text('当前动作：' + this.deviceActionText(this.selectedDeviceCode)).fontSize(9).fontColor(Theme.muted).margin({ top: 12 })
         Text('允许参数').fontSize(9).fontColor(Theme.muted).margin({ top: 18, bottom: 6 })
         ForEach(this.controlsValue().parameters.filter((control: ParameterControlDefinition) => control.deviceCode === this.selectedDeviceCode).slice(0, 3),
@@ -1349,7 +1349,7 @@ struct StageDetail {
               Row() {
                 Text(control.label).fontSize(9).fontColor(Theme.text)
                 Blank()
-                Text(this.parameterCurrent(control).toString() + ' ' + control.unit).fontSize(9).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+                Text(this.parameterCurrent(control).toString() + ' ' + control.unit).fontSize(9).fontColor(Theme.text).fontWeight(FontWeight.Bold)
               }
               .width('100%')
               Row() {
@@ -1360,7 +1360,7 @@ struct StageDetail {
               .width('100%')
               .margin({ top: 5 })
               .height(5)
-              .backgroundColor('#DDE6E9')
+              .backgroundColor(Theme.panelStrong)
               .border({ width: { left: 2 }, color: Theme.accent })
               .onClick(() => this.selectParameterForAssistant(control))
             }
@@ -1392,7 +1392,7 @@ struct StageDetail {
   hmiMaterialPanel() {
     Column() {
       Text('在制品 / MATERIAL').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-      Text(this.stationRunsValue().length.toString() + ' 件本站在制品').fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 10 })
+      Text(this.stationRunsValue().length.toString() + ' 件本站在制品').fontSize(16).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 10 })
       ForEach(this.stationRunsValue().slice(0, 4), (run: FactoryRun) => {
         Row({ space: 7 }) {
           Circle().width(7).height(7).fill(statusColor(run.status))
@@ -1423,7 +1423,7 @@ struct StageDetail {
   hmiSensorPanel() {
     Column() {
       Text('传感器 / SENSORS').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-      Text(this.stationReadingsValue().length.toString() + ' 个实时读数').fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 10 })
+      Text(this.stationReadingsValue().length.toString() + ' 个实时读数').fontSize(16).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 10 })
       ForEach(this.stationReadingsValue().slice(0, 4), (reading: SensorReading) => {
         Row() {
           Column() {
@@ -1432,7 +1432,7 @@ struct StageDetail {
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
-          Text(reading.value.toString() + ' ' + reading.unit).fontSize(11).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+          Text(reading.value.toString() + ' ' + reading.unit).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold)
         }
         .width('100%')
         .padding({ top: 7, bottom: 7 })
@@ -1481,7 +1481,7 @@ struct StageDetail {
       Row() {
         Column() {
           Text('CONTROL CONSOLE').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
-          Text('参数与操作').fontSize(22).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+          Text('参数与操作').fontSize(22).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 3 })
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
@@ -1536,7 +1536,7 @@ struct StageDetail {
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-        Text(this.parameterCurrent(control).toString() + ' ' + control.unit).fontSize(15).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+        Text(this.parameterCurrent(control).toString() + ' ' + control.unit).fontSize(15).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       }
       .width('100%')
       Row() {
@@ -1547,7 +1547,7 @@ struct StageDetail {
       .width('100%')
       .margin({ top: 6 })
       .height(6)
-      .backgroundColor('#DDE6E9')
+      .backgroundColor(Theme.panelStrong)
       .border({ width: { left: 5 }, color: Theme.accent })
       Row({ space: 7 }) {
         Button('-').width(34).height(28).fontSize(12).enabled(this.canEditParameter(control))
@@ -1630,7 +1630,7 @@ struct StageDetail {
             .fontWeight(FontWeight.Bold)
           Text(this.currentStage().name + '工位')
             .fontSize(30)
-            .fontColor(Theme.navy)
+            .fontColor(Theme.text)
             .fontWeight(FontWeight.Bold)
             .margin({ top: 7 })
           Text(this.currentStage().description)
@@ -1725,7 +1725,7 @@ struct StageDetail {
       }
       if (!this.planarEnabled && !this.threeEnabled) {
         Column() {
-          Text('可视化已关闭').fontSize(18).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+          Text('可视化已关闭').fontSize(18).fontColor(Theme.text).fontWeight(FontWeight.Bold)
           Text('实时数据仍继续刷新，关闭只停止 ArkWeb 渲染以节省 GPU 和内存。').fontSize(10).fontColor(Theme.muted).margin({ top: 8 })
         }
         .width('100%')
@@ -1850,7 +1850,7 @@ struct StageDetail {
             }
             .alignItems(HorizontalAlign.Start)
             .layoutWeight(1)
-            Text(reading.value.toString() + ' ' + reading.unit).fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+            Text(reading.value.toString() + ' ' + reading.unit).fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold)
           }
           .width('100%')
           .padding(11)
@@ -2028,7 +2028,7 @@ struct StageDetail {
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
         if (SessionStore.isAuthenticated) {
-          Button('退出').height(32).fontSize(10).backgroundColor(Theme.panelStrong).fontColor(Theme.navy).onClick(() => this.logoutOperator())
+          Button('退出').height(32).fontSize(10).backgroundColor(Theme.panelStrong).fontColor(Theme.text).onClick(() => this.logoutOperator())
         }
       }
       .width('100%')
@@ -2076,7 +2076,7 @@ struct StageDetail {
         .layoutWeight(1)
         Column() {
           Text('当前 ' + this.parameterCurrent(control).toString() + ' ' + control.unit).fontSize(9).fontColor(Theme.muted)
-          Text('目标 ' + this.targetValue(control.parameterCode).toString() + ' ' + control.unit).fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+          Text('目标 ' + this.targetValue(control.parameterCode).toString() + ' ' + control.unit).fontSize(16).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 4 })
         }
         .alignItems(HorizontalAlign.End)
       }
@@ -2136,11 +2136,11 @@ struct StageDetail {
     if (this.pendingDraft.commandType.length > 0) {
       Column() {
         Text('二次确认').fontSize(10).fontColor(Theme.warning).fontWeight(FontWeight.Bold)
-        Text(this.pendingDraft.label + ' · ' + this.pendingDraft.commandType).fontSize(15).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 5 })
+        Text(this.pendingDraft.label + ' · ' + this.pendingDraft.commandType).fontSize(15).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 5 })
         Text(this.pendingDraft.intent).fontSize(10).fontColor(Theme.text).margin({ top: 6 })
         Text('风险：' + this.pendingDraft.risk).fontSize(9).fontColor(Theme.danger).margin({ top: 6 })
         Row({ space: 8 }) {
-          Button('取消').layoutWeight(1).height(36).backgroundColor(Theme.panelStrong).fontColor(Theme.navy).onClick(() => this.clearDraft())
+          Button('取消').layoutWeight(1).height(36).backgroundColor(Theme.panelStrong).fontColor(Theme.text).onClick(() => this.clearDraft())
           Button('确认发送到后端').layoutWeight(1).height(36).backgroundColor(Theme.warning).fontColor('#FFFFFF')
             .enabled(this.commandBlockReason(this.pendingDraft.dangerous, this.pendingDraft.requiredRole, this.pendingDraft.deviceCode, this.pendingDraft.commandType).length === 0)
             .onClick(() => void this.confirmCommand())
@@ -2178,7 +2178,7 @@ struct StageDetail {
   @Builder
   commandHistoryPanel() {
     Column() {
-      Text('最近本站命令').fontSize(12).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text('最近本站命令').fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       if (this.stationCommandsValue().length === 0) {
         Text('暂无命令记录。').fontSize(9).fontColor(Theme.muted).margin({ top: 8 })
       } else {
@@ -2218,7 +2218,7 @@ struct StageDetail {
       Row() {
         Text('关键读数').fontSize(10).fontColor(Theme.muted)
         Blank()
-        Text(this.deviceReading(this.selectedDeviceCode)).fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+        Text(this.deviceReading(this.selectedDeviceCode)).fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       }
       .width('100%')
       .padding(10)
@@ -2341,7 +2341,7 @@ struct StageDetail {
   impactCard(label: string, value: string, note: string) {
     Column() {
       Text(label).fontSize(9).fontColor(Theme.muted)
-      Text(value).fontSize(12).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 6 }).maxLines(2)
+      Text(value).fontSize(12).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 6 }).maxLines(2)
       Text(note).fontSize(8).fontColor(Theme.muted).margin({ top: 4 })
     }
     .alignItems(HorizontalAlign.Start)
@@ -2357,7 +2357,7 @@ struct StageDetail {
     Row() {
       Text(label).fontSize(10).fontColor(Theme.muted)
       Blank()
-      Text(value).fontSize(11).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text(value).fontSize(11).fontColor(Theme.text).fontWeight(FontWeight.Bold)
     }
     .width('100%')
     .padding(10)

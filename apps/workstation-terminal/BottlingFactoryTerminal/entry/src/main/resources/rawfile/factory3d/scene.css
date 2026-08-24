@@ -103,3 +103,17 @@ canvas { display: block; width: 100%; height: 100%; }
   .hud-right { top: auto; right: 10px; bottom: 10px; }
   .selection { right: 10px; bottom: 48px; }
 }
+
+/* SCADA visual layer for the 3D workcell. */
+:root { color: #e7f1fb; background: #0a1628; }
+body, body.planar {
+  background:
+    linear-gradient(rgba(0, 168, 232, .06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 168, 232, .06) 1px, transparent 1px),
+    #0a1628;
+  background-size: 24px 24px;
+}
+.hud { border-color: #1a3a6a; border-top-color: #00a8e8; background: rgba(13, 30, 60, .96); }
+.hud-left > span:last-child { color: #8899aa; }
+.selection { border-left-color: #00d4aa; background: rgba(13, 30, 60, .97); }
+.fallback { background: #0a1628; color: #f4f8ff; } .fallback span { color: #8899aa; }

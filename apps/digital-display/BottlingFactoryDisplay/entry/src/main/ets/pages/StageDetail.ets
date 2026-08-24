@@ -570,7 +570,7 @@ struct StageDetail {
 
           if (!this.threeEnabled && !this.planarEnabled) {
             Column() {
-              Text('可视化已关闭').fontSize(18).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+              Text('可视化已关闭').fontSize(18).fontColor(Theme.text).fontWeight(FontWeight.Bold)
               Text('实时数据仍在刷新，只是不再渲染图形。').fontSize(10).fontColor(Theme.muted).margin({ top: 8 })
             }.width('100%').height(170).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center).backgroundColor(Theme.panelSoft).margin({ top: 12 })
           }
@@ -658,7 +658,7 @@ struct StageDetail {
       Row() {
         Column() {
           Text('01  LIVE WORKCELL').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-          Text('工位现场').fontSize(18).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+          Text('工位现场').fontSize(18).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 4 })
           Text('2D 平面图与 3D 设备场景共用同一实时快照').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Scroll() {
@@ -695,7 +695,7 @@ struct StageDetail {
         }.width('100%').backgroundColor('#071015').padding({ left: 12, right: 12, bottom: 12 })
       }
       if (!this.threeEnabled && !this.planarEnabled) {
-        Column() { Text('可视化已关闭').fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold); Text('实时数据仍在更新，打开 2D 或 3D 继续查看现场。').fontSize(9).fontColor(Theme.muted).margin({ top: 8 }) }.width('100%').height(170).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center).backgroundColor(Theme.panelSoft)
+        Column() { Text('可视化已关闭').fontSize(16).fontColor(Theme.text).fontWeight(FontWeight.Bold); Text('实时数据仍在更新，打开 2D 或 3D 继续查看现场。').fontSize(9).fontColor(Theme.muted).margin({ top: 8 }) }.width('100%').height(170).justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center).backgroundColor(Theme.panelSoft)
       }
     }.width('100%').backgroundColor(Theme.panel).border({ width: { bottom: 1 }, color: Theme.line })
   }

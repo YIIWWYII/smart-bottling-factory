@@ -11,7 +11,7 @@ export struct SectionTitle {
     Row() {
       Column() {
         Text(this.code).fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold).letterSpacing(0.8)
-        Text(this.title).fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 4 })
+        Text(this.title).fontSize(19).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 4 })
         if (this.description.length > 0) {
           Text(this.description).fontSize(10).fontColor(Theme.muted).margin({ top: 5 })
         }
@@ -33,7 +33,7 @@ export struct MetricTile {
   build() {
     Column() {
       Text(this.label).fontSize(10).fontColor(Theme.muted)
-      Text(this.value).fontSize(23).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 4 })
+        Text(this.value).fontSize(23).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7, bottom: 4 })
       Text(this.note).fontSize(9).fontColor(Theme.muted).maxLines(2)
     }
     .alignItems(HorizontalAlign.Start)

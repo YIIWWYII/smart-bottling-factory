@@ -34,7 +34,7 @@ struct Register {
       Column() {
         Button('返回登录').type(ButtonType.Normal).fontColor(Theme.blue).backgroundColor(Color.Transparent).alignSelf(ItemAlign.Start).onClick(() => router.back())
         Text('ACCOUNT APPLICATION').fontSize(10).fontColor(Theme.accent).fontWeight(FontWeight.Bold).margin({ top: 20 })
-        Text('申请只读账号').fontSize(26).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 7 })
+        Text('申请只读账号').fontSize(26).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7 })
         Text('公开注册不会授予产线控制、报警确认或用户管理权限。').fontSize(11).fontColor(Theme.muted).margin({ top: 6, bottom: 18 })
         TextInput({ text: this.username, placeholder: '用户名：3-32 位字母、数字或下划线' }).onChange((value: string) => this.username = value).margin({ bottom: 12 })
         TextInput({ text: this.displayName, placeholder: '姓名' }).onChange((value: string) => this.displayName = value).margin({ bottom: 12 })

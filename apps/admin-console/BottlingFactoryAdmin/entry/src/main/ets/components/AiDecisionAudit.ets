@@ -113,7 +113,7 @@ export struct AiDecisionAuditPanel {
   @Builder
   detailPanel() {
     Column() {
-      Text('决策详情').fontSize(13).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text('决策详情').fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       if (this.selected === undefined) {
         Text('请选择一条 AI 决策记录。').fontSize(10).fontColor(Theme.muted).margin({ top: 8 })
       } else {

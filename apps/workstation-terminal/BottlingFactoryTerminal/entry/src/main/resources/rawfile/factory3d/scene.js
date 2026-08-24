@@ -14,23 +14,23 @@
 
   var THREE = window.THREE;
   var COLORS = {
-    navy: 0x123a5b,
-    blue: 0x145da0,
-    accent: 0x1f7acb,
-    steel: 0x698395,
-    steelDark: 0x405968,
-    floor: 0xd6e2e9,
-    white: 0xf4f8fb,
-    running: 0x238b5a,
-    warning: 0xd89016,
-    alarm: 0xc83f49,
-    offline: 0x8397a6,
-    product: 0x2a86cf,
-    liquid: 0x40a8d8,
+    navy: 0x071422,
+    blue: 0x00a8e8,
+    accent: 0x00d4aa,
+    steel: 0x2b5f95,
+    steelDark: 0x102b49,
+    floor: 0x0a1628,
+    white: 0xdcecff,
+    running: 0x00c853,
+    warning: 0xffab00,
+    alarm: 0xff1744,
+    offline: 0x667788,
+    product: 0x00a8e8,
+    liquid: 0x26bde8,
     box: 0xb68a52,
-    line: 0x6f8796,
-    planarBg: 0xe8f1f6,
-    reject: 0xb94040
+    line: 0x2b5f95,
+    planarBg: 0x0b1a36,
+    reject: 0xff1744
   };
 
   var state = {
@@ -132,8 +132,8 @@
   function init() {
     try {
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xdfeaf1);
-      scene.fog = new THREE.Fog(0xdfeaf1, 22, 42);
+      scene.background = new THREE.Color(0x0a1628);
+      scene.fog = new THREE.Fog(0x0a1628, 22, 42);
 
       perspectiveCamera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
       planarCamera = new THREE.OrthographicCamera(-10, 10, 6, -6, 0.1, 100);
@@ -145,7 +145,7 @@
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       host.appendChild(renderer.domElement);
 
-      var hemisphere = new THREE.HemisphereLight(0xf5fbff, 0x657786, 2.2);
+      var hemisphere = new THREE.HemisphereLight(0xa8c9df, 0x071422, 2.2);
       scene.add(hemisphere);
       var key = new THREE.DirectionalLight(0xffffff, 3.2);
       key.position.set(-8, 15, 10);

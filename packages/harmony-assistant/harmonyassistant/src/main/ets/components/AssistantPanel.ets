@@ -1,13 +1,13 @@
 import { AssistantController } from '../controller/AssistantController'
 import { AssistantCitation, AssistantMessageView, AssistantUiStatus } from '../model/AssistantModels'
 
-const PANEL_BACKGROUND: string = '#F5F8FC'
-const PANEL_SURFACE: string = '#FFFFFF'
-const PANEL_BORDER: string = '#B6C5D7'
-const PANEL_TEXT: string = '#17293D'
-const PANEL_MUTED: string = '#65778B'
-const PANEL_BLUE: string = '#1769AA'
-const PANEL_DANGER: string = '#B3261E'
+const PANEL_BACKGROUND: string = '#0A1628'
+const PANEL_SURFACE: string = '#0D1E3C'
+const PANEL_BORDER: string = '#1A3A6A'
+const PANEL_TEXT: string = '#F4F8FF'
+const PANEL_MUTED: string = '#8899AA'
+const PANEL_BLUE: string = '#00A8E8'
+const PANEL_DANGER: string = '#FF1744'
 
 @Component
 struct AssistantMessageCard {
@@ -21,6 +21,10 @@ struct AssistantMessageCard {
   }
   // Keep streamed text as a primitive prop so List item reuse cannot retain an older object field.
   @Prop content: string = ''
+
+  private safeCitations(): Array<AssistantCitation> {
+    return this.message.citations === undefined || this.message.citations === null ? [] : this.message.citations
+  }
 
   build() {
     Column({ space: 7 }) {
@@ -50,9 +54,9 @@ struct AssistantMessageCard {
           }
         }.width('100%')
       }
-      if (this.message.citations !== undefined && this.message.citations.length > 0) {
+      if (this.safeCitations().length > 0) {
         Column({ space: 5 }) {
-          ForEach(this.message.citations, (citation: AssistantCitation) => {
+          ForEach(this.safeCitations(), (citation: AssistantCitation) => {
             Text(citation.title + ' · ' + citation.version)
               .width('100%')
               .fontSize(10)
@@ -65,7 +69,7 @@ struct AssistantMessageCard {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding(12)
-    .backgroundColor(this.message.role === 'USER' ? '#EAF1F8' : PANEL_SURFACE)
+    .backgroundColor(this.message.role === 'USER' ? '#102B49' : PANEL_SURFACE)
     .border({ width: 1, color: PANEL_BORDER })
     .borderRadius(4)
   }
@@ -76,6 +80,14 @@ export struct AssistantPanel {
   @ObjectLink controller: AssistantController
   @Prop panelWidth: number = 410
   @Prop panelHeight: number = 620
+
+  private safeMessages(): Array<AssistantMessageView> {
+    return this.controller.messages === undefined || this.controller.messages === null ? [] : this.controller.messages
+  }
+
+  private safeErrorMessage(): string {
+    return this.controller.errorMessage === undefined || this.controller.errorMessage === null ? '' : this.controller.errorMessage
+  }
 
   build() {
     Column() {
@@ -113,12 +125,12 @@ export struct AssistantPanel {
         }
         .width('100%')
         .padding(10)
-        .backgroundColor('#EAF1F8')
+        .backgroundColor('#102B49')
         .border({ width: { bottom: 1 }, color: PANEL_BORDER })
       }
 
       List({ space: 8 }) {
-        ForEach(this.controller.messages, (message: AssistantMessageView) => {
+        ForEach(this.safeMessages(), (message: AssistantMessageView) => {
           ListItem() {
             AssistantMessageCard({ message: message, content: message.content === undefined ? '' : message.content })
           }
@@ -136,13 +148,13 @@ export struct AssistantPanel {
       .width('100%')
       .padding(10)
 
-      if (this.controller.errorMessage.length > 0) {
-        Text(this.controller.errorMessage)
+      if (this.safeErrorMessage().length > 0) {
+        Text(this.safeErrorMessage())
           .width('100%')
           .padding({ left: 12, right: 12, top: 8, bottom: 8 })
           .fontSize(11)
           .fontColor(this.controller.status === AssistantUiStatus.FAILED ? PANEL_DANGER : PANEL_MUTED)
-          .backgroundColor('#FFF1F0')
+          .backgroundColor('#3A1020')
       }
 
       TextArea({ text: this.controller.draft, placeholder: '询问当前页面、设备、产品或知识资料' })
@@ -168,7 +180,7 @@ export struct AssistantPanel {
             this.controller.status === AssistantUiStatus.STOPPED) {
             Button('重试')
               .height(38)
-              .backgroundColor('#DCE7F2')
+              .backgroundColor('#12325A')
               .fontColor(PANEL_TEXT)
               .borderRadius(3)
               .onClick(() => { void this.controller.retry() })

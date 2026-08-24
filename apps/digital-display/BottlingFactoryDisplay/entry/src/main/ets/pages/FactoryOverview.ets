@@ -351,7 +351,7 @@ struct FactoryOverview {
             Row() {
               Column() {
                 Text('01  MAIN PRODUCTION LINE').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-                Text('主生产线 · 连续工艺流').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+                Text('主生产线 · 连续工艺流').fontSize(19).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 3 })
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               Text('点击工序卡进入工位详情').fontSize(9).fontColor(Theme.muted)
             }.width('100%').padding({ bottom: 10 }).border({ width: { bottom: 2 }, color: Theme.line })
@@ -428,7 +428,7 @@ struct FactoryOverview {
       Row() {
         Column() {
           Text('PARALLEL BEVERAGE PREPARATION').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-          Text('饮料准备并行线').fontSize(17).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+          Text('饮料准备并行线').fontSize(17).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 3 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Text('混合调配 → 高温杀菌 → 温湿度监控 → 汇入灌装').fontSize(9).fontColor(Theme.muted)
       }.width('100%').padding({ bottom: 10 }).border({ width: { bottom: 1 }, color: Theme.line })
@@ -454,7 +454,7 @@ struct FactoryOverview {
       Row() {
         Column() {
           Text('02  LIVE PRODUCTION LINE').fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold)
-          Text('整线设备实况').fontSize(19).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 3 })
+          Text('整线设备实况').fontSize(19).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 3 })
           Text('输送、设备、瓶体和状态灯使用同一份实时快照；点击设备或工位进入详情。').fontSize(9).fontColor(Theme.muted).margin({ top: 4 })
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Row({ space: 12 }) {
@@ -499,7 +499,7 @@ struct FactoryOverview {
         Blank()
         StateBadge({ status: this.stageStatus(stage), label: this.stageStatus(stage) === 'RUNNING' ? '持续运行' : this.stageStatus(stage) === 'REJECTED' ? '存在剔除' : '待处理' })
       }.width('100%')
-      Text(stage.name).fontSize(16).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 12 })
+      Text(stage.name).fontSize(16).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 12 })
       Text(stage.description).fontSize(9).fontColor(Theme.muted).maxLines(2).lineHeight(14).margin({ top: 6 })
       this.stageMachinePreview(stage)
       Row({ space: 4 }) {
@@ -511,7 +511,7 @@ struct FactoryOverview {
           .width(40)
           .height(38)
           .justifyContent(FlexAlign.Center)
-          .backgroundColor('#F0F5F8')
+          .backgroundColor(Theme.panelSoft)
           .border({ width: 1, color: Theme.line })
           .onClick(() => this.selectOverviewDevice(device.code, 'ARKUI'))
         }, (device: DeviceDefinition) => device.code)
@@ -563,10 +563,10 @@ struct FactoryOverview {
       }
       Row({ space: 3 }) {
         Circle().width(5).height(5).fill(statusColor(this.stageStatus(stage)))
-        Blank().width(64).height(3).backgroundColor('#7B99AA')
+        Blank().width(64).height(3).backgroundColor(Theme.lineStrong)
         Circle().width(5).height(5).fill(Theme.blue)
       }.align(Alignment.Bottom)
-    }.width('100%').height(52).margin({ top: 7, bottom: 3 }).backgroundColor('#EAF1F5').border({ width: 1, color: Theme.line })
+    }.width('100%').height(52).margin({ top: 7, bottom: 3 }).backgroundColor(Theme.panelSoft).border({ width: 1, color: Theme.line })
   }
 
   @Builder
@@ -581,7 +581,7 @@ struct FactoryOverview {
     Column() {
       SectionTitle({ code: 'PRODUCTION & QUALITY', title: '生产与质量', description: '以持续产线和工序事件为口径，呈现当前放行态势。' })
       Row() { Text(this.dashboardPassRate).fontSize(30).fontColor(Theme.blue).fontWeight(FontWeight.Bold); Text('批次通过率').fontSize(10).fontColor(Theme.muted).margin({ left: 9, top: 13 }) }.width('100%').margin({ top: 14 })
-      Progress({ value: this.dashboardCompleted + this.dashboardRejected > 0 ? this.dashboardCompleted / (this.dashboardCompleted + this.dashboardRejected) * 100 : 0, total: 100, type: ProgressType.Linear }).width('100%').height(8).color(Theme.success).backgroundColor('#DDE8EF').margin({ top: 9 })
+      Progress({ value: this.dashboardCompleted + this.dashboardRejected > 0 ? this.dashboardCompleted / (this.dashboardCompleted + this.dashboardRejected) * 100 : 0, total: 100, type: ProgressType.Linear }).width('100%').height(8).color(Theme.success).backgroundColor(Theme.panelStrong).margin({ top: 9 })
       Text('已判定 ' + (this.dashboardCompleted + this.dashboardRejected) + ' 批 · 通过 ' + this.dashboardCompleted + ' 批 · 剔除 ' + this.dashboardRejected + ' 批').fontSize(9).fontColor(Theme.muted).margin({ top: 7 })
       Row() {
         this.smallValue('运行工位', this.runningStageCount + '/' + FACTORY_STAGES.length, 'RUNNING')
@@ -600,7 +600,7 @@ struct FactoryOverview {
         this.smallValue('模拟兜底', String(this.fallbackDeviceCount), 'WAIT')
       }.width('100%').margin({ top: 14 })
       Text('当前约束').fontSize(10).fontColor(Theme.muted).margin({ top: 18 })
-      Text(this.constraintText()).fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ top: 5 })
+      Text(this.constraintText()).fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 5 })
       Text('各工位缓冲不再一味按单一速度判定，而是由当前工位运行态和相邻工序联锁共同约束。').fontSize(9).fontColor(Theme.muted).lineHeight(14).margin({ top: 6 })
       Row() { Text('在线设备 ' + this.onlineDeviceCount).fontSize(10).fontColor(Theme.text); Blank(); Text(this.bundle.source).fontSize(9).fontColor(Theme.blue).fontWeight(FontWeight.Bold) }.width('100%').margin({ top: 16 })
     }.width(390).constraintSize({ minHeight: 220 }).alignItems(HorizontalAlign.Start).padding(17).margin(5).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
@@ -621,7 +621,7 @@ struct FactoryOverview {
           Text('仓区 ' + this.logisticsData().zones[0].zoneCode + ' · ' + this.logisticsData().zones[0].status).fontSize(11).fontColor(Theme.text).margin({ left: 8 })
           Blank()
           Text('VOC ' + this.logisticsData().zones[0].vocPpm + ' ppm').fontSize(9).fontColor(Theme.muted)
-        }.width('100%').padding(10).backgroundColor('#EEF7F2').margin({ top: 16 })
+        }.width('100%').padding(10).backgroundColor(Theme.successSoft).margin({ top: 16 })
       }
     }.width(390).constraintSize({ minHeight: 220 }).alignItems(HorizontalAlign.Start).padding(17).margin(5).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 2 }, color: Theme.line }).borderRadius(3)
   }
@@ -631,7 +631,7 @@ struct FactoryOverview {
     Column() {
       SectionTitle({ code: 'ACTIVE EXCEPTIONS', title: '异常与影响范围', description: '报警确认与工艺影响必须经过后端判定。' })
       if (this.openExceptionCount === 0) {
-        Row({ space: 8 }) { Circle().width(8).height(8).fill(Theme.success); Text('当前无开放异常，所有工位满足连续运行条件。').fontSize(11).fontColor(Theme.text) }.width('100%').padding(14).backgroundColor('#EEF7F2').margin({ top: 14 })
+        Row({ space: 8 }) { Circle().width(8).height(8).fill(Theme.success); Text('当前无开放异常，所有工位满足连续运行条件。').fontSize(11).fontColor(Theme.text) }.width('100%').padding(14).backgroundColor(Theme.successSoft).margin({ top: 14 })
       } else {
         ForEach(this.operationsData().alarms.filter(item => item.status === 'OPEN').slice(0, 4), (alarm: AlarmRecord) => {
           Row({ space: 10 }) {

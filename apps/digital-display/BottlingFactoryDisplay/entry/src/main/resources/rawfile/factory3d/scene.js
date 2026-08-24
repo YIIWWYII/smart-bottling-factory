@@ -14,20 +14,20 @@
 
   var THREE = window.THREE;
   var COLORS = {
-    navy: 0x071219,
-    blue: 0x176f96,
-    accent: 0x2cc4d8,
-    steel: 0x45616d,
-    steelDark: 0x203943,
-    floor: 0x142831,
-    white: 0x8caab4,
-    running: 0x238b5a,
-    warning: 0xd89016,
-    alarm: 0xc83f49,
-    offline: 0x8397a6,
-    product: 0x2a86cf,
-    liquid: 0x40a8d8,
-    box: 0x936e43
+    navy: 0x071422,
+    blue: 0x00a8e8,
+    accent: 0x00d4aa,
+    steel: 0x2b5f95,
+    steelDark: 0x102b49,
+    floor: 0x0a1628,
+    white: 0xdcecff,
+    running: 0x00c853,
+    warning: 0xffab00,
+    alarm: 0xff1744,
+    offline: 0x667788,
+    product: 0x00a8e8,
+    liquid: 0x26bde8,
+    box: 0xb68a52
   };
 
   var state = {
@@ -110,8 +110,8 @@
   function init() {
     try {
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x0a171e);
-      scene.fog = new THREE.Fog(0x0a171e, 22, 42);
+      scene.background = new THREE.Color(0x0a1628);
+      scene.fog = new THREE.Fog(0x0a1628, 22, 42);
 
       createCameraForMode();
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
@@ -483,11 +483,11 @@
     statusRail.userData.isStatusIndicator = true;
     group.add(statusRail);
 
-    var label = createLabelSprite(device.name || device.code, '#173247');
+    var label = createLabelSprite(device.name || device.code, '#e7f1fb');
     label.userData.deviceOwner = group;
     label.position.set(0, 0.42, 1.02);
     group.add(label);
-    var stateLabel = createLabelSprite(device.state || 'STANDBY', '#476276');
+    var stateLabel = createLabelSprite(device.state || 'STANDBY', '#8899aa');
     stateLabel.scale.set(1.0, 0.25, 1);
     stateLabel.userData.deviceOwner = group;
     stateLabel.position.set(0, 0.42, 1.43);
@@ -510,12 +510,12 @@
     canvas.width = 256;
     canvas.height = 64;
     var context = canvas.getContext('2d');
-    context.fillStyle = 'rgba(249,251,253,.92)';
+    context.fillStyle = 'rgba(13,30,60,.96)';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.strokeStyle = 'rgba(21,94,149,.55)';
     context.lineWidth = 4;
     context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
-    context.fillStyle = color || '#173247';
+    context.fillStyle = color || '#e7f1fb';
     context.font = '24px Microsoft YaHei, sans-serif';
     context.textAlign = 'center';
     context.textBaseline = 'middle';

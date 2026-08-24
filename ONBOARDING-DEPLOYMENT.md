@@ -266,12 +266,13 @@ $env:AI_REQUEST_TIMEOUT_SECONDS = '20'
 
 ## 8. 配置三个鸿蒙应用
 
-三个 App 当前默认访问 `192.168.0.104`。如果后端和 AI 中枢运行在另一台电脑，必须将三个 App 的 `ApiConfig.ets` 中的主机地址改为运行服务电脑的局域网 IPv4 地址：
+三个 App 当前默认访问 `192.168.0.104`。这是部署示例地址，不是自动发现地址。如果后端和 AI 中枢运行在另一台电脑，或电脑重新连接网络后局域网 IPv4 发生变化，必须在构建 HAP 前将以下配置中的主机地址改为运行服务电脑当前的局域网 IPv4：
 
 ```text
 apps/digital-display/BottlingFactoryDisplay/entry/src/main/ets/service/ApiConfig.ets
 apps/workstation-terminal/BottlingFactoryTerminal/entry/src/main/ets/service/ApiConfig.ets
 apps/admin-console/BottlingFactoryAdmin/entry/src/main/ets/service/ApiConfig.ets
+apps/admin-console/BottlingFactoryAdmin/entry/src/main/ets/service/AiCenterConfig.ets
 ```
 
 地址关系：

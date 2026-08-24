@@ -399,7 +399,7 @@ export struct KnowledgeGovernance {
   @Builder
   uploadPanel() {
     Column({ space: 8 }) {
-      Text('提交知识资料').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text('提交知识资料').fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       Row({ space: 8 }) {
         Button('选择文件').enabled(this.canSubmit()).height(36).backgroundColor(this.canSubmit() ? Theme.blue : Theme.neutral).fontColor('#FFFFFF').onClick(() => void this.chooseFile())
         Text(this.fileName.length > 0 ? this.fileName : '支持 PDF、Word、TXT、Markdown；文件先进入隔离区。').fontSize(10).fontColor(Theme.muted).layoutWeight(1).maxLines(2)
@@ -441,7 +441,7 @@ export struct KnowledgeGovernance {
   @Builder
   reviewQueue() {
     Column() {
-      Text('审核队列与索引进度').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold).margin({ bottom: 8 })
+      Text('审核队列与索引进度').fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ bottom: 8 })
       if (this.filteredReviews().length === 0) {
         Text(this.serviceAvailable ? '没有匹配的审核任务。' : 'AI 中枢不可用，无法取得审核队列。').fontSize(11).fontColor(Theme.muted).padding(20).width('100%').textAlign(TextAlign.Center)
       } else {
@@ -466,7 +466,7 @@ export struct KnowledgeGovernance {
   @Builder
   previewPanel() {
     Column({ space: 8 }) {
-      Text('解析预览与审核').fontSize(14).fontColor(Theme.navy).fontWeight(FontWeight.Bold)
+      Text('解析预览与审核').fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold)
       if (this.selectedReview === undefined) {
         Text('请选择审核任务查看原文解析、来源、适用范围、冲突和版权检查。').fontSize(10).fontColor(Theme.muted).padding(18).width('100%')
       } else {
