@@ -25,6 +25,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class FactoryMqttBridge {
@@ -34,11 +37,18 @@ public class FactoryMqttBridge {
     private String url;
     @Value("${mqtt.port:31883}")
     private String port;
+    @Value("${factory.mqtt.reconnect-delay-ms:5000}")
+    private long reconnectDelayMillis;
 
     private final FactoryService factoryService;
     private final FactoryRuntimeService runtimeService;
     private final OperationsService operationsService;
-    private MqttClient client;
+    private volatile MqttClient client;
+    private final ScheduledExecutorService reconnectExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "factory-mqtt-reconnect");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     public FactoryMqttBridge(FactoryService factoryService, FactoryRuntimeService runtimeService,
                              OperationsService operationsService) {
@@ -53,11 +63,18 @@ public class FactoryMqttBridge {
             XLog.info("factory MQTT bridge disabled");
             return;
         }
+        reconnectExecutor.scheduleWithFixedDelay(this::connectIfNeeded, 0,
+                Math.max(1000L, reconnectDelayMillis), TimeUnit.MILLISECONDS);
+    }
+
+    private synchronized void connectIfNeeded() {
+        if (isConnected()) return;
+        closeClient();
         try {
             client = new MqttClient(url + ":" + port, "factory-bridge-" + UUID.randomUUID(), new MemoryPersistence());
             MqttConnectOptions options = new MqttConnectOptions();
             options.setCleanSession(true);
-            options.setAutomaticReconnect(true);
+            options.setAutomaticReconnect(false);
             options.setConnectionTimeout(5);
             client.connect(options);
             client.subscribe("factory/+/+/+/telemetry", 1, this::onMessage);
@@ -66,7 +83,20 @@ public class FactoryMqttBridge {
             client.subscribe("factory/+/+/+/command-ack", 1, this::onMessage);
             XLog.info("factory MQTT bridge connected");
         } catch (Exception exception) {
-            XLog.error("factory MQTT bridge unavailable: " + exception.getMessage());
+            closeClient();
+            XLog.warn("factory MQTT bridge unavailable, retrying: " + exception.getMessage());
+        }
+    }
+
+    private void closeClient() {
+        MqttClient current = client;
+        client = null;
+        if (current == null) return;
+        try {
+            if (current.isConnected()) current.disconnect();
+            current.close();
+        } catch (MqttException exception) {
+            XLog.warn("factory MQTT bridge close failed: " + exception.getMessage());
         }
     }
 
@@ -153,12 +183,7 @@ public class FactoryMqttBridge {
 
     @PreDestroy
     public void stop() {
-        if (client == null) return;
-        try {
-            client.disconnect();
-            client.close();
-        } catch (MqttException exception) {
-            XLog.warn("factory MQTT bridge close failed: " + exception.getMessage());
-        }
+        reconnectExecutor.shutdownNow();
+        closeClient();
     }
 }
