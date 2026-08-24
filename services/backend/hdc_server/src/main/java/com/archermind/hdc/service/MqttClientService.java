@@ -122,6 +122,10 @@ public class MqttClientService implements MqttCallbackExtended {
         mqttTopic.publish(mqttMessage);
     }
 
+    public boolean isConnected() {
+        return enabled && client != null && client.isConnected();
+    }
+
     @Override
     public void connectComplete(boolean reconnect, String serverURI) {
         XLog.info("mqtt 链接完成，reconnect：" + reconnect);

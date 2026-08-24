@@ -25,6 +25,7 @@ import {
 } from '../service/AdminAssistantSelection'
 import { AdminAssistantHostAdapter } from '../service/AdminAssistantHostAdapter'
 import {
+  PERMISSION_DEVICE_CONTROL,
   PERMISSION_INCIDENT_DISPOSE,
   PERMISSION_SYSTEM_MANAGE,
   PERMISSION_THRESHOLD_MANAGE,
@@ -40,6 +41,8 @@ import {
   AiAudit,
   AlarmRecord,
   AuthUser,
+  EnterpriseLampCommandResult,
+  EnterprisePlcStatus,
   FactoryBundle,
   FactoryIncident,
   FactoryRun,
@@ -86,12 +89,13 @@ const MENU: Array<MenuItem> = [
   { code: 'KNOWLEDGE', label: '知识资料', description: '上传、解析、审核、撤销和索引', minRole: 'VIEWER' },
   { code: 'USERS', label: '用户权限', description: '账号、角色和状态', minRole: 'ADMIN' },
   { code: 'SETTINGS', label: '系统配置', description: '阈值和策略版本', minRole: 'VIEWER' },
-  { code: 'AUDIT', label: '操作审计', description: '用户操作和后端结果', minRole: 'VIEWER' }
+  { code: 'AUDIT', label: '操作审计', description: '用户操作和后端结果', minRole: 'VIEWER' },
+  { code: 'LIVE_IO', label: '现场设备', description: '企业 MQTT、PLC 四路状态和实际灯位控制', minRole: 'VIEWER' }
 ]
 
 const NAV_GROUPS: Array<MenuGroup> = [
   { label: '运行管理', items: [MENU[0], MENU[1], MENU[2]] },
-  { label: '资产与追溯', items: [MENU[3], MENU[4], MENU[5]] },
+  { label: '资产与追溯', items: [MENU[3], MENU[4], MENU[5], MENU[12]] },
   { label: 'AI 治理', items: [MENU[6], MENU[7], MENU[8]] },
   { label: '平台管理', items: [MENU[9], MENU[10], MENU[11]] }
 ]
@@ -147,6 +151,16 @@ struct AdminConsole {
   @State aiTestQuestion: string = '当前 PLA 瓶 VOC 达标后是否可以进入瑕疵检测？'
   @State aiTestResult: string = '尚未测试。'
   @State aiTestStatus: string = 'WAIT'
+  @State livePlc: EnterprisePlcStatus = {
+    mqttConnected: false,
+    online: false,
+    switchNames: [],
+    switchDevices: [],
+    switches: [],
+    lamps: []
+  }
+  @State livePlcLoading: boolean = false
+  @State livePlcMessage: string = '尚未读取现场 PLC。'
   private timer: number = -1
   private readonly pageSize: number = 5
   private readonly assistantAdapter: AdminAssistantHostAdapter = new AdminAssistantHostAdapter()
@@ -197,6 +211,7 @@ struct AdminConsole {
       this.users = []
     }
     if (this.section === 'AI_CONFIG') await this.loadAiModelConfig()
+    if (this.section === 'LIVE_IO') await this.loadLivePlcStatus()
     if (this.section === 'AUDIT') await this.loadAuditRecords()
     this.loading = false
   }
@@ -410,11 +425,12 @@ struct AdminConsole {
     this.query = ''
     this.filter = 'ALL'
     this.pageIndex = 0
-    this.selectedDetail = this.currentMenu().description
+    this.selectedDetail = code === 'LIVE_IO' ? '请选择一条记录查看详情。' : this.currentMenu().description
     this.message = ''
     if (code === 'USERS' && SessionStore.isAdmin) void this.loadUsers()
     if (code === 'INCIDENTS') void this.loadIncidents()
     if (code === 'AI_CONFIG') void this.loadAiModelConfig()
+    if (code === 'LIVE_IO') void this.loadLivePlcStatus()
     if (code === 'AUDIT') void this.loadAuditRecords()
   }
 
@@ -579,6 +595,7 @@ struct AdminConsole {
                 if (this.section === 'PRODUCTION') this.productionView()
                 if (this.section === 'INCIDENTS') this.incidentView()
                 if (this.section === 'DEVICES') this.deviceView()
+                if (this.section === 'LIVE_IO') this.liveIoView()
                 if (this.section === 'MATERIALS') this.materialView()
                 if (this.section === 'LOGISTICS') this.logisticsView()
                 if (this.section === 'AI_AUDIT') this.aiAuditView()
@@ -652,6 +669,43 @@ struct AdminConsole {
         .border({ width: 1, color: '#2B5876' })
         .onClick(() => void this.logout())
     }.width(248).height('100%').padding(18).alignItems(HorizontalAlign.Start).backgroundColor(Theme.navy).border({ width: { right: 1 }, color: '#2B5876' })
+  }
+
+  private async loadLivePlcStatus(): Promise<void> {
+    if (SessionStore.isDemo) {
+      this.livePlcMessage = '演示账号不访问现场设备接口。'
+      return
+    }
+    this.livePlcLoading = true
+    try {
+      this.livePlc = await FactoryRepository.getEnterprisePlcStatus()
+      this.livePlcMessage = this.livePlc.online
+        ? 'PLC 正在通过现场 MQTT 上报，状态不会由前端模拟。'
+        : (this.livePlc.mqttConnected ? 'Broker 已连接，正在等待 PLC 心跳。' : 'Broker 未连接。')
+    } catch (error) {
+      this.livePlcMessage = '现场 PLC 状态读取失败：' + (error instanceof Error ? error.message : '后端请求失败')
+    } finally {
+      this.livePlcLoading = false
+    }
+  }
+
+  private async setLiveLamp(index: number, action: number): Promise<void> {
+    if (!this.canWrite(PERMISSION_DEVICE_CONTROL)) {
+      this.livePlcMessage = this.writeDisabledReason(PERMISSION_DEVICE_CONTROL)
+      return
+    }
+    this.livePlcLoading = true
+    try {
+      const result: EnterpriseLampCommandResult = await FactoryRepository.setEnterpriseLamp(index, action)
+      this.livePlcMessage = result.message
+      this.appendClientActivity('PLC 灯控', 'LAMP-' + (index + 1).toString(), result.status,
+        action === 1 ? '点亮命令已发送' : '熄灭命令已发送')
+      await this.loadLivePlcStatus()
+    } catch (error) {
+      this.livePlcMessage = '灯控失败：' + (error instanceof Error ? error.message : '后端请求失败')
+    } finally {
+      this.livePlcLoading = false
+    }
   }
 
   @Builder
@@ -1092,6 +1146,99 @@ struct AdminConsole {
       }
       this.detailPanel()
     }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: { top: 3, left: 1, right: 1, bottom: 1 }, color: Theme.line })
+  }
+
+  @Builder
+  liveIoView() {
+    Column({ space: 14 }) {
+      Row() {
+        Column() {
+          Text('ENTERPRISE DEVICE LINK').fontSize(9).fontColor(Theme.accent).fontWeight(FontWeight.Bold)
+          Text('现场 PLC 与 MQTT').fontSize(20).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 5 })
+          Text('四路设备状态由 PLC 只读上报；灯位控制经后端权限校验后发送到现场 Broker。')
+            .fontSize(10).fontColor(Theme.muted).margin({ top: 6 })
+        }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+        StateBadge({ status: this.livePlc.mqttConnected ? 'RUNNING' : 'FAILED',
+          label: this.livePlc.mqttConnected ? 'MQTT CONNECTED' : 'MQTT OFFLINE' })
+        StateBadge({ status: this.livePlc.online ? 'RUNNING' : 'WAIT',
+          label: this.livePlc.online ? 'PLC ONLINE' : 'PLC WAITING' }).margin({ left: 8 })
+      }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+
+      Row({ space: 12 }) {
+        this.liveFact('Broker', '192.168.1.200:1883', this.livePlc.mqttConnected ? '已连接' : '未连接')
+        this.liveFact('适配器 SN', this.livePlc.adapterSn || '--',
+          this.livePlc.version ? '固件 ' + this.livePlc.version : '等待版本')
+        this.liveFact('适配器地址', this.livePlc.adapterIp || '--', this.livePlc.protocolType || 'MQTT')
+        this.liveFact('最后心跳', this.livePlc.lastSeenAt || '--', this.livePlc.online ? '数据新鲜' : '数据超时')
+      }.width('100%')
+
+      Column() {
+        SectionTitle({ code: 'PLC INPUT', title: 'PLC 四路设备状态', description: '物理设备输入，只读；顺序由企业协议固定映射。' })
+        Row({ space: 10 }) {
+          ForEach(this.livePlc.switchDevices, (deviceCode: string, index: number) => {
+            Column() {
+              Row({ space: 7 }) {
+                Circle().width(8).height(8).fill(this.plcSwitchAt(index) === 1 ? Theme.success : Theme.neutral)
+                Text(this.plcSwitchAt(index) === 1 ? 'RUNNING' : 'STANDBY').fontSize(9)
+                  .fontColor(this.plcSwitchAt(index) === 1 ? Theme.success : Theme.muted).fontWeight(FontWeight.Bold)
+              }.width('100%')
+              Text(this.plcSwitchNameAt(index)).fontSize(14).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 10 })
+              Text(deviceCode).fontSize(10).fontColor(Theme.blue).margin({ top: 5 })
+              Text('PLC INPUT ' + index.toString()).fontSize(9).fontColor(Theme.muted).margin({ top: 12 })
+            }.layoutWeight(1).height(118).padding(14).alignItems(HorizontalAlign.Start)
+              .backgroundColor(Theme.panelSoft)
+              .border({ width: 1, color: this.plcSwitchAt(index) === 1 ? Theme.success : Theme.line })
+          }, (deviceCode: string) => deviceCode)
+        }.width('100%').margin({ top: 12 })
+      }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+
+      Column() {
+        SectionTitle({ code: 'PLC OUTPUT', title: '现场灯位控制', description: '仅展示 PLC 实际上报的灯位数量；发送后以设备回报为最终状态。' })
+        if (this.livePlc.lamps.length === 0) {
+          this.emptyState('PLC 尚未上报灯位状态。')
+        } else {
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+            ForEach(this.livePlc.lamps, (lamp: number, index: number) => {
+              Row() {
+                Column() {
+                  Text('LAMP ' + (index + 1).toString()).fontSize(10).fontColor(Theme.muted)
+                  Text(lamp === 1 ? '已点亮' : '已熄灭').fontSize(14)
+                    .fontColor(lamp === 1 ? Theme.warning : Theme.text).fontWeight(FontWeight.Bold).margin({ top: 5 })
+                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                Button(lamp === 1 ? '熄灭' : '点亮').type(ButtonType.Normal).height(34).fontSize(10)
+                  .enabled(this.canWrite(PERMISSION_DEVICE_CONTROL) && this.livePlc.online && !this.livePlcLoading)
+                  .fontColor('#FFFFFF').backgroundColor(lamp === 1 ? Theme.neutral : Theme.blue)
+                  .onClick(() => this.confirmAction(lamp === 1 ? '确认熄灭现场灯位' : '确认点亮现场灯位',
+                    '该命令会发送到真实 PLC，最终状态以设备回报为准。',
+                    () => void this.setLiveLamp(index, lamp === 1 ? 0 : 1)))
+              }.width(260).height(72).padding(12).margin({ right: 10, bottom: 10 })
+                .backgroundColor(Theme.panelSoft).border({ width: 1, color: lamp === 1 ? Theme.warning : Theme.line })
+            }, (lamp: number, index: number) => index.toString())
+          }.width('100%').margin({ top: 12 })
+        }
+        Text(this.livePlcMessage).fontSize(10).fontColor(this.livePlc.online ? Theme.success : Theme.warning)
+          .width('100%').padding(10).backgroundColor(Theme.panelSoft).margin({ top: 4 })
+      }.width('100%').padding(16).backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+    }.width('100%')
+  }
+
+  @Builder
+  liveFact(label: string, value: string, note: string) {
+    Column() {
+      Text(label).fontSize(9).fontColor(Theme.muted)
+      Text(value).fontSize(13).fontColor(Theme.text).fontWeight(FontWeight.Bold).margin({ top: 7 })
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(note).fontSize(9).fontColor(Theme.blue).margin({ top: 6 })
+    }.layoutWeight(1).height(86).padding(12).alignItems(HorizontalAlign.Start)
+      .backgroundColor(Theme.panel).border({ width: 1, color: Theme.line })
+  }
+
+  private plcSwitchAt(index: number): number {
+    return index < this.livePlc.switches.length ? this.livePlc.switches[index] : 0
+  }
+
+  private plcSwitchNameAt(index: number): string {
+    return index < this.livePlc.switchNames.length ? this.livePlc.switchNames[index] : '设备 ' + (index + 1).toString()
   }
 
   @Builder

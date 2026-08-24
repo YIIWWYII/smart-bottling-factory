@@ -4,11 +4,15 @@ import com.archermind.hdc.dto.MqttHelper;
 import com.archermind.hdc.factory.capability.DeviceCapabilityCatalog;
 import com.archermind.hdc.factory.runtime.dto.DeviceTelemetryRequest;
 import com.archermind.hdc.factory.runtime.service.FactoryRuntimeService;
+import com.archermind.hdc.integration.enterprise.dto.EnterprisePlcStatus;
 import com.archermind.hdc.log.XLog;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +27,16 @@ public class EnterprisePlcRuntimeAdapter {
     private boolean enabled;
     @Value("${factory.enterprise.plc.switch-devices:PK-ARM-01,FIL-HEAD-01,PT-CV-01,AGV-01}")
     private String configuredDevices;
+    @Value("${factory.enterprise.plc.online-timeout-seconds:15}")
+    private int onlineTimeoutSeconds;
+
+    private String adapterSn;
+    private String adapterIp;
+    private String protocolType;
+    private String version;
+    private LocalDateTime lastSeenAt;
+    private List<Integer> switchStates = new ArrayList<>();
+    private List<Integer> lampStates = new ArrayList<>();
 
     private final FactoryRuntimeService runtimeService;
     private final DeviceCapabilityCatalog capabilities;
@@ -33,17 +47,79 @@ public class EnterprisePlcRuntimeAdapter {
         this.capabilities = capabilities;
     }
 
-    public void recordSync(MqttHelper.OrderServiceSyncDto dto) {
+    public synchronized void recordOnline(MqttHelper.DeviceNetworkOnlineDto dto) {
+        if (!enabled || dto == null || !StringUtils.hasText(dto.getSn())) return;
+        if (!dto.getSn().equals(adapterSn)) {
+            switchStates = new ArrayList<>();
+            lampStates = new ArrayList<>();
+            version = null;
+        }
+        adapterSn = dto.getSn();
+        adapterIp = dto.getIp();
+        protocolType = dto.getProtocolType();
+        lastSeenAt = LocalDateTime.now();
+        refreshCurrentSwitches();
+    }
+
+    public synchronized void recordSync(MqttHelper.OrderServiceSyncDto dto) {
         if (!enabled || dto == null || dto.getDevice() == null) return;
-        List<Integer> states = dto.getDevice();
-        for (int index = 0; index < Math.min(states.size(), deviceCodes().size()); index++) {
-            record(dto.getSn(), index, states.get(index), "order/service/sync");
+        adapterSn = dto.getSn();
+        version = dto.getVersion();
+        lastSeenAt = LocalDateTime.now();
+        switchStates = new ArrayList<>(dto.getDevice());
+        lampStates = dto.getLamps() == null ? new ArrayList<>() : new ArrayList<>(dto.getLamps());
+        for (int index = 0; index < Math.min(switchStates.size(), deviceCodes().size()); index++) {
+            record(dto.getSn(), index, switchStates.get(index), "order/service/sync");
         }
     }
 
-    public void recordSwitch(MqttHelper.OrderServiceSwitchDto dto) {
+    public synchronized void recordSwitch(MqttHelper.OrderServiceSwitchDto dto) {
         if (!enabled || dto == null || dto.getIndex() == null || dto.getAction() == null) return;
+        adapterSn = dto.getSn();
+        lastSeenAt = LocalDateTime.now();
+        ensureSize(switchStates, Math.max(4, dto.getIndex() + 1));
+        switchStates.set(dto.getIndex(), dto.getAction());
         record(dto.getSn(), dto.getIndex(), dto.getAction(), "order/service/switch");
+    }
+
+    public synchronized void recordLamps(MqttHelper.OrderServiceLampsDto dto) {
+        if (!enabled || dto == null || dto.getIndex() == null || dto.getAction() == null) return;
+        adapterSn = dto.getSn();
+        lastSeenAt = LocalDateTime.now();
+        int size = dto.getTotalLamps() == null ? dto.getIndex() + 1 : dto.getTotalLamps();
+        ensureSize(lampStates, Math.max(size, dto.getIndex() + 1));
+        lampStates.set(dto.getIndex(), dto.getAction());
+    }
+
+    public synchronized EnterprisePlcStatus snapshot(boolean mqttConnected) {
+        EnterprisePlcStatus status = new EnterprisePlcStatus();
+        status.setMqttConnected(mqttConnected);
+        status.setOnline(isOnline());
+        status.setAdapterSn(adapterSn);
+        status.setAdapterIp(adapterIp);
+        status.setProtocolType(protocolType);
+        status.setVersion(version);
+        status.setLastSeenAt(lastSeenAt);
+        status.setSwitchNames(new ArrayList<>(SWITCH_NAMES));
+        status.setSwitchDevices(deviceCodes());
+        status.setSwitches(new ArrayList<>(switchStates));
+        status.setLamps(new ArrayList<>(lampStates));
+        return status;
+    }
+
+    public synchronized boolean isOnline() {
+        return lastSeenAt != null && Math.abs(Duration.between(lastSeenAt, LocalDateTime.now()).getSeconds())
+                <= Math.max(1, onlineTimeoutSeconds);
+    }
+
+    private void refreshCurrentSwitches() {
+        for (int index = 0; index < Math.min(switchStates.size(), deviceCodes().size()); index++) {
+            record(adapterSn, index, switchStates.get(index), "device/network/online");
+        }
+    }
+
+    private void ensureSize(List<Integer> values, int size) {
+        while (values.size() < size) values.add(0);
     }
 
     private void record(String sn, int index, Integer action, String topic) {

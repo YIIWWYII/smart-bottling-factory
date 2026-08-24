@@ -72,6 +72,7 @@ public class ManagementAuthFilter extends OncePerRequestFilter {
         if (path.matches("/factory/runs/[^/]+/disposition") || path.equals("/factory/runtime/incidents")
                 || path.matches("/factory/runtime/incidents/[^/]+/resolve")) return true;
         if (path.matches("/operations/alarms/[^/]+/ack") || path.equals("/operations/commands") || path.equals("/operations/ai/decide")) return true;
+        if (path.matches("/enterprise/plc/lamps/[^/]+")) return true;
         if (path.equals("/production/orders") || path.matches("/production/orders/[^/]+")) return true;
         if (path.startsWith("/config/recipes") || path.startsWith("/config/thresholds")
                 || path.startsWith("/quality/rules") || path.startsWith("/simulation/")) return true;

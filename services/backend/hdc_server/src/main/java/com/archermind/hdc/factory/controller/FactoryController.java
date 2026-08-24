@@ -7,6 +7,8 @@ import com.archermind.hdc.factory.dto.FactoryStartRequest;
 import com.archermind.hdc.factory.dto.FactoryStepRequest;
 import com.archermind.hdc.factory.model.FactoryRun;
 import com.archermind.hdc.factory.service.FactoryService;
+import com.archermind.hdc.factory.service.FactoryMqttBridge;
+import com.archermind.hdc.integration.enterprise.EnterprisePlcRuntimeAdapter;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,16 +24,23 @@ import java.util.Map;
 @RequestMapping("/factory")
 public class FactoryController {
     private final FactoryService factoryService;
+    private final FactoryMqttBridge mqttBridge;
+    private final EnterprisePlcRuntimeAdapter enterprisePlc;
 
-    public FactoryController(FactoryService factoryService) {
+    public FactoryController(FactoryService factoryService, FactoryMqttBridge mqttBridge,
+                             EnterprisePlcRuntimeAdapter enterprisePlc) {
         this.factoryService = factoryService;
+        this.mqttBridge = mqttBridge;
+        this.enterprisePlc = enterprisePlc;
     }
 
     @GetMapping("/health")
     public Result<Map<String, Object>> health() {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("status", "UP");
-        data.put("mode", "SIMULATION");
+        data.put("mode", mqttBridge.isConnected() ? "HYBRID" : "SIMULATION");
+        data.put("mqttConnected", mqttBridge.isConnected());
+        data.put("enterprisePlcOnline", enterprisePlc.isOnline());
         data.put("service", "factory-core");
         return Result.success(data);
     }

@@ -21,7 +21,7 @@
 
 在项目组验证环境执行过：
 
-- 后端 `mvn test`：`Tests run: 36, Failures: 0, Errors: 0`。
+- 后端 `mvn test`：`Tests run: 37, Failures: 0, Errors: 0`。
 - 后端 `factory-demo-smoke.ps1`：HTTP、WebSocket、MySQL 登录、模拟传感器和模拟命令 ACK 全部通过。
 - AI 中枢 `scripts/smoke_test.py`：`SMOKE TEST PASSED`。
 - 三个 App 的 `tools/validate-project.ps1`：均通过。
@@ -31,16 +31,16 @@
 
 | 产物 | 路径 | SHA-256 |
 | --- | --- | --- |
-| 共享 HAR 1.0.5 | `packages/harmony-assistant/harmonyassistant/build/default/outputs/default/harmonyassistant.har` | `19F8AACD3B7ECDEC0B11DDB220D9C4ADEB94B5DEE92167251543A4788703FED1` |
-| 数字展板 HAP | `apps/digital-display/BottlingFactoryDisplay/entry/build/default/outputs/default/entry-default-unsigned.hap` | `74939E51329DF12B9A2E24BEE7C66D0E08269F39EC5EF40B2ABCA484D43CA2F1` |
-| 工位终端 HAP | `apps/workstation-terminal/BottlingFactoryTerminal/entry/build/default/outputs/default/entry-default-unsigned.hap` | `98BE18B2439CAA7AECA8F14E869EB9B6233E3E1886A851DE55F341EA20D9C3DF` |
-| 后台管理 HAP | `apps/admin-console/BottlingFactoryAdmin/entry/build/default/outputs/default/entry-default-unsigned.hap` | `A6D98253E9392993C4FAAF1013C6594BCD1244729799472326B7F4D21AEBF1F2` |
+| 共享 HAR 1.0.5 | `packages/harmony-assistant/harmonyassistant/build/default/outputs/default/harmonyassistant.har` | `7172AF4E8298CA6DE56D23B0982D58C9C073B25A4A93CD1CB56FFF676631EEF7` |
+| 数字展板 HAP | `apps/digital-display/BottlingFactoryDisplay/entry/build/default/outputs/default/entry-default-unsigned.hap` | `940A1B67E35A77E1469F6DC20F8F83FD79430240F76453E3AD4B386834CE63EC` |
+| 工位终端 HAP | `apps/workstation-terminal/BottlingFactoryTerminal/entry/build/default/outputs/default/entry-default-unsigned.hap` | `71F47870E29574E79BD9344AD86DBBBB14056CB658DBDEC51AECBD920A4B6B3D` |
+| 后台管理 HAP | `apps/admin-console/BottlingFactoryAdmin/entry/build/default/outputs/default/entry-default-unsigned.hap` | `6CB4530E7FE0123D866D4FB6C7C670871AE91E38326FA1EE9FCFC67C5964654A` |
 
 ### 1.2 目前还不能说“全流程真实打通”的部分
 
 以下内容不能当作已经完成的生产能力：
 
-1. 本次验证没有在线鸿蒙模拟器或真机，因此没有在本次交接前重新做安装、点击、ArkWeb WebGL 和长时间运行验收。
+1. 本轮已在 `MatePad Pro 13 / 127.0.0.1:5555` 鸿蒙模拟器安装并启动后台 HAP，验证登录、现场设备页面滚动、PLC/灯位状态展示和离线状态展示；数字展板与工位端已完成构建，但本轮没有宣称它们完成新的安装点击验收。
 2. 后端默认配置使用 MySQL `127.0.0.1:3307`。如果本机 MySQL 是 `3306`，必须按本文修改配置或启动参数。
 3. 后端登录、MySQL 持久化和 WebSocket 已在项目组环境完成联调；换电脑后仍必须按本文重新执行 smoke，不能只看单元测试。
 4. AI 默认是 `LOCAL_DEMO`。真实大模型需要在后台 AI 配置中填写兼容接口、模型和 API Key；本地 RAG 当前是演示型内存检索，不是生产向量数据库。
@@ -130,6 +130,16 @@ CREATE DATABASE IF NOT EXISTS hdc
 端口：3307
 用户：root
 密码：123456
+
+本项目组验证机的 MySQL 程序和数据目录都在 D 盘。若使用同样的便携式 MySQL，可用下面的方式启动；`--lower_case_table_names=2` 必须保留：
+
+```powershell
+$mysql = 'D:\HarmonyOS-Dev\Tools\mysql-8.0.46-winx64\bin\mysqld.exe'
+$data = 'D:\HarmonyOS-Dev\Runtime\mysql\hdc'
+& $mysql --defaults-file='D:\HarmonyOS-Dev\Runtime\mysql\my.ini' --datadir=$data --port=3307 --lower_case_table_names=2 --console
+```
+
+如果已有 Windows 服务管理 MySQL，只需确认它实际监听的端口与 Spring Boot 配置一致；不要同时启动两个 MySQL 实例使用同一个数据目录。
 ```
 
 如果本机是常见的 `3306` 或密码不同，不要直接改 GitHub 中的默认配置，可以在启动时覆盖：
@@ -181,12 +191,25 @@ Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\services\backen
 真实设备通道不可用 -> FAILED，不显示假成功
 ```
 
-没有现场硬件时继续使用 `factory-demo`。接入企业 Broker 时改用 `factory-mqtt-demo`，并通过启动参数填写现场地址：
+没有现场硬件时继续使用 `factory-demo`。当前现场 Broker 为 `192.168.1.200:1883`，已写入 `factory-mqtt-demo`；电脑需连接现场网络并处于 `192.168.1.0/24` 网段。启动前先验证 TCP 和 MQTT：
+
+```powershell
+Test-NetConnection 192.168.1.200 -Port 1883
+```
+
+看到 `TcpTestSucceeded : True` 后启动真实/模拟混合模式：
+
+```powershell
+mvn spring-boot:run `
+  "-Dspring-boot.run.profiles=factory-mqtt-demo"
+```
+
+若现场 Broker 地址变化，不要改 Java 代码，使用启动参数覆盖：
 
 ```powershell
 mvn spring-boot:run `
   "-Dspring-boot.run.profiles=factory-mqtt-demo" `
-  "-Dspring-boot.run.arguments=--mqtt.url=tcp://192.168.1.10 --mqtt.port=1883 --factory.enterprise.plc.switch-devices=PK-ARM-01,FIL-HEAD-01,PT-CV-01,AGV-01"
+  "-Dspring-boot.run.arguments=--mqtt.url=tcp://新地址 --mqtt.port=1883"
 ```
 
 企业 PLC 兼容 Topic：
@@ -197,6 +220,15 @@ PLC 全量状态：     order/service/sync
 PLC 单路状态：     order/service/switch
 PLC 指示灯状态：   order/service/lamps
 ```
+
+PLC 上线状态与网络信息：
+
+```text
+PLC 网络/心跳上报：device/network/online
+后端请求适配器灯位：order/adapter/lamps
+```
+
+四路 PLC 输入在后台“现场设备”页只读展示，当前企业软件明确提供的可控能力是四路指示灯；没有验收过的传送带调速、机械臂动作、AGV 调度按钮不会在界面中伪造。传送带现场仍由电源和旋钮调速，机械臂 TCP 默认关闭。灯位命令发送后，页面以 PLC 回报的最终状态为准。
 
 `device` 数组或 `index` 默认按以下顺序映射，可用 `factory.enterprise.plc.switch-devices` 覆盖：
 
@@ -266,7 +298,7 @@ $env:AI_REQUEST_TIMEOUT_SECONDS = '20'
 
 ## 8. 配置三个鸿蒙应用
 
-三个 App 当前默认访问 `192.168.0.104`。这是部署示例地址，不是自动发现地址。如果后端和 AI 中枢运行在另一台电脑，或电脑重新连接网络后局域网 IPv4 发生变化，必须在构建 HAP 前将以下配置中的主机地址改为运行服务电脑当前的局域网 IPv4：
+三个 App 当前默认访问 `192.168.1.104`，这是本次现场联调电脑的局域网地址，不是自动发现地址。如果后端和 AI 中枢运行在另一台电脑，或电脑重新连接网络后局域网 IPv4 发生变化，必须在构建 HAP 前将以下配置中的主机地址改为运行服务电脑当前的局域网 IPv4：
 
 ```text
 apps/digital-display/BottlingFactoryDisplay/entry/src/main/ets/service/ApiConfig.ets
@@ -355,7 +387,7 @@ Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\apps\admin-cons
 6. 启动模拟器，安装并运行数字展板：确认总览、九工序、2D、3D、滚动、暂停/恢复和对象选择。
 7. 运行工位端：使用对应工位账号，确认本站数据、设备能力、只读/可控边界和命令回执。
 8. 运行后台：使用 `admin/admin123`，确认登录、导航、AI 配置、知识审核和审计页面。
-9. 关闭后端或 AI 中枢，确认前端显示离线/LOCAL DEMO，不显示假成功。
+9. 关闭后端或 AI 中枢，确认前端显示离线/LOCAL DEMO，不显示假成功；关闭现场 Broker 时，后台“现场设备”应显示 `MQTT OFFLINE`，不能保留假在线。
 10. 重新启动服务，确认快照、WebSocket 重连和数据版本恢复。
 
 ## 12. 常见问题

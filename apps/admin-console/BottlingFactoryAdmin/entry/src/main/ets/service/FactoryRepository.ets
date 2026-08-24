@@ -3,12 +3,16 @@ import { ApiClient, apiClient } from './ApiClient'
 import { FactoryRealtime } from './FactoryRealtime'
 import { createMockBundle } from './MockFactoryData'
 import { SessionStore } from './SessionStore'
-import { FactoryBundle, FactoryDashboard, FactoryIncident, LogisticsOverview, OperationsOverview, RuntimeSnapshot } from '../model/FactoryModels'
+import { EnterpriseLampCommandResult, EnterprisePlcStatus, FactoryBundle, FactoryDashboard, FactoryIncident, LogisticsOverview, OperationsOverview, RuntimeSnapshot } from '../model/FactoryModels'
 
 interface IncidentResolveRequest {
   action: string
   targetStage: string
   note: string
+}
+
+interface LampCommandRequest {
+  action: number
 }
 
 class FactoryRepositoryImpl {
@@ -85,6 +89,16 @@ class FactoryRepositoryImpl {
     }
     const suffix: string = status.length > 0 ? `?status=${status}` : ''
     return await this.client.request<Array<FactoryIncident>>(`/factory/runtime/incidents${suffix}`)
+  }
+
+  async getEnterprisePlcStatus(): Promise<EnterprisePlcStatus> {
+    return await this.client.request<EnterprisePlcStatus>('/enterprise/plc/status')
+  }
+
+  async setEnterpriseLamp(index: number, action: number): Promise<EnterpriseLampCommandResult> {
+    const payload: LampCommandRequest = { action: action }
+    return await this.client.request<EnterpriseLampCommandResult>(`/enterprise/plc/lamps/${index}`,
+      http.RequestMethod.POST, JSON.stringify(payload))
   }
 }
 

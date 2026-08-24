@@ -96,6 +96,7 @@ public class AdapterPlcService implements MqttHelper.RegisterMessage {
         if (ObjectUtils.isEmpty(sn)) {
             return;
         }
+        enterpriseRuntimeAdapter.recordOnline(dto);
         Device device = deviceMapper.findDeviceBySn(sn);
         if (ObjectUtils.isEmpty(device)) {
             XLog.warn("SN：" + sn + "，数据库中不存在,新建设备。");
@@ -215,6 +216,7 @@ public class AdapterPlcService implements MqttHelper.RegisterMessage {
             XLog.warn("解析数据为空");
             return;
         }
+        enterpriseRuntimeAdapter.recordLamps(dto);
         String sn = dto.getSn();
         Integer index = dto.getIndex();
         Integer action = dto.getAction();

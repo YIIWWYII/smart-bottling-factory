@@ -230,6 +230,28 @@ export interface FactoryBundle {
   errorMessage: string
 }
 
+export interface EnterprisePlcStatus {
+  mqttConnected: boolean
+  online: boolean
+  adapterSn?: string
+  adapterIp?: string
+  protocolType?: string
+  version?: string
+  lastSeenAt?: string
+  switchNames: Array<string>
+  switchDevices: Array<string>
+  switches: Array<number>
+  lamps: Array<number>
+}
+
+export interface EnterpriseLampCommandResult {
+  status: string
+  adapterSn: string
+  index: number
+  action: number
+  message: string
+}
+
 export interface StageDefinition {
   code: string
   name: string
