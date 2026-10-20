@@ -1,0 +1,16 @@
+{
+  "folders": [{"path": ".", "name": "瓶安视觉算法"}],
+  "settings": {"files.encoding": "utf8", "editor.wordWrap": "on"},
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "视觉算法：运行单元测试",
+        "type": "shell",
+        "command": "docker compose exec -T vision pytest -q -p no:cacheprovider test_video_workflow.py",
+        "options": {"cwd": "${workspaceFolder}"},
+        "problemMatcher": []
+      }
+    ]
+  }
+}

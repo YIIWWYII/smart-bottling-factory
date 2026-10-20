@@ -1,0 +1,323 @@
+{
+  "schema_version": "1.0",
+  "request": "Fixed shot beverage production process scene, neobrutalism Eevee toon shader banding outlines, reuse machine assemblies, curve pipes, array conveyors. No campus. Perspective render.",
+  "deliverable": "shot",
+  "classes": [
+    "npr_stylization",
+    "regular_repetition",
+    "surface_appearance"
+  ],
+  "physical_causes": [
+    "palette_mapping",
+    "quantized_lighting"
+  ],
+  "candidates": [
+    {
+      "method": "toon_shader_banding",
+      "skill": "blender-npr-eevee",
+      "score": 20,
+      "matched_terms": [
+        "toon shader"
+      ],
+      "reasons": [
+        "cel-shaded light bands",
+        "anime color steps",
+        "stylized shadow palette"
+      ],
+      "risks": [
+        "engine incompatibility",
+        "crawling high-frequency noise",
+        "uncontrolled banding",
+        "color input connected as shader by accident"
+      ],
+      "available": true
+    },
+    {
+      "method": "shader_nodes",
+      "skill": "blender-material-surfacing",
+      "score": 17,
+      "matched_terms": [
+        "shader"
+      ],
+      "reasons": [
+        "color",
+        "roughness",
+        "bump",
+        "normal",
+        "emission",
+        "microscopic variation"
+      ],
+      "risks": [
+        "uniform roughness",
+        "wrong scale",
+        "color-space error"
+      ],
+      "available": true
+    },
+    {
+      "method": "array_instances",
+      "skill": "blender-procedural-systems",
+      "score": 16,
+      "matched_terms": [
+        "array"
+      ],
+      "reasons": [
+        "regular repetition",
+        "modular linear or radial pattern"
+      ],
+      "risks": [
+        "applied duplicate explosion",
+        "origin drift"
+      ],
+      "available": true
+    },
+    {
+      "method": "alternative:toon_bsdf",
+      "skill": "blender-production-router",
+      "score": 10,
+      "matched_terms": [],
+      "reasons": [
+        "documented alternative to compare: Toon BSDF"
+      ],
+      "risks": [
+        "requires task-specific prerequisite and downstream compatibility review"
+      ],
+      "available": null
+    }
+  ],
+  "selected_method": "toon_shader_banding",
+  "selected_skill": "blender-npr-eevee",
+  "secondary_methods": [
+    "shader_nodes",
+    "array_instances",
+    "alternative:toon_bsdf"
+  ],
+  "forbidden_substitutions": [
+    "blockout_proxy_as_final_topology",
+    "color_block_partition_as_part_graph",
+    "detail_before_transition_forms",
+    "join_objects_as_topology_fusion",
+    "material_or_lighting_as_geometry_concealment",
+    "primitive_only_formal_modeling",
+    "primitive_stacking_after_blockout",
+    "scene_or_world_reset_without_authorization",
+    "shader_to_rgb_in_cycles",
+    "smooth_shading_or_weighted_normal_as_bevel",
+    "toon_shading_as_true_outline",
+    "unclassified_mesh_islands",
+    "unclassified_visible_intersections"
+  ],
+  "prerequisites": [
+    "render-engine decision",
+    "controlled lights",
+    "palette ramp",
+    "material-space noise policy"
+  ],
+  "validation": [
+    "render engine",
+    "light rotation",
+    "palette steps",
+    "noise stability",
+    "approved Part Graph and construction methods",
+    "front side top hero clay and wireframe evidence",
+    "formal-topology conversion after Blockout",
+    "topology rollback strike audit"
+  ],
+  "required_specialists": [
+    "blender-production-router",
+    "blender-local-asset-library",
+    "blender-npr-eevee",
+    "blender-geometry-validation"
+  ],
+  "construction_archetypes": [],
+  "construction_method_decision": {
+    "shape_grammar_review_required": true,
+    "detected_archetypes": [],
+    "parameter_owners": {},
+    "native_generator_comparisons": [],
+    "fallback_when_no_archetype_matches": "inspect the form and declare unique topology, deformation, distribution, simulation, assembly, or shading ownership before primitive creation",
+    "native_component_decision": {
+      "status": "planned",
+      "primary_system": "SHADER_NODES",
+      "parameter_owners": {},
+      "source_policy": "one semantic source/control object per dependent system",
+      "python_role": "orchestration",
+      "application_policy": "keep_non_destructive",
+      "fallback_reason": null,
+      "scene_design_required": false,
+      "system_choice": {
+        "comparison_required": false,
+        "direct_candidate": "SHADER_NODES",
+        "node_candidate": null,
+        "selected_system": "SHADER_NODES",
+        "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+        "rejected_alternative": "No credible node alternative was identified at route selection.",
+        "node_justification": [],
+        "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+      },
+      "official_sources": [
+        "https://docs.blender.org/manual/en/5.2/render/shader_nodes/color/shader_to_rgb.html",
+        "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/toon.html",
+        "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeValToRGB.html#bpy.types.ShaderNodeValToRGB.color_ramp",
+        "https://docs.blender.org/manual/en/5.2/render/shader_nodes/color/shader_to_rgb.rst.html",
+        "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.rst.html",
+        "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html",
+        "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon.is_registered_node_type",
+        "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon",
+        "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon.bl_rna_get_subclass"
+      ],
+      "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+    }
+  },
+  "design_owner": "not_applicable",
+  "native_component_decision": {
+    "status": "planned",
+    "primary_system": "SHADER_NODES",
+    "parameter_owners": {},
+    "source_policy": "one semantic source/control object per dependent system",
+    "python_role": "orchestration",
+    "application_policy": "keep_non_destructive",
+    "fallback_reason": null,
+    "scene_design_required": false,
+    "system_choice": {
+      "comparison_required": false,
+      "direct_candidate": "SHADER_NODES",
+      "node_candidate": null,
+      "selected_system": "SHADER_NODES",
+      "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+      "rejected_alternative": "No credible node alternative was identified at route selection.",
+      "node_justification": [],
+      "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+    },
+    "official_sources": [
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/color/shader_to_rgb.html",
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/toon.html",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeValToRGB.html#bpy.types.ShaderNodeValToRGB.color_ramp",
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/color/shader_to_rgb.rst.html",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.rst.html",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon.is_registered_node_type",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon.bl_rna_get_subclass"
+    ],
+    "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+  },
+  "local_asset_library": {
+    "status": "unavailable",
+    "requested": true,
+    "request_origin": "router_node_candidate",
+    "root": null,
+    "eligible_catalogs": [],
+    "candidate_policy": "Candidate library was not found; do not install, append, or assume assets."
+  },
+  "official_doc_resolution": {
+    "schema_version": "1.0",
+    "status": "cached",
+    "version": "5.2",
+    "query": "Shader to RGB toon color ramp Fixed shot beverage production process scene, neobrutalism Eevee toon shader banding outlines, reuse machine assemblies, curve pipes, array conveyors. No campus. Perspective render.",
+    "cache_path": "D:\\Codex\\.codex\\cache\\blender-production-suite\\5.2\\official_blender_docs_index.json",
+    "source_status": {
+      "manual": "live_verified",
+      "python_api": "live_verified"
+    },
+    "source_urls": {
+      "manual": "https://docs.blender.org/manual/en/5.2/",
+      "python_api": "https://docs.blender.org/api/5.2/"
+    },
+    "results": [
+      {
+        "name": "bpy.types.ShaderNodeValToRGB.color_ramp",
+        "title": "bpy.types.ShaderNodeValToRGB.color_ramp",
+        "role": "py:data",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeValToRGB.html#bpy.types.ShaderNodeValToRGB.color_ramp",
+        "source": "python_api",
+        "score": 32.1903
+      },
+      {
+        "name": "render/shader_nodes/color/shader_to_rgb.rst",
+        "title": "Shader To RGB Node",
+        "role": "page",
+        "priority": 1,
+        "url": "https://docs.blender.org/manual/en/5.2/render/shader_nodes/color/shader_to_rgb.rst.html",
+        "source": "manual",
+        "score": 28.9547
+      },
+      {
+        "name": "render/shader_nodes/color/shader_to_rgb",
+        "title": "Shader To RGB Node",
+        "role": "std:doc",
+        "priority": -1,
+        "url": "https://docs.blender.org/manual/en/5.2/render/shader_nodes/color/shader_to_rgb.html",
+        "source": "manual",
+        "score": 28.9547
+      },
+      {
+        "name": "bpy.types.ShaderNodeBsdfToon.rst",
+        "title": "ShaderNodeBsdfToon(ShaderNode)",
+        "role": "page",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.rst.html",
+        "source": "python_api",
+        "score": 28.4547
+      },
+      {
+        "name": "bpy.types.ShaderNodeBsdfToon",
+        "title": "ShaderNodeBsdfToon(ShaderNode)",
+        "role": "std:doc",
+        "priority": -1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html",
+        "source": "python_api",
+        "score": 28.4547
+      },
+      {
+        "name": "bpy.types.ShaderNodeBsdfToon.is_registered_node_type",
+        "title": "bpy.types.ShaderNodeBsdfToon.is_registered_node_type",
+        "role": "py:method",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon.is_registered_node_type",
+        "source": "python_api",
+        "score": 28.1025
+      },
+      {
+        "name": "bpy.types.ShaderNodeBsdfToon",
+        "title": "bpy.types.ShaderNodeBsdfToon",
+        "role": "py:class",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon",
+        "source": "python_api",
+        "score": 27.5917
+      },
+      {
+        "name": "bpy.types.ShaderNodeBsdfToon.bl_rna_get_subclass",
+        "title": "bpy.types.ShaderNodeBsdfToon.bl_rna_get_subclass",
+        "role": "py:method",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon.bl_rna_get_subclass",
+        "source": "python_api",
+        "score": 27.5917
+      }
+    ],
+    "errors": [],
+    "declared_sources": [
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/color/shader_to_rgb.html",
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/toon.html"
+    ],
+    "resolved_sources": [
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/color/shader_to_rgb.html",
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/toon.html",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeValToRGB.html#bpy.types.ShaderNodeValToRGB.color_ramp",
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/color/shader_to_rgb.rst.html",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.rst.html",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon.is_registered_node_type",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon",
+      "https://docs.blender.org/api/5.2/bpy.types.ShaderNodeBsdfToon.html#bpy.types.ShaderNodeBsdfToon.bl_rna_get_subclass"
+    ]
+  },
+  "code_role": "orchestration",
+  "application_policy": "keep_non_destructive",
+  "fallback_reason": null,
+  "task_id": "71d430073fa8",
+  "generated_at": "2026-10-04T16:24:19.771528+00:00"
+}

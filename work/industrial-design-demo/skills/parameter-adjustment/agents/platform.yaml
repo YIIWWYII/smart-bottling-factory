@@ -1,0 +1,8 @@
+interface:
+  display_name: 参数调整
+  default_prompt: 把水洗时间调整到20秒
+enabled: true
+tools:
+  - query_devices
+  - search_knowledge
+  - propose_change

@@ -1,0 +1,24 @@
+{
+  "version": "cylinder-experiment-v1",
+  "product": "fixed-cylindrical-bottle",
+  "association": {"toleranceSeconds": 0.3},
+  "tracking": {
+    "backgroundThreshold": 35, "minAreaFraction": 0.01,
+    "maxDistanceFraction": 0.12, "maxGapSeconds": 0.25,
+    "minDurationSeconds": 0.4, "minSamples": 5,
+    "sharpnessMinimum": 10, "centerFallback": true,
+    "speedVariationLimit": 0.8, "travelAxis": 0
+  },
+  "cameras": {
+    "top": {"timeOffsetSeconds": 0, "travelDelaySeconds": 0, "roi": [0.05, 0.1, 0.95, 0.9], "backgroundFrame": 0},
+    "side-0": {"timeOffsetSeconds": 0, "travelDelaySeconds": 0, "roi": [0.05, 0.1, 0.95, 0.9], "backgroundFrame": 0, "angleDegrees": 0},
+    "side-120": {"timeOffsetSeconds": 0, "travelDelaySeconds": 0, "roi": [0.05, 0.1, 0.95, 0.9], "backgroundFrame": 0, "angleDegrees": 120},
+    "side-240": {"timeOffsetSeconds": 0, "travelDelaySeconds": 0, "roi": [0.05, 0.1, 0.95, 0.9], "backgroundFrame": 0, "angleDegrees": 240}
+  },
+  "unwrap": {
+    "width": 768, "height": 256, "halfViewDegrees": 70,
+    "excludePolygons": [], "reference": null, "minimumCorrelation": 0.8,
+    "maximumOverlapMeanDifference": 45
+  },
+  "inspection": {"enabled": false}
+}

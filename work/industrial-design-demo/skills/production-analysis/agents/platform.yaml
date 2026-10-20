@@ -1,0 +1,9 @@
+interface:
+  display_name: 生产数据分析
+  default_prompt: 分析今天的生产情况
+enabled: true
+tools:
+  - query_production
+  - query_tasks
+  - query_logs
+  - query_products

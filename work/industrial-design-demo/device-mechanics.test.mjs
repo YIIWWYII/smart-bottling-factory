@@ -1,0 +1,31 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {createDeviceMechanics} from './src/deviceMechanics.js';
+
+test('wash asset effects follow flow, stage and pause without adding per-frame objects',async()=>{
+ const bytes=fs.readFileSync('public/models/factory-realistic/wash.glb');
+ const asset=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+ const mechanics=createDeviceMechanics(asset.scene,{stage:'wash'});
+ const values={'PT-WASH-01:washFlow':6,'PT-AIR-01:airFlow':80,__washPhase:'rinse'};
+ const count=()=>{let n=0;mechanics.group.traverse(()=>n++);return n;};
+ const before=count();
+ const first=mechanics.update(.1,values);
+ assert.equal(first.rinseActive,true);assert.equal(first.airActive,false);
+ const spray=mechanics.group.getObjectByName('WaterSprayAssembly');
+ const drops=spray.children.find(o=>o.isInstancedMesh);
+ const initial=Array.from(drops.instanceMatrix.array);
+ const faster=mechanics.update(.1,{...values,'PT-WASH-01:washFlow':20});
+ assert.ok(faster.rinseParticleSpeed>first.rinseParticleSpeed);
+ assert.notDeepEqual(Array.from(drops.instanceMatrix.array),initial);
+ const air=mechanics.update(.1,{...values,__washPhase:'air'});
+ assert.equal(air.rinseActive,false);assert.equal(air.airActive,true);
+ const off=mechanics.update(.1,{...values,'PT-WASH-01:washFlow':0});
+ assert.equal(off.rinseActive,false);
+ const paused=mechanics.update(.1,values,()=>false);
+ assert.equal(paused.rinseActive,false);assert.equal(paused.airActive,false);
+ const stopped=mechanics.update(.1,{...values,'PT-WASH-01:runState':'PAUSED'});
+ assert.equal(stopped.rinseActive,false);
+ assert.equal(count(),before);mechanics.dispose();assert.equal(mechanics.group.parent,null);
+});

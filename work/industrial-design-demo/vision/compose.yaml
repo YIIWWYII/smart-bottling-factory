@@ -1,0 +1,15 @@
+name: bottleworks-vision
+services:
+  vision:
+    build: .
+    image: bottleworks-vision:cpu-yolo12
+    ports:
+      - "127.0.0.1:8095:8095"
+    volumes:
+      - "F:/BottleAI/vision:/data"
+      - "./:/app:ro"
+    environment:
+      VISION_DATA: /data
+    mem_limit: 6g
+    cpus: 4
+    restart: unless-stopped

@@ -1,0 +1,197 @@
+{
+  "schema_version": "1.0",
+  "request": "为现有装瓶产线补充可导出GLB的电控柜散热风扇、冷却循环撬装、带液位显示的缓冲罐、挡瓶器和AGV障碍物。保留当前场景，独立集合；Three.js驱动风扇和阀门。机械硬表面、米制尺寸、金属材质。",
+  "deliverable": "environment",
+  "classes": [
+    "conductive_surface",
+    "material_surfacing",
+    "surface_appearance"
+  ],
+  "physical_causes": [
+    "manufacturing_direction",
+    "microfacet_reflection",
+    "oxidation"
+  ],
+  "candidates": [
+    {
+      "method": "metal_material",
+      "skill": "blender-material-surfacing",
+      "score": 22,
+      "matched_terms": [
+        "金属材质"
+      ],
+      "reasons": [
+        "bare metal",
+        "brushed steel",
+        "coated metal",
+        "rust",
+        "oxide",
+        "machined surface"
+      ],
+      "risks": [
+        "plastic metal",
+        "uniform roughness",
+        "wrong anisotropy direction",
+        "decorative rust noise"
+      ],
+      "available": null
+    },
+    {
+      "method": "alternative:image_pbr_set",
+      "skill": "blender-production-router",
+      "score": 12,
+      "matched_terms": [],
+      "reasons": [
+        "documented alternative to compare: image PBR set"
+      ],
+      "risks": [
+        "requires task-specific prerequisite and downstream compatibility review"
+      ],
+      "available": null
+    },
+    {
+      "method": "alternative:custom_layered_shader",
+      "skill": "blender-production-router",
+      "score": 11,
+      "matched_terms": [],
+      "reasons": [
+        "documented alternative to compare: custom layered shader"
+      ],
+      "risks": [
+        "requires task-specific prerequisite and downstream compatibility review"
+      ],
+      "available": null
+    }
+  ],
+  "selected_method": "metal_material",
+  "selected_skill": "blender-material-surfacing",
+  "secondary_methods": [
+    "alternative:image_pbr_set",
+    "alternative:custom_layered_shader"
+  ],
+  "forbidden_substitutions": [
+    "blockout_proxy_as_final_topology",
+    "color_block_partition_as_part_graph",
+    "detail_before_transition_forms",
+    "gray_color_plus_metallic_as_finished_metal",
+    "isotropic_noise_as_brushed_metal",
+    "join_objects_as_topology_fusion",
+    "material_or_lighting_as_geometry_concealment",
+    "primitive_only_formal_modeling",
+    "primitive_stacking_after_blockout",
+    "rust_color_without_layer_logic",
+    "scene_or_world_reset_without_authorization",
+    "smooth_shading_or_weighted_normal_as_bevel",
+    "unclassified_mesh_islands",
+    "unclassified_visible_intersections"
+  ],
+  "prerequisites": [
+    "probe current Blender capabilities",
+    "material state",
+    "real scale",
+    "UV or tangent direction",
+    "review lighting"
+  ],
+  "validation": [
+    "conductor and coating separation",
+    "roughness response",
+    "anisotropy tangent",
+    "causal corrosion masks",
+    "grazing reflection review",
+    "approved Part Graph and construction methods",
+    "front side top hero clay and wireframe evidence",
+    "formal-topology conversion after Blockout",
+    "topology rollback strike audit"
+  ],
+  "required_specialists": [
+    "blender-production-router",
+    "blender-local-asset-library",
+    "blender-material-surfacing",
+    "blender-geometry-validation"
+  ],
+  "construction_archetypes": [],
+  "construction_method_decision": {
+    "shape_grammar_review_required": true,
+    "detected_archetypes": [],
+    "parameter_owners": {},
+    "native_generator_comparisons": [],
+    "fallback_when_no_archetype_matches": "inspect the form and declare unique topology, deformation, distribution, simulation, assembly, or shading ownership before primitive creation",
+    "native_component_decision": {
+      "status": "planned",
+      "primary_system": "SHADER_NODES",
+      "parameter_owners": {},
+      "source_policy": "one semantic source/control object per dependent system",
+      "python_role": "orchestration",
+      "application_policy": "keep_non_destructive",
+      "fallback_reason": null,
+      "scene_design_required": false,
+      "system_choice": {
+        "comparison_required": false,
+        "direct_candidate": "SHADER_NODES",
+        "node_candidate": null,
+        "selected_system": "SHADER_NODES",
+        "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+        "rejected_alternative": "No credible node alternative was identified at route selection.",
+        "node_justification": [],
+        "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+      },
+      "official_sources": [
+        "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/principled.html"
+      ],
+      "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+    }
+  },
+  "design_owner": "not_applicable",
+  "native_component_decision": {
+    "status": "planned",
+    "primary_system": "SHADER_NODES",
+    "parameter_owners": {},
+    "source_policy": "one semantic source/control object per dependent system",
+    "python_role": "orchestration",
+    "application_policy": "keep_non_destructive",
+    "fallback_reason": null,
+    "scene_design_required": false,
+    "system_choice": {
+      "comparison_required": false,
+      "direct_candidate": "SHADER_NODES",
+      "node_candidate": null,
+      "selected_system": "SHADER_NODES",
+      "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+      "rejected_alternative": "No credible node alternative was identified at route selection.",
+      "node_justification": [],
+      "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+    },
+    "official_sources": [
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/principled.html"
+    ],
+    "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+  },
+  "local_asset_library": {
+    "status": "unavailable",
+    "requested": true,
+    "request_origin": "router_node_candidate",
+    "root": null,
+    "eligible_catalogs": [],
+    "candidate_policy": "Candidate library was not found; do not install, append, or assume assets."
+  },
+  "official_doc_resolution": {
+    "schema_version": "1.0",
+    "status": "pending_capability_probe",
+    "version": null,
+    "query": null,
+    "cache_path": null,
+    "declared_sources": [
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/principled.html"
+    ],
+    "results": [],
+    "resolved_sources": [
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/principled.html"
+    ],
+    "errors": []
+  },
+  "code_role": "orchestration",
+  "application_policy": "keep_non_destructive",
+  "fallback_reason": null,
+  "task_id": "a26e604186bc",
+  "generated_at": "2026-10-09T11:22:27.997794+00:00"
+}

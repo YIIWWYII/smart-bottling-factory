@@ -1,0 +1,8 @@
+interface:
+  display_name: 操作结果复核
+  default_prompt: 检查我最近一次操作的结果
+enabled: true
+tools:
+  - query_commands
+  - query_devices
+  - query_logs

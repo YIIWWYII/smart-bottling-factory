@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "description": "运行参数：速度和吸具设置。此文件提供脚本参数；保存不自动向实机下发。",
+  "smallPaths": {
+    "speedFactorPercent": 5,
+    "speedLPercent": 5,
+    "accLPercent": 5,
+    "dwellMs": 300,
+    "observeDwellMs": 10000
+  },
+  "pickPlace": {
+    "speedLPercent": 10,
+    "accLPercent": 10,
+    "vacuum": {
+      "mode": "unconfigured",
+      "output": null,
+      "onLevel": null,
+      "offLevel": null,
+      "pickWaitMs": 500,
+      "releaseWaitMs": 500,
+      "pressureKPa": null,
+      "description": "接线核实后可用 digital-output 配置单 DO 阀；无调压适配器，pressureKPa 必须为 null。"
+    }
+  },
+  "platform": {
+    "defaultSpeedPercent": 80
+  },
+  "liveTest": {
+    "description": "空载测试运行参数；启动时重新读取。界面确认改速同时更新speedFactorPercent。",
+    "speedFactorPercent": 80,
+    "speedLPercent": 20,
+    "accLPercent": 5,
+    "pickWaitMs": 1000,
+    "placeWaitMs": 500,
+    "suctionOffGapMs": 200,
+    "blowPulseMs": 300,
+    "releaseWaitMs": 500,
+    "cycleWaitMs": 1000,
+    "vacuumOutput": 2,
+    "blowOutput": 1
+  }
+}

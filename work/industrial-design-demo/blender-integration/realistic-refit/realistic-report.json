@@ -1,0 +1,179 @@
+{
+  "materials": {
+    "FactoryHD.beltblue.001": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.002": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.003": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.004": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.005": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.006": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.007": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.008": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.009": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.010": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.011": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.012": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.013": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.014": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.015": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.beltblue.016": {
+      "metallic": 0.05,
+      "roughness": 0.64
+    },
+    "FactoryHD.floor": {
+      "metallic": 0.15,
+      "roughness": 0.5
+    },
+    "FactoryHD.frame": {
+      "metallic": 0.82,
+      "roughness": 0.28
+    },
+    "FactoryHD.glass": {
+      "metallic": 0.18,
+      "roughness": 0.1
+    },
+    "FactoryHD.hallfloor": {
+      "metallic": 0.18,
+      "roughness": 0.46
+    },
+    "FactoryHD.hallwall": {
+      "metallic": 0.12,
+      "roughness": 0.58
+    },
+    "FactoryHD.orange": {
+      "metallic": 0.2,
+      "roughness": 0.3
+    },
+    "FactoryHD.polished": {
+      "metallic": 0.88,
+      "roughness": 0.2
+    },
+    "FactoryHD.polished.001": {
+      "metallic": 0.88,
+      "roughness": 0.2
+    },
+    "FactoryHD.rubber": {
+      "metallic": 0,
+      "roughness": 0.78
+    },
+    "FactoryHD.shell": {
+      "metallic": 0.18,
+      "roughness": 0.25
+    },
+    "FactoryHD.steel": {
+      "metallic": 0.68,
+      "roughness": 0.32
+    },
+    "FactoryHD.steel.001": {
+      "metallic": 0.68,
+      "roughness": 0.32
+    },
+    "FactoryHD.teal": {
+      "metallic": 0.5,
+      "roughness": 0.24
+    },
+    "FactoryHD.white": {
+      "metallic": 0.12,
+      "roughness": 0.25
+    },
+    "FactoryHD.white.001": {
+      "metallic": 0.12,
+      "roughness": 0.25
+    },
+    "FactoryHD.white.002": {
+      "metallic": 0.12,
+      "roughness": 0.25
+    },
+    "FactoryHD.yellow": {
+      "metallic": 0.2,
+      "roughness": 0.28
+    }
+  },
+  "exports": {
+    "hall": {
+      "objects": 1623,
+      "bytes": 19554028
+    },
+    "wash": {
+      "objects": 144,
+      "bytes": 1665328
+    },
+    "gas": {
+      "objects": 144,
+      "bytes": 1605968
+    },
+    "vision": {
+      "objects": 105,
+      "bytes": 1146120
+    },
+    "beverage": {
+      "objects": 80,
+      "bytes": 1006368
+    },
+    "filler": {
+      "objects": 162,
+      "bytes": 1798068
+    },
+    "secondary": {
+      "objects": 106,
+      "bytes": 1144620
+    },
+    "robot": {
+      "objects": 46,
+      "bytes": 420116
+    },
+    "agv": {
+      "objects": 32,
+      "bytes": 375272
+    },
+    "warehouse": {
+      "objects": 109,
+      "bytes": 2521040
+    }
+  },
+  "webIdsMatch": true
+}

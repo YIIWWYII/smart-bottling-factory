@@ -1,0 +1,63 @@
+{
+  "status": "PASS",
+  "models": [
+    {
+      "id": "agv",
+      "bytes": 298952,
+      "nodes": 28
+    },
+    {
+      "id": "fill",
+      "bytes": 494860,
+      "nodes": 43
+    },
+    {
+      "id": "gas",
+      "bytes": 653188,
+      "nodes": 55
+    },
+    {
+      "id": "mix",
+      "bytes": 653188,
+      "nodes": 55
+    },
+    {
+      "id": "pack",
+      "bytes": 388720,
+      "nodes": 35
+    },
+    {
+      "id": "quality",
+      "bytes": 507844,
+      "nodes": 44
+    },
+    {
+      "id": "vision",
+      "bytes": 507856,
+      "nodes": 44
+    },
+    {
+      "id": "warehouse",
+      "bytes": 495012,
+      "nodes": 43
+    },
+    {
+      "id": "wash",
+      "bytes": 494872,
+      "nodes": 43
+    }
+  ],
+  "checks": [
+    "Nine GLBs loaded across all stations",
+    "Desktop and 390px viewport inspected",
+    "No page horizontal overflow",
+    "Pointer drag changes draft only",
+    "Preview shows 70 to 85 percent; cancelled",
+    "Device filtering preserves draft",
+    "No control API requests during verification"
+  ],
+  "limits": [
+    "Conceptual operator consoles, not manufacturer-specific replicas",
+    "Existing simulator control transport preserved; real hardware not exercised"
+  ]
+}

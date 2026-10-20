@@ -1,0 +1,145 @@
+{
+  "schema_version": "1.0",
+  "part_graph_status": "analysis_required",
+  "parts": [
+    {
+      "id": "subject",
+      "role": "primary_form",
+      "construction": "direct_mesh_editing",
+      "form_level": "primary",
+      "physical_function": "unresolved",
+      "separation_policy": "unresolved",
+      "separation_reason": "unresolved",
+      "construction_method": "direct_mesh_editing",
+      "connection_method": "unresolved",
+      "combination_level": "unresolved",
+      "bevel_policy": {
+        "classes": [],
+        "method": "unresolved",
+        "widths": {}
+      },
+      "modifier_stack_intent": [],
+      "asset_provenance": {},
+      "final_object_name": "unresolved",
+      "blockout_proxy": true,
+      "topology_status": "planned",
+      "blockout_object_names": [],
+      "assembly_interfaces": [],
+      "topology_evidence": {
+        "construction_operations": [],
+        "connected_component_count": null,
+        "evaluated_bevel_geometry": null,
+        "boolean_cleanup_passed": null,
+        "primitive_retained_reason": null,
+        "wireframe": null
+      },
+      "native_system": "MESH_DATA",
+      "source_objects": [
+        "subject_SOURCE"
+      ],
+      "semantic_inputs": {
+        "route_method": "direct_mesh_editing",
+        "parameter_owners": {}
+      },
+      "generated_dependents": [],
+      "code_role": "direct_topology_exception",
+      "application_policy": "keep_non_destructive",
+      "native_component_evidence": {
+        "status": "planned",
+        "expected_system": "MESH_DATA",
+        "expected_source_count": 1,
+        "official_sources": [
+          "https://docs.blender.org/api/current/bmesh.html"
+        ]
+      }
+    }
+  ],
+  "relationships": [],
+  "unclassified_visible_intersections_allowed": false,
+  "modeling_contract": {
+    "analysis_before_mutation": true,
+    "minimum_viable_analysis_allows_reversible_blockout": true,
+    "part_analysis_required_before_formal_topology": true,
+    "primitive_blockout_is_final": false,
+    "continuous_shell_requires_single_component": true,
+    "difficulty_is_valid_separation_reason": false,
+    "functional_or_detail_before_transition_allowed": false,
+    "material_or_lighting_may_conceal_geometry_failure": false,
+    "wireframe_acceptance_required": true,
+    "real_bevel_geometry_required": true,
+    "shape_grammar_before_primitive_creation": true,
+    "native_generator_comparison_required": true,
+    "manual_assembly_requires_documented_exception": true,
+    "python_is_orchestration_layer": true,
+    "native_component_ownership_required": true,
+    "manual_count_driven_fragments_allowed": false
+  },
+  "construction_archetypes": [],
+  "construction_method_decision": {
+    "shape_grammar_review_required": true,
+    "detected_archetypes": [],
+    "parameter_owners": {},
+    "native_generator_comparisons": [],
+    "fallback_when_no_archetype_matches": "inspect the form and declare unique topology, deformation, distribution, simulation, assembly, or shading ownership before primitive creation",
+    "native_component_decision": {
+      "status": "planned",
+      "primary_system": "MESH_DATA",
+      "parameter_owners": {},
+      "source_policy": "one semantic source/control object per dependent system",
+      "python_role": "direct_topology_exception",
+      "application_policy": "keep_non_destructive",
+      "fallback_reason": "unique form requires direct topology until a native component can express the silhouette",
+      "scene_design_required": true,
+      "system_choice": {
+        "comparison_required": false,
+        "direct_candidate": "MESH_DATA",
+        "node_candidate": null,
+        "selected_system": "MESH_DATA",
+        "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+        "rejected_alternative": "No credible node alternative was identified at route selection.",
+        "node_justification": [],
+        "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+      },
+      "official_sources": [
+        "https://docs.blender.org/api/current/bmesh.html"
+      ],
+      "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+    }
+  },
+  "design_owner": "blender-scene-design",
+  "native_component_decision": {
+    "status": "planned",
+    "primary_system": "MESH_DATA",
+    "parameter_owners": {},
+    "source_policy": "one semantic source/control object per dependent system",
+    "python_role": "direct_topology_exception",
+    "application_policy": "keep_non_destructive",
+    "fallback_reason": "unique form requires direct topology until a native component can express the silhouette",
+    "scene_design_required": true,
+    "system_choice": {
+      "comparison_required": false,
+      "direct_candidate": "MESH_DATA",
+      "node_candidate": null,
+      "selected_system": "MESH_DATA",
+      "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+      "rejected_alternative": "No credible node alternative was identified at route selection.",
+      "node_justification": [],
+      "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+    },
+    "official_sources": [
+      "https://docs.blender.org/api/current/bmesh.html"
+    ],
+    "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+  },
+  "local_asset_library": {
+    "status": "not_requested",
+    "requested": false,
+    "request_origin": "not_requested",
+    "root": null,
+    "eligible_catalogs": [],
+    "candidate_policy": "No local candidate discovery is needed for the selected direct system."
+  },
+  "code_role": "direct_topology_exception",
+  "application_policy": "keep_non_destructive",
+  "fallback_reason": "unique form requires direct topology until a native component can express the silhouette"
+}

@@ -1,0 +1,287 @@
+{
+  "schema_version": "1.0",
+  "request": "Reuse approved Factory_Campus Blender scene and original independent device animation; remove downloaded vegetation from integration copy; export existing hall and nine devices to web terminals. No new geometry or redesign. Preserve original files and animation drivers.",
+  "deliverable": "animated_asset",
+  "classes": [
+    "mechanical_motion",
+    "rigging"
+  ],
+  "physical_causes": [],
+  "candidates": [
+    {
+      "method": "armature_constraints",
+      "skill": "blender-deformation-rigging",
+      "score": 14,
+      "matched_terms": [
+        "driver"
+      ],
+      "reasons": [
+        "reusable articulation",
+        "character deformation",
+        "mechanical linkage"
+      ],
+      "risks": [
+        "weight collapse",
+        "cyclic dependency",
+        "limit violation"
+      ],
+      "available": true
+    },
+    {
+      "method": "alternative:shape_keys",
+      "skill": "blender-production-router",
+      "score": 4,
+      "matched_terms": [],
+      "reasons": [
+        "documented alternative to compare: Shape Keys"
+      ],
+      "risks": [
+        "requires task-specific prerequisite and downstream compatibility review"
+      ],
+      "available": null
+    },
+    {
+      "method": "alternative:rigid_body_constraints",
+      "skill": "blender-production-router",
+      "score": 3,
+      "matched_terms": [],
+      "reasons": [
+        "documented alternative to compare: Rigid Body Constraints"
+      ],
+      "risks": [
+        "requires task-specific prerequisite and downstream compatibility review"
+      ],
+      "available": null
+    }
+  ],
+  "selected_method": "armature_constraints",
+  "selected_skill": "blender-deformation-rigging",
+  "secondary_methods": [
+    "alternative:shape_keys",
+    "alternative:rigid_body_constraints"
+  ],
+  "forbidden_substitutions": [
+    "blockout_proxy_as_final_topology",
+    "color_block_partition_as_part_graph",
+    "detail_before_transition_forms",
+    "join_objects_as_topology_fusion",
+    "material_or_lighting_as_geometry_concealment",
+    "primitive_only_formal_modeling",
+    "primitive_stacking_after_blockout",
+    "scene_or_world_reset_without_authorization",
+    "smooth_shading_or_weighted_normal_as_bevel",
+    "unclassified_mesh_islands",
+    "unclassified_visible_intersections"
+  ],
+  "prerequisites": [
+    "rest pose",
+    "hierarchy",
+    "weights or rigid parenting"
+  ],
+  "validation": [
+    "pose range",
+    "dependency graph",
+    "clearance check",
+    "approved Part Graph and construction methods",
+    "front side top hero clay and wireframe evidence",
+    "formal-topology conversion after Blockout",
+    "topology rollback strike audit"
+  ],
+  "required_specialists": [
+    "blender-production-router",
+    "blender-local-asset-library",
+    "blender-scene-design",
+    "blender-deformation-rigging",
+    "blender-geometry-validation"
+  ],
+  "construction_archetypes": [],
+  "construction_method_decision": {
+    "shape_grammar_review_required": true,
+    "detected_archetypes": [],
+    "parameter_owners": {},
+    "native_generator_comparisons": [],
+    "fallback_when_no_archetype_matches": "inspect the form and declare unique topology, deformation, distribution, simulation, assembly, or shading ownership before primitive creation",
+    "native_component_decision": {
+      "status": "planned",
+      "primary_system": "ARMATURE_CONSTRAINT_DRIVER",
+      "parameter_owners": {},
+      "source_policy": "one semantic source/control object per dependent system",
+      "python_role": "orchestration",
+      "application_policy": "keep_non_destructive",
+      "fallback_reason": null,
+      "scene_design_required": true,
+      "system_choice": {
+        "comparison_required": false,
+        "direct_candidate": "ARMATURE_CONSTRAINT_DRIVER",
+        "node_candidate": null,
+        "selected_system": "ARMATURE_CONSTRAINT_DRIVER",
+        "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+        "rejected_alternative": "No credible node alternative was identified at route selection.",
+        "node_justification": [],
+        "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+      },
+      "official_sources": [
+        "https://docs.blender.org/manual/en/5.2/animation/armatures/index.html",
+        "https://docs.blender.org/api/5.2/bpy.types.SpaceNodeEditor.html#bpy.types.SpaceNodeEditor.draw_handler_remove",
+        "https://docs.blender.org/api/5.2/bpy.types.FileHandler.html#bpy.types.FileHandler.bl_export_operator",
+        "https://docs.blender.org/api/5.2/bpy.types.SpaceClipEditor.html#bpy.types.SpaceClipEditor.draw_handler_remove",
+        "https://docs.blender.org/api/5.2/bpy.types.SpaceDopeSheetEditor.html#bpy.types.SpaceDopeSheetEditor.draw_handler_remove",
+        "https://docs.blender.org/api/5.2/bpy.types.SpaceGraphEditor.html#bpy.types.SpaceGraphEditor.draw_handler_remove",
+        "https://docs.blender.org/api/5.2/bpy.types.SpaceImageEditor.html#bpy.types.SpaceImageEditor.draw_handler_remove",
+        "https://docs.blender.org/api/5.2/bpy.types.SpaceNodeEditor.html#bpy.types.SpaceNodeEditor.draw_handler_add",
+        "https://docs.blender.org/api/5.2/bpy.types.SpaceSequenceEditor.html#bpy.types.SpaceSequenceEditor.draw_handler_remove"
+      ],
+      "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+    }
+  },
+  "design_owner": "blender-scene-design",
+  "native_component_decision": {
+    "status": "planned",
+    "primary_system": "ARMATURE_CONSTRAINT_DRIVER",
+    "parameter_owners": {},
+    "source_policy": "one semantic source/control object per dependent system",
+    "python_role": "orchestration",
+    "application_policy": "keep_non_destructive",
+    "fallback_reason": null,
+    "scene_design_required": true,
+    "system_choice": {
+      "comparison_required": false,
+      "direct_candidate": "ARMATURE_CONSTRAINT_DRIVER",
+      "node_candidate": null,
+      "selected_system": "ARMATURE_CONSTRAINT_DRIVER",
+      "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+      "rejected_alternative": "No credible node alternative was identified at route selection.",
+      "node_justification": [],
+      "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+    },
+    "official_sources": [
+      "https://docs.blender.org/manual/en/5.2/animation/armatures/index.html",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceNodeEditor.html#bpy.types.SpaceNodeEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.FileHandler.html#bpy.types.FileHandler.bl_export_operator",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceClipEditor.html#bpy.types.SpaceClipEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceDopeSheetEditor.html#bpy.types.SpaceDopeSheetEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceGraphEditor.html#bpy.types.SpaceGraphEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceImageEditor.html#bpy.types.SpaceImageEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceNodeEditor.html#bpy.types.SpaceNodeEditor.draw_handler_add",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceSequenceEditor.html#bpy.types.SpaceSequenceEditor.draw_handler_remove"
+    ],
+    "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+  },
+  "local_asset_library": {
+    "status": "unavailable",
+    "requested": true,
+    "request_origin": "router_node_candidate",
+    "root": null,
+    "eligible_catalogs": [],
+    "candidate_policy": "Candidate library was not found; do not install, append, or assume assets."
+  },
+  "official_doc_resolution": {
+    "schema_version": "1.0",
+    "status": "cached",
+    "version": "5.2",
+    "query": "bpy.types.ArmatureModifier constraints drivers mechanical motion Reuse approved Factory_Campus Blender scene and original independent device animation; remove downloaded vegetation from integration copy; export existing hall and nine devices to web terminals. No new geometry or redesign. Preserve original files and animation drivers.",
+    "cache_path": "D:\\Codex\\.codex\\cache\\blender-production-suite\\5.2\\official_blender_docs_index.json",
+    "source_status": {
+      "manual": "live_verified",
+      "python_api": "live_verified"
+    },
+    "source_urls": {
+      "manual": "https://docs.blender.org/manual/en/5.2/",
+      "python_api": "https://docs.blender.org/api/5.2/"
+    },
+    "results": [
+      {
+        "name": "bpy.types.SpaceNodeEditor.draw_handler_remove",
+        "title": "bpy.types.SpaceNodeEditor.draw_handler_remove",
+        "role": "py:method",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.SpaceNodeEditor.html#bpy.types.SpaceNodeEditor.draw_handler_remove",
+        "source": "python_api",
+        "score": 41.3875
+      },
+      {
+        "name": "bpy.types.FileHandler.bl_export_operator",
+        "title": "bpy.types.FileHandler.bl_export_operator",
+        "role": "py:attribute",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.FileHandler.html#bpy.types.FileHandler.bl_export_operator",
+        "source": "python_api",
+        "score": 37.2997
+      },
+      {
+        "name": "bpy.types.SpaceClipEditor.draw_handler_remove",
+        "title": "bpy.types.SpaceClipEditor.draw_handler_remove",
+        "role": "py:method",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.SpaceClipEditor.html#bpy.types.SpaceClipEditor.draw_handler_remove",
+        "source": "python_api",
+        "score": 36.7889
+      },
+      {
+        "name": "bpy.types.SpaceDopeSheetEditor.draw_handler_remove",
+        "title": "bpy.types.SpaceDopeSheetEditor.draw_handler_remove",
+        "role": "py:method",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.SpaceDopeSheetEditor.html#bpy.types.SpaceDopeSheetEditor.draw_handler_remove",
+        "source": "python_api",
+        "score": 36.7889
+      },
+      {
+        "name": "bpy.types.SpaceGraphEditor.draw_handler_remove",
+        "title": "bpy.types.SpaceGraphEditor.draw_handler_remove",
+        "role": "py:method",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.SpaceGraphEditor.html#bpy.types.SpaceGraphEditor.draw_handler_remove",
+        "source": "python_api",
+        "score": 36.7889
+      },
+      {
+        "name": "bpy.types.SpaceImageEditor.draw_handler_remove",
+        "title": "bpy.types.SpaceImageEditor.draw_handler_remove",
+        "role": "py:method",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.SpaceImageEditor.html#bpy.types.SpaceImageEditor.draw_handler_remove",
+        "source": "python_api",
+        "score": 36.7889
+      },
+      {
+        "name": "bpy.types.SpaceNodeEditor.draw_handler_add",
+        "title": "bpy.types.SpaceNodeEditor.draw_handler_add",
+        "role": "py:method",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.SpaceNodeEditor.html#bpy.types.SpaceNodeEditor.draw_handler_add",
+        "source": "python_api",
+        "score": 36.7889
+      },
+      {
+        "name": "bpy.types.SpaceSequenceEditor.draw_handler_remove",
+        "title": "bpy.types.SpaceSequenceEditor.draw_handler_remove",
+        "role": "py:method",
+        "priority": 1,
+        "url": "https://docs.blender.org/api/5.2/bpy.types.SpaceSequenceEditor.html#bpy.types.SpaceSequenceEditor.draw_handler_remove",
+        "source": "python_api",
+        "score": 36.7889
+      }
+    ],
+    "errors": [],
+    "declared_sources": [
+      "https://docs.blender.org/manual/en/5.2/animation/armatures/index.html"
+    ],
+    "resolved_sources": [
+      "https://docs.blender.org/manual/en/5.2/animation/armatures/index.html",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceNodeEditor.html#bpy.types.SpaceNodeEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.FileHandler.html#bpy.types.FileHandler.bl_export_operator",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceClipEditor.html#bpy.types.SpaceClipEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceDopeSheetEditor.html#bpy.types.SpaceDopeSheetEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceGraphEditor.html#bpy.types.SpaceGraphEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceImageEditor.html#bpy.types.SpaceImageEditor.draw_handler_remove",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceNodeEditor.html#bpy.types.SpaceNodeEditor.draw_handler_add",
+      "https://docs.blender.org/api/5.2/bpy.types.SpaceSequenceEditor.html#bpy.types.SpaceSequenceEditor.draw_handler_remove"
+    ]
+  },
+  "code_role": "orchestration",
+  "application_policy": "keep_non_destructive",
+  "fallback_reason": null,
+  "task_id": "f17ec4048b40",
+  "generated_at": "2026-10-02T11:56:07.970485+00:00"
+}

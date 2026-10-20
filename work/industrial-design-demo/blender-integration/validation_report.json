@@ -1,0 +1,47 @@
+{
+  "status": "passed",
+  "scope": "existing model integration; not new geometry certification",
+  "blenderVersion": "5.2.1 LTS",
+  "sourceThread": "01a0a3de-5062-7731-a531-bcae17dbf808",
+  "sourceThreadTitle": "6 (3)",
+  "sceneControllers": 21,
+  "invalidDrivers": 0,
+  "repairedRestPoses": 23,
+  "exportedMotionTracks": 37,
+  "devicesLoaded": 9,
+  "vegetationObjectsInIntegrationScene": 0,
+  "displayAnimationChangesPixels": true,
+  "displayPauseMotionClockHeld": true,
+  "pausedPixelDifferenceAbove2": 0,
+  "stationPauseResume": true,
+  "adminDeviceModel": "robot",
+  "desktop": [
+    1440,
+    1000
+  ],
+  "mobile": [
+    390,
+    844
+  ],
+  "horizontalOverflow": false,
+  "limitations": [
+    "simulated data and animation",
+    "no live Blender link in browser",
+    "no hardware control",
+    "HarmonyOS runtime not verified",
+    "warehouse static"
+  ],
+  "peopleObjectsInExport": 0,
+  "peopleRemovalVerifiedFiles": [
+    "agv.glb",
+    "beverage.glb",
+    "filler.glb",
+    "gas.glb",
+    "hall.glb",
+    "robot.glb",
+    "secondary.glb",
+    "vision.glb",
+    "warehouse.glb",
+    "wash.glb"
+  ]
+}

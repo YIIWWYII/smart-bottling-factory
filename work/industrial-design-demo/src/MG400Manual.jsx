@@ -1,0 +1,22 @@
+import {useEffect,useRef,useState} from 'react';
+import {api} from './TwinState';
+import {Modal} from './ui';
+export default function MG400Manual({status,allowed}){
+ const [mode,setMode]=useState('step'),[step,setStep]=useState(1),[armed,setArmed]=useState(false),[confirm,setConfirm]=useState(false),[active,setActive]=useState(''),[error,setError]=useState('');
+ const timer=useRef(),generation=useRef(0),busy=useRef(false),mounted=useRef(true);
+ const available=allowed&&status?.online&&!status?.externalControl&&status?.feedback?.enable_status&&!status?.feedback?.error_status;
+ async function stop(){generation.current++;clearInterval(timer.current);busy.current=false;setActive('');try{await api('/api/ops/mg400/manual/stop',{});}catch(e){if(mounted.current)setError('停止未确认，请现场急停：'+e.message);}}
+ useEffect(()=>{mounted.current=true;const blur=()=>{setArmed(false);if(busy.current)void stop();};const visibility=()=>{if(document.hidden)blur();};window.addEventListener('blur',blur);document.addEventListener('visibilitychange',visibility);return()=>{mounted.current=false;window.removeEventListener('blur',blur);document.removeEventListener('visibilitychange',visibility);if(busy.current)void stop();clearInterval(timer.current);};},[]);
+ useEffect(()=>{if(!available){setArmed(false);if(busy.current)void stop();}},[available]);
+ async function start(axis,direction){
+  if(!armed||!available||busy.current)return;busy.current=true;setActive(axis+(direction>0?'+':'−'));setError('');const epoch=++generation.current;
+  try{
+   const result=await api('/api/ops/mg400/manual/start',{mode,axis,direction,step,confirmed:true});
+   if(epoch!==generation.current){await api('/api/ops/mg400/manual/stop',{});return;}
+   let pending=false;timer.current=setInterval(async()=>{if(pending)return;pending=true;try{const result2=await api('/api/ops/mg400/manual/heartbeat',{id:result.id});if(!result2.active){clearInterval(timer.current);busy.current=false;setActive('');}}catch(e){setError(e.message);void stop();}finally{pending=false;}},150);
+  }catch(e){busy.current=false;setActive('');setError(e.message);}
+ }
+ const f=status?.feedback;
+ const button=(axis,direction)=> <button key={axis+direction} className={'jog-direction '+(active===axis+(direction>0?'+':'−')?'active':'')} disabled={!armed||!available||(!!active&&active!==axis+(direction>0?'+':'−'))} onPointerDown={e=>{if(mode!=='jog')return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);void start(axis,direction);}} onPointerUp={()=>{if(mode==='jog'&&busy.current)void stop();}} onPointerCancel={()=>{if(mode==='jog'&&busy.current)void stop();}} onLostPointerCapture={()=>{if(mode==='jog'&&busy.current)void stop();}} onClick={()=>{if(mode==='step')void start(axis,direction);}}>{axis}{direction>0?'+':'−'}</button>;
+ return <section className="mg400-manual"><header><h4>手动调试</h4><button disabled={!available||!!active} onClick={()=>armed?setArmed(false):setConfirm(true)}>{armed?'退出手动调试':'启用手动调试'}</button></header><div className="mg400-manual-modes"><label>方式<select disabled={!!active} value={mode} onChange={e=>setMode(e.target.value)}><option value="jog">点动 · 按住移动</option><option value="step">寸动 · 单次移动</option></select></label><label>寸动距离<select disabled={!!active||mode!=='step'} value={step} onChange={e=>setStep(Number(e.target.value))}>{[.1,1,5,10].map(n=><option key={n} value={n}>{n} mm / °</option>)}</select></label><span>User0 / Tool0</span></div><div className="mg400-jog-groups">{[['X','Y'],['Z','R'],['J1','J2'],['J3','J4']].map(axes=><div className="mg400-jog-group" key={axes.join()}><div className="jog-values">{axes.map(axis=>{const joint=axis.startsWith('J'),i=joint?Number(axis[1])-1:['X','Y','Z','R'].indexOf(axis);return <span key={axis}>{axis}<b>{f?(joint?f.q_actual[i]:f.tool_vector_actual[i]).toFixed(2):'—'}</b><small>{joint||axis==='R'?'°':'mm'}</small></span>;})}</div><div className="jog-pad">{button(axes[0],1)}{button(axes[1],1)}{button(axes[1],-1)}{button(axes[0],-1)}</div></div>)}</div><footer><span>{active?'正在操作 '+active:armed?'点动松开即停；寸动到位停止':'未启用，按钮不下发运动'}</span><button className="mg400-stop" disabled={!active} onClick={()=>void stop()}>停止手动动作</button></footer>{error&&<p role="alert">{error}</p>}{confirm&&<Modal title="启用手动调试" onClose={()=>setConfirm(false)}><p>确认运动范围内无人和障碍物，现场可立即急停。点动按住移动；寸动每次按所选距离移动。请先设置合适的速度比例。</p><button onClick={()=>{setArmed(true);setConfirm(false);}}>确认启用</button><button onClick={()=>setConfirm(false)}>取消</button></Modal>}</section>;
+}

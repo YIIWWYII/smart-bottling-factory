@@ -1,0 +1,21 @@
+{
+  "models": [
+    {
+      "name": "warehouseVent",
+      "bytes": 202264,
+      "parts": 17
+    },
+    {
+      "name": "warehouseDryer",
+      "bytes": 298724,
+      "parts": 18
+    },
+    {
+      "name": "warehouseFire",
+      "bytes": 235076,
+      "parts": 12
+    }
+  ],
+  "preview": "E:\\2026挑战杯\\工业沙盘2026\\数字展板前后端\\work\\industrial-design-demo\\blender-integration\\warehouse-safety\\preview.png",
+  "protected": true
+}

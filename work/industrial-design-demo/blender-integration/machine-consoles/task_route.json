@@ -1,0 +1,278 @@
+{
+  "schema_version": "1.0",
+  "request": "Complete machine operator consoles for web with live DOM screen and deck anchored into Blender model. Distinct stainless filler desk, vision workstation, mixer cabinet, analyzer cabinet, packaging pendant, AGV terminal, warehouse desk. Preserve other scenes.",
+  "deliverable": "environment",
+  "classes": [
+    "static_geometry"
+  ],
+  "physical_causes": [],
+  "candidates": [
+    {
+      "method": "direct_mesh_editing",
+      "skill": "blender-direct-surface-modeling",
+      "score": 1,
+      "matched_terms": [],
+      "reasons": [
+        "default unique static form route; inspect before execution"
+      ],
+      "risks": [
+        "request requires further decomposition"
+      ],
+      "available": true
+    },
+    {
+      "method": "alternative:subdivision_surface",
+      "skill": "blender-production-router",
+      "score": -9,
+      "matched_terms": [],
+      "reasons": [
+        "documented alternative to compare: Subdivision Surface"
+      ],
+      "risks": [
+        "requires task-specific prerequisite and downstream compatibility review"
+      ],
+      "available": null
+    },
+    {
+      "method": "alternative:sculpt",
+      "skill": "blender-production-router",
+      "score": -10,
+      "matched_terms": [],
+      "reasons": [
+        "documented alternative to compare: Sculpt"
+      ],
+      "risks": [
+        "requires task-specific prerequisite and downstream compatibility review"
+      ],
+      "available": null
+    }
+  ],
+  "selected_method": "direct_mesh_editing",
+  "selected_skill": "blender-direct-surface-modeling",
+  "secondary_methods": [
+    "alternative:subdivision_surface",
+    "alternative:sculpt"
+  ],
+  "forbidden_substitutions": [
+    "blockout_proxy_as_final_topology",
+    "color_block_partition_as_part_graph",
+    "detail_before_transition_forms",
+    "join_objects_as_topology_fusion",
+    "material_or_lighting_as_geometry_concealment",
+    "primitive_only_formal_modeling",
+    "primitive_stacking_after_blockout",
+    "scene_or_world_reset_without_authorization",
+    "smooth_shading_or_weighted_normal_as_bevel",
+    "unclassified_mesh_islands",
+    "unclassified_visible_intersections"
+  ],
+  "prerequisites": [
+    "valid scale",
+    "semantic region selection"
+  ],
+  "validation": [
+    "topology audit",
+    "multiview silhouette",
+    "approved Part Graph and construction methods",
+    "front side top hero clay and wireframe evidence",
+    "formal-topology conversion after Blockout",
+    "topology rollback strike audit"
+  ],
+  "required_specialists": [
+    "blender-production-router",
+    "blender-scene-design",
+    "blender-direct-surface-modeling",
+    "blender-assembly-structure",
+    "blender-geometry-validation"
+  ],
+  "construction_archetypes": [],
+  "construction_method_decision": {
+    "shape_grammar_review_required": true,
+    "detected_archetypes": [],
+    "parameter_owners": {},
+    "native_generator_comparisons": [],
+    "fallback_when_no_archetype_matches": "inspect the form and declare unique topology, deformation, distribution, simulation, assembly, or shading ownership before primitive creation",
+    "native_component_decision": {
+      "status": "planned",
+      "primary_system": "MESH_DATA",
+      "parameter_owners": {},
+      "source_policy": "one semantic source/control object per dependent system",
+      "python_role": "direct_topology_exception",
+      "application_policy": "keep_non_destructive",
+      "fallback_reason": "unique form requires direct topology until a native component can express the silhouette",
+      "scene_design_required": true,
+      "system_choice": {
+        "comparison_required": false,
+        "direct_candidate": "MESH_DATA",
+        "node_candidate": null,
+        "selected_system": "MESH_DATA",
+        "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+        "rejected_alternative": "No credible node alternative was identified at route selection.",
+        "node_justification": [],
+        "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+      },
+      "official_sources": [
+        "https://docs.blender.org/api/current/bmesh.html",
+        "https://docs.blender.org/manual/en/5.2/modeling/meshes/editing/mesh/transform/randomize.rst.html",
+        "https://docs.blender.org/manual/en/5.2/modeling/meshes/editing/mesh/transform/randomize.html",
+        "https://docs.blender.org/manual/en/5.2/modeling/geometry_nodes/instances/randomize_transforms.rst.html",
+        "https://docs.blender.org/manual/en/5.2/modeling/geometry_nodes/instances/randomize_transforms.html",
+        "https://docs.blender.org/manual/en/5.2/modeling/meshes/selecting/random.rst.html",
+        "https://docs.blender.org/manual/en/5.2/scene_layout/object/editing/transform/randomize.rst.html",
+        "https://docs.blender.org/manual/en/5.2/modeling/meshes/selecting/random.html",
+        "https://docs.blender.org/manual/en/5.2/scene_layout/object/editing/transform/randomize.html"
+      ],
+      "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+    }
+  },
+  "design_owner": "blender-scene-design",
+  "native_component_decision": {
+    "status": "planned",
+    "primary_system": "MESH_DATA",
+    "parameter_owners": {},
+    "source_policy": "one semantic source/control object per dependent system",
+    "python_role": "direct_topology_exception",
+    "application_policy": "keep_non_destructive",
+    "fallback_reason": "unique form requires direct topology until a native component can express the silhouette",
+    "scene_design_required": true,
+    "system_choice": {
+      "comparison_required": false,
+      "direct_candidate": "MESH_DATA",
+      "node_candidate": null,
+      "selected_system": "MESH_DATA",
+      "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+      "rejected_alternative": "No credible node alternative was identified at route selection.",
+      "node_justification": [],
+      "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+    },
+    "official_sources": [
+      "https://docs.blender.org/api/current/bmesh.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/meshes/editing/mesh/transform/randomize.rst.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/meshes/editing/mesh/transform/randomize.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/geometry_nodes/instances/randomize_transforms.rst.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/geometry_nodes/instances/randomize_transforms.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/meshes/selecting/random.rst.html",
+      "https://docs.blender.org/manual/en/5.2/scene_layout/object/editing/transform/randomize.rst.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/meshes/selecting/random.html",
+      "https://docs.blender.org/manual/en/5.2/scene_layout/object/editing/transform/randomize.html"
+    ],
+    "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+  },
+  "local_asset_library": {
+    "status": "not_requested",
+    "requested": false,
+    "request_origin": "not_requested",
+    "root": null,
+    "eligible_catalogs": [],
+    "candidate_policy": "No local candidate discovery is needed for the selected direct system."
+  },
+  "official_doc_resolution": {
+    "schema_version": "1.0",
+    "status": "cached",
+    "version": "5.2",
+    "query": "direct mesh editing Complete machine operator consoles for web with live DOM screen and deck anchored into Blender model. Distinct stainless filler desk, vision workstation, mixer cabinet, analyzer cabinet, packaging pendant, AGV terminal, warehouse desk. Preserve other scenes.",
+    "cache_path": "D:\\Codex\\.codex\\cache\\blender-production-suite\\5.2\\official_blender_docs_index.json",
+    "source_status": {
+      "manual": "live_verified",
+      "python_api": "live_verified"
+    },
+    "source_urls": {
+      "manual": "https://docs.blender.org/manual/en/5.2/",
+      "python_api": "https://docs.blender.org/api/5.2/"
+    },
+    "results": [
+      {
+        "name": "modeling/meshes/editing/mesh/transform/randomize.rst",
+        "title": "Randomize",
+        "role": "page",
+        "priority": 1,
+        "url": "https://docs.blender.org/manual/en/5.2/modeling/meshes/editing/mesh/transform/randomize.rst.html",
+        "source": "manual",
+        "score": 20.3753
+      },
+      {
+        "name": "modeling/meshes/editing/mesh/transform/randomize",
+        "title": "Randomize",
+        "role": "std:doc",
+        "priority": -1,
+        "url": "https://docs.blender.org/manual/en/5.2/modeling/meshes/editing/mesh/transform/randomize.html",
+        "source": "manual",
+        "score": 20.3753
+      },
+      {
+        "name": "modeling/geometry_nodes/instances/randomize_transforms.rst",
+        "title": "Randomize Transforms Node",
+        "role": "page",
+        "priority": 1,
+        "url": "https://docs.blender.org/manual/en/5.2/modeling/geometry_nodes/instances/randomize_transforms.rst.html",
+        "source": "manual",
+        "score": 16.489
+      },
+      {
+        "name": "modeling/geometry_nodes/instances/randomize_transforms",
+        "title": "Randomize Transforms Node",
+        "role": "std:doc",
+        "priority": -1,
+        "url": "https://docs.blender.org/manual/en/5.2/modeling/geometry_nodes/instances/randomize_transforms.html",
+        "source": "manual",
+        "score": 16.489
+      },
+      {
+        "name": "modeling/meshes/selecting/random.rst",
+        "title": "Select Random",
+        "role": "page",
+        "priority": 1,
+        "url": "https://docs.blender.org/manual/en/5.2/modeling/meshes/selecting/random.rst.html",
+        "source": "manual",
+        "score": 14.5835
+      },
+      {
+        "name": "scene_layout/object/editing/transform/randomize.rst",
+        "title": "Randomize",
+        "role": "page",
+        "priority": 1,
+        "url": "https://docs.blender.org/manual/en/5.2/scene_layout/object/editing/transform/randomize.rst.html",
+        "source": "manual",
+        "score": 14.5835
+      },
+      {
+        "name": "modeling/meshes/selecting/random",
+        "title": "Select Random",
+        "role": "std:doc",
+        "priority": -1,
+        "url": "https://docs.blender.org/manual/en/5.2/modeling/meshes/selecting/random.html",
+        "source": "manual",
+        "score": 14.5835
+      },
+      {
+        "name": "scene_layout/object/editing/transform/randomize",
+        "title": "Randomize",
+        "role": "std:doc",
+        "priority": -1,
+        "url": "https://docs.blender.org/manual/en/5.2/scene_layout/object/editing/transform/randomize.html",
+        "source": "manual",
+        "score": 14.5835
+      }
+    ],
+    "errors": [],
+    "declared_sources": [
+      "https://docs.blender.org/api/current/bmesh.html"
+    ],
+    "resolved_sources": [
+      "https://docs.blender.org/api/current/bmesh.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/meshes/editing/mesh/transform/randomize.rst.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/meshes/editing/mesh/transform/randomize.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/geometry_nodes/instances/randomize_transforms.rst.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/geometry_nodes/instances/randomize_transforms.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/meshes/selecting/random.rst.html",
+      "https://docs.blender.org/manual/en/5.2/scene_layout/object/editing/transform/randomize.rst.html",
+      "https://docs.blender.org/manual/en/5.2/modeling/meshes/selecting/random.html",
+      "https://docs.blender.org/manual/en/5.2/scene_layout/object/editing/transform/randomize.html"
+    ]
+  },
+  "code_role": "direct_topology_exception",
+  "application_policy": "keep_non_destructive",
+  "fallback_reason": "unique form requires direct topology until a native component can express the silhouette",
+  "task_id": "e93cec58f589",
+  "generated_at": "2026-10-06T10:43:54.429419+00:00"
+}

@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-10-02T11:56:07.970533+00:00",
+  "status": "integration",
+  "execution_allowed": true,
+  "execution_scope": "existing asset cleanup, export, browser integration",
+  "deliverable": "animated_asset",
+  "completion_scope": "three web demo terminals; no hardware or HarmonyOS change",
+  "protected_scope": {
+    "objects": [
+      "all original source blend files",
+      "device drivers and functional geometry"
+    ],
+    "task_owned_collection": "integration copy"
+  },
+  "real_scale": {
+    "status": "unresolved",
+    "units": "METRIC",
+    "anchors": []
+  },
+  "minimum_viable_analysis": {
+    "status": "open",
+    "attempts": 0,
+    "max_automatic_reviews": 2,
+    "required_decisions": {
+      "deliverable_scope": false,
+      "protected_scope": false,
+      "major_parts_or_regions": false,
+      "scale_strategy": false,
+      "provisional_route": false
+    },
+    "evidence": []
+  },
+  "design_intent": "Restore the existing dynamic production line with the accepted hall and device geometry; no new model design.",
+  "focal_hierarchy": [
+    "display: complete hall and production line",
+    "station: selected device and motion",
+    "admin: device detail on demand"
+  ],
+  "depth_layers": [],
+  "visual_flow": {
+    "leading_lines": [],
+    "occlusion_order": [],
+    "negative_space": [],
+    "scale_rhythm": [],
+    "repetition_rhythm": []
+  },
+  "camera_mobility": "orbit, zoom, reset",
+  "representation_budget": {
+    "status": "unresolved",
+    "real_geometry": [],
+    "instances": [],
+    "shader_or_normal": [],
+    "distant_simplification": []
+  },
+  "performance_budget": {
+    "hallDrawCallsTarget": 300,
+    "hallTrianglesTarget": 650000,
+    "mobilePixelRatioCap": 1.6
+  },
+  "failure_repair_policy": {},
+  "reference_inputs": [],
+  "camera_and_perspective": {
+    "status": "unresolved",
+    "evidence": [],
+    "unknowns": []
+  },
+  "primary_silhouette_and_proportion": {
+    "status": "unresolved",
+    "evidence": [],
+    "unknowns": []
+  },
+  "spatial_and_support_structure": {
+    "status": "unresolved",
+    "evidence": [],
+    "unknowns": []
+  },
+  "object_partition_basis": [],
+  "geometry_vs_shading": [],
+  "form_hierarchy": {
+    "primary_masses": [],
+    "structural_forms": [],
+    "transition_forms": [],
+    "functional_parts": [],
+    "surface_details": []
+  },
+  "part_graph_status": "open",
+  "lighting_analysis": {
+    "status": "unresolved",
+    "evidence": [],
+    "unknowns": []
+  },
+  "material_analysis": {
+    "status": "unresolved",
+    "classes": [],
+    "scale_evidence": [],
+    "unknowns": []
+  },
+  "systems_analysis": {
+    "deformation": [],
+    "simulation": [],
+    "procedural": [],
+    "animation": [],
+    "export": []
+  },
+  "critical_blockers": [],
+  "blocking_unknowns": [],
+  "assumptions": [],
+  "approvals": [],
+  "required_checks": [
+    "no vegetation in export",
+    "nine device resources load",
+    "motion changes pixels",
+    "pause freezes motion",
+    "no export transform drift",
+    "desktop and mobile layout"
+  ]
+}

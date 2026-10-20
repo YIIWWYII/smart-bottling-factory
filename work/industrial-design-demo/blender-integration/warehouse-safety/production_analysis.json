@@ -1,0 +1,133 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-10-12T10:14:23.148402+00:00",
+  "status": "resolved",
+  "execution_allowed": true,
+  "execution_scope": "task_collection",
+  "deliverable": "animated_asset",
+  "completion_scope": "reusable warehouse facilities",
+  "protected_scope": {
+    "status": "resolved",
+    "objects": [
+      "Cube",
+      "Camera",
+      "Light"
+    ],
+    "task_owned_collection": "WarehouseSafety_20261012"
+  },
+  "real_scale": {
+    "status": "resolved",
+    "units": "METRIC",
+    "anchors": [
+      "0.85 m fan cabinet",
+      "1.15 m dehumidifier",
+      "1.8 m sensor mast"
+    ]
+  },
+  "minimum_viable_analysis": {
+    "status": "passed",
+    "attempts": 0,
+    "max_automatic_reviews": 2,
+    "required_decisions": {
+      "deliverable_scope": true,
+      "protected_scope": true,
+      "major_parts_or_regions": true,
+      "scale_strategy": true,
+      "provisional_route": true
+    },
+    "evidence": []
+  },
+  "design_intent": {
+    "status": "resolved",
+    "visual_thesis": "Blue enamel and stainless warehouse environmental safety assemblies, semantic fan rotors and alarm beacon, low polygon GLB",
+    "scope": "original",
+    "evidence": [
+      "Existing cabinet assembly language"
+    ],
+    "unknowns": []
+  },
+  "focal_hierarchy": [],
+  "depth_layers": [],
+  "visual_flow": {
+    "leading_lines": [],
+    "occlusion_order": [],
+    "negative_space": [],
+    "scale_rhythm": [],
+    "repetition_rhythm": []
+  },
+  "camera_mobility": {
+    "mode": "unresolved",
+    "allowed_move": null,
+    "parallax_requirements": []
+  },
+  "representation_budget": {
+    "status": "unresolved",
+    "real_geometry": [],
+    "instances": [],
+    "shader_or_normal": [],
+    "distant_simplification": []
+  },
+  "performance_budget": {
+    "status": "unresolved",
+    "object_limit": null,
+    "instance_limit": null,
+    "realization_policy": "unresolved",
+    "simulation_preview": null,
+    "render_target": null
+  },
+  "failure_repair_policy": {},
+  "reference_inputs": [],
+  "camera_and_perspective": {
+    "status": "unresolved",
+    "evidence": [],
+    "unknowns": []
+  },
+  "primary_silhouette_and_proportion": {
+    "status": "unresolved",
+    "evidence": [],
+    "unknowns": []
+  },
+  "spatial_and_support_structure": {
+    "status": "unresolved",
+    "evidence": [],
+    "unknowns": []
+  },
+  "object_partition_basis": [],
+  "geometry_vs_shading": [],
+  "form_hierarchy": {
+    "primary_masses": [],
+    "structural_forms": [],
+    "transition_forms": [],
+    "functional_parts": [],
+    "surface_details": []
+  },
+  "part_graph_status": "open",
+  "lighting_analysis": {
+    "status": "unresolved",
+    "evidence": [],
+    "unknowns": []
+  },
+  "material_analysis": {
+    "status": "unresolved",
+    "classes": [],
+    "scale_evidence": [],
+    "unknowns": []
+  },
+  "systems_analysis": {
+    "deformation": [],
+    "simulation": [],
+    "procedural": [],
+    "animation": [],
+    "export": []
+  },
+  "critical_blockers": [],
+  "blocking_unknowns": [],
+  "assumptions": [],
+  "approvals": [],
+  "system_choice": {
+    "fan opening": "Boolean Difference",
+    "ventilation slots": "constant offset Array",
+    "cables": "beveled Curve",
+    "motion": "Three.js data-driven FanRotor and AlarmBeacon"
+  }
+}

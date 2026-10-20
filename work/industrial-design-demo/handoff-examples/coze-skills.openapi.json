@@ -1,0 +1,101 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "瓶安当前平台工具",
+    "version": "2.0.0",
+    "description": "当前平台数据、双轨检索和待确认变更；不开放确认执行接口"
+  },
+  "servers": [
+    {
+      "url": "http://host.docker.internal:8094"
+    }
+  ],
+  "paths": {
+    "/tools/list_skills": {
+      "post": {
+        "operationId": "list_skills",
+        "summary": "列出平台可用技能的名称和用途，由智能体自主选择",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/use_skill": {
+      "post": {
+        "operationId": "use_skill",
+        "summary": "加载技能的说明与允许工具，然后继续调用工具完成目标，不执行控制命令",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "技能名称，来自 list_skills 或 availableSkills"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

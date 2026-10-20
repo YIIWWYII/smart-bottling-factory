@@ -1,0 +1,774 @@
+{
+  "version": 1,
+  "description": "轨迹配置：小幅测试使用相对毫米坐标；取放模板引用控制器内示教点。",
+  "smallPaths": {
+    "origin": [
+      198.830406,
+      -27.946299,
+      -0.165869,
+      -3.800676
+    ],
+    "defaultPath": "vertical",
+    "paths": {
+      "vertical": [
+        [
+          0,
+          0,
+          5
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      "vertical10": [
+        [
+          0,
+          0,
+          10
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      "horizontal": [
+        [
+          0,
+          0,
+          5
+        ],
+        [
+          -5,
+          0,
+          5
+        ],
+        [
+          5,
+          0,
+          5
+        ],
+        [
+          0,
+          0,
+          5
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      "rectangle": [
+        [
+          0,
+          0,
+          5
+        ],
+        [
+          5,
+          0,
+          5
+        ],
+        [
+          5,
+          5,
+          5
+        ],
+        [
+          0,
+          5,
+          5
+        ],
+        [
+          0,
+          0,
+          5
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    }
+  },
+  "pickPlace": {
+    "points": {
+      "start": "P1",
+      "pickAbove": "P2",
+      "pick": "P3",
+      "transit": "P4",
+      "placeAbove": "P5",
+      "place": "P6"
+    },
+    "entry": {
+      "source": "fresh_actual_pose",
+      "initialLiftMm": 0,
+      "contactClearanceMm": 50,
+      "keepXYR": true,
+      "transferZRule": "max(pickContactZ, placeContactZ) + 50",
+      "validationRequired": true,
+      "description": "接触点上方50 mm；不是当前位置加50 mm。首次进入须单独核验，未验证的起点禁止自动运动。"
+    }
+  },
+  "controller": {
+    "defaultProject": ""
+  },
+  "taughtProducts": {
+    "cola-330ml": {
+      "name": "可乐 330 mL 易拉罐",
+      "user": 0,
+      "tool": 0,
+      "pickContact": {
+        "x": 256.24,
+        "y": -0.01,
+        "z": -52.4,
+        "r": 102.98
+      },
+      "source": "用户确认：上料和下料均实际接触罐底凹面，User0/Tool0",
+      "placeContact": {
+        "x": 246.6,
+        "y": 188.44,
+        "z": -38.42,
+        "r": 160.68
+      },
+      "transferPath": {
+        "status": "含新复位末段的单次运动及IO反馈通过",
+        "travelZ": 11.58,
+        "speedFactorPercent": 80,
+        "speedLPercent": 20,
+        "accLPercent": 5,
+        "gasEnabled": true,
+        "points": [
+          [
+            256.24,
+            -0.01,
+            11.58,
+            102.98
+          ],
+          [
+            256.24,
+            -0.01,
+            -52.4,
+            102.98
+          ],
+          [
+            256.24,
+            -0.01,
+            11.58,
+            102.98
+          ],
+          [
+            246.6,
+            188.44,
+            11.58,
+            160.68
+          ],
+          [
+            246.6,
+            188.44,
+            -38.42,
+            160.68
+          ],
+          [
+            246.6,
+            188.44,
+            11.58,
+            160.68
+          ],
+          [
+            256.24,
+            -0.01,
+            11.58,
+            102.98
+          ],
+          [
+            256.24,
+            -0.01,
+            -2.4,
+            102.98
+          ]
+        ],
+        "outputActions": [
+          {
+            "afterPoint": 2,
+            "command": "DOExecute(2,1)",
+            "waitAfterMs": 1000
+          },
+          {
+            "afterPoint": 5,
+            "waitBeforeMs": 500,
+            "command": "DOExecute(2,0)",
+            "waitAfterMs": 200
+          },
+          {
+            "afterPoint": 5,
+            "command": "DOExecute(1,1)",
+            "waitAfterMs": 300
+          },
+          {
+            "afterPoint": 5,
+            "command": "DOExecute(1,0)",
+            "waitAfterMs": 500
+          }
+        ],
+        "verification": "2026-10-19 新末段已实际到位 Z=-2.40376 mm；整机比例50%，单段20%，气泵输出归零，无报警。物理吸附/释放仍以现场确认为准。",
+        "executionEnabled": false,
+        "runMode": "single"
+      },
+      "status": "接触点已确认；可乐运动、复位及气泵输出验证通过，实际取放结果以现场为准",
+      "orientation": "倒置，罐底朝上，从上方吸附底部凹面",
+      "recessDepthMm": 10,
+      "recessDepthSource": "用户估计约 10 mm，待实测",
+      "bottleHeightMm": 155,
+      "heightSource": "用户提供：15.5 cm（2026-10-19）"
+    }
+  },
+  "productTrajectories": {
+    "version": 1,
+    "status": "规划草案，尚未接入执行器，不会自动运行",
+    "executionEnabled": false,
+    "user": 0,
+    "tool": 0,
+    "referenceProduct": "cola-330ml",
+    "heightCalibration": {
+      "referenceEffectiveHeightMm": 145,
+      "description": "用户提供可乐总高155 mm，凹陷约10 mm，基准有效吸附高度145 mm；其他三种无凹陷。可乐示教接触坐标不变，其他瓶型按有效高度差换算。凹陷10 mm仍为近似值。",
+      "deltaZFormula": "(product.bottleHeightMm - product.recessDepthMm) - referenceEffectiveHeightMm",
+      "pickZFormula": "-52.40 + deltaZ",
+      "placeZFormula": "-38.42 + deltaZ",
+      "conditions": [
+        "四种瓶子使用相同上料支撑面和下料支撑面",
+        "瓶子吸附位置中心对准相同 XY，吸盘和 User0/Tool0 不变",
+        "各瓶型分别确认吸附面可吸牢；不能假设所有瓶底凹陷都是 10 mm"
+      ]
+    },
+    "entry": {
+      "source": "fresh_actual_pose",
+      "initialLiftMm": 0,
+      "contactClearanceMm": 50,
+      "keepXYR": true,
+      "transferZRule": "max(pickContactZ, placeContactZ) + 50",
+      "validationRequired": true,
+      "description": "接触点上方50 mm；不是当前位置加50 mm。首次进入须单独核验，未验证的起点禁止自动运动。"
+    },
+    "clearanceRule": {
+      "contactClearanceMm": 50,
+      "formula": "max(pickZ, placeZ) + 50",
+      "note": "仅上方点规划；载瓶净空和吸附可靠性须另行验证。"
+    },
+    "motionVerification": {
+      "sequence": [
+        "MovL",
+        "Sync",
+        "fresh_feedback_arrival"
+      ],
+      "arrivalToleranceMm": 0.4,
+      "arrivalToleranceDeg": 0.4,
+      "stableFeedbackSamples": 4,
+      "arrivalTimeoutMs": 30000,
+      "noMovementTimeoutMs": 4000,
+      "onFailure": "ResetRobot，停止并清队列，不重试、不追加点位"
+    },
+    "pneumatics": {
+      "vacuumOutput": 2,
+      "vacuumOn": 1,
+      "vacuumOff": 0,
+      "blowOutput": 1,
+      "blowEnabled": true,
+      "vacuumSensorAvailable": false,
+      "gripVerification": "人工确认吸牢后继续",
+      "releaseVerification": "DO1开关输出已验证，使用短吹气释放；无真空传感器，物理释放仍需现场确认",
+      "placeDwellMs": 500,
+      "suctionOffGapMs": 200,
+      "blowPulseMs": 300,
+      "releaseWaitMs": 500
+    },
+    "steps": [
+      {
+        "id": 1,
+        "action": "move-pick-above",
+        "point": "P1",
+        "description": "高位移动到取料点正上方"
+      },
+      {
+        "id": 2,
+        "action": "descend-pick",
+        "point": "P2",
+        "description": "竖直下降到瓶子实际吸附面"
+      },
+      {
+        "id": 3,
+        "action": "vacuum-on",
+        "description": "DO2开启吸气；无真空传感器，不能从输出状态判断吸牢"
+      },
+      {
+        "id": 4,
+        "action": "lift-loaded",
+        "point": "P3",
+        "description": "带瓶竖直抬升至通行高度"
+      },
+      {
+        "id": 5,
+        "action": "transfer-loaded",
+        "point": "P4",
+        "description": "高位移动至传送带放料点正上方"
+      },
+      {
+        "id": 6,
+        "action": "descend-place",
+        "point": "P5",
+        "description": "竖直放到传送带支撑面"
+      },
+      {
+        "id": 7,
+        "action": "vacuum-off",
+        "description": "放稳停0.5秒，关DO2，间隔0.2秒，开DO1吹气0.3秒后关闭，等待0.5秒；现场确认释放"
+      },
+      {
+        "id": 8,
+        "action": "lift-empty",
+        "point": "P6",
+        "description": "放料后空载竖直抬起"
+      },
+      {
+        "action": "return-start",
+        "point": "P1",
+        "description": "先在横移高度返回上料点上方，尚未完成复位",
+        "id": 9
+      },
+      {
+        "id": 10,
+        "action": "descend-reset",
+        "point": "P7",
+        "description": "竖直到上料接触点上方50 mm，停止"
+      }
+    ],
+    "profiles": [
+      {
+        "id": "cola-330ml",
+        "name": "可乐 330 mL",
+        "executionEnabled": false,
+        "effectiveContactHeightMm": 145,
+        "deltaZMm": 0,
+        "plannedTravelZ": 11.58,
+        "status": "运动和P7复位及气泵输出已验证；实际取放结果待现场确认",
+        "points": {
+          "P1": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 11.58,
+            "r": 102.98,
+            "zRule": "runtimeTransitZ"
+          },
+          "P2": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": -52.4,
+            "r": 102.98,
+            "zRule": "-52.40 + deltaZ"
+          },
+          "P3": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 11.58,
+            "r": 102.98,
+            "zRule": "runtimeTransitZ"
+          },
+          "P4": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 11.58,
+            "r": 160.68,
+            "zRule": "runtimeTransitZ"
+          },
+          "P5": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": -38.42,
+            "r": 160.68,
+            "zRule": "-38.42 + deltaZ"
+          },
+          "P6": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 11.58,
+            "r": 160.68,
+            "zRule": "runtimeTransitZ"
+          },
+          "P7": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": -2.4,
+            "r": 102.98,
+            "zRule": "pickZ + 50"
+          }
+        },
+        "bottleHeightMm": 155,
+        "recessDepthMm": 10,
+        "heightSource": "用户提供厘米值换算为毫米，2026-10-19",
+        "returnPoint": "P7",
+        "returnSequence": [
+          "P6",
+          "P1",
+          "P7"
+        ],
+        "resetVerification": "2026-10-19 新末段已实际到位 Z=-2.40376 mm；整机比例50%，单段20%，气泵输出归零，无报警。物理吸附/释放仍以现场确认为准。",
+        "runMode": "single"
+      },
+      {
+        "id": "wahaha-596ml",
+        "name": "娃哈哈 596 mL",
+        "executionEnabled": false,
+        "effectiveContactHeightMm": 305,
+        "deltaZMm": 160,
+        "plannedTravelZ": 171.58,
+        "status": "已按用户瓶高计算；待逆解、全程净空和实际接触位置验证，未执行",
+        "points": {
+          "P1": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 171.58,
+            "r": 102.98,
+            "zRule": "runtimeTransitZ"
+          },
+          "P2": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 107.6,
+            "r": 102.98,
+            "zRule": "-52.40 + deltaZ"
+          },
+          "P3": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 171.58,
+            "r": 102.98,
+            "zRule": "runtimeTransitZ"
+          },
+          "P4": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 171.58,
+            "r": 160.68,
+            "zRule": "runtimeTransitZ"
+          },
+          "P5": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 121.58,
+            "r": 160.68,
+            "zRule": "-38.42 + deltaZ"
+          },
+          "P6": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 171.58,
+            "r": 160.68,
+            "zRule": "runtimeTransitZ"
+          },
+          "P7": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 157.6,
+            "r": 102.98,
+            "zRule": "pickZ + 50"
+          }
+        },
+        "bottleHeightMm": 305,
+        "recessDepthMm": 0,
+        "recessDepthSource": "用户确认：其他三种瓶子没有凹陷",
+        "effectiveHeightRule": "bottleHeightMm",
+        "returnPoint": "P7",
+        "plannedTravelZRule": "max(pickZ, placeZ) + 50",
+        "releaseSequence": [
+          {
+            "action": "dwell",
+            "durationMs": 500
+          },
+          {
+            "action": "output",
+            "output": 2,
+            "value": 0
+          },
+          {
+            "action": "dwell",
+            "durationMs": 200
+          },
+          {
+            "action": "output",
+            "output": 1,
+            "value": 1
+          },
+          {
+            "action": "dwell",
+            "durationMs": 300
+          },
+          {
+            "action": "output",
+            "output": 1,
+            "value": 0
+          },
+          {
+            "action": "dwell",
+            "durationMs": 500
+          }
+        ],
+        "heightSource": "用户提供厘米值换算为毫米，2026-10-19",
+        "verification": {
+          "motionTested": false,
+          "loadedTested": false,
+          "note": "高度变化较大；不得直接套用可乐已通过的可达性结论，不能擅自降低通行高度。"
+        },
+        "returnSequence": [
+          "P6",
+          "P1",
+          "P7"
+        ],
+        "resetVerification": "待验证新增末段：高位返回P1后竖直到P7",
+        "runMode": "single"
+      },
+      {
+        "id": "jasmine-tea-468ml",
+        "name": "茉莉蜜茶 468 mL",
+        "executionEnabled": false,
+        "effectiveContactHeightMm": 276,
+        "deltaZMm": 131,
+        "plannedTravelZ": 142.58,
+        "status": "单次运动及气泵输出验证通过；实际吸附和释放结果待现场确认",
+        "points": {
+          "P1": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 142.58,
+            "r": 102.98,
+            "zRule": "runtimeTransitZ"
+          },
+          "P2": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 78.6,
+            "r": 102.98,
+            "zRule": "-52.40 + deltaZ"
+          },
+          "P3": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 142.58,
+            "r": 102.98,
+            "zRule": "runtimeTransitZ"
+          },
+          "P4": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 142.58,
+            "r": 160.68,
+            "zRule": "runtimeTransitZ"
+          },
+          "P5": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 92.58,
+            "r": 160.68,
+            "zRule": "-38.42 + deltaZ"
+          },
+          "P6": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 142.58,
+            "r": 160.68,
+            "zRule": "runtimeTransitZ"
+          },
+          "P7": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 128.6,
+            "r": 102.98,
+            "zRule": "pickZ + 50"
+          }
+        },
+        "bottleHeightMm": 276,
+        "recessDepthMm": 0,
+        "recessDepthSource": "用户确认：其他三种瓶子没有凹陷",
+        "effectiveHeightRule": "bottleHeightMm",
+        "returnPoint": "P7",
+        "plannedTravelZRule": "max(pickZ, placeZ) + 50",
+        "releaseSequence": [
+          {
+            "action": "dwell",
+            "durationMs": 500
+          },
+          {
+            "action": "output",
+            "output": 2,
+            "value": 0
+          },
+          {
+            "action": "dwell",
+            "durationMs": 200
+          },
+          {
+            "action": "output",
+            "output": 1,
+            "value": 1
+          },
+          {
+            "action": "dwell",
+            "durationMs": 300
+          },
+          {
+            "action": "output",
+            "output": 1,
+            "value": 0
+          },
+          {
+            "action": "dwell",
+            "durationMs": 500
+          }
+        ],
+        "heightSource": "用户提供厘米值换算为毫米，2026-10-19",
+        "verification": {
+          "motionTested": true,
+          "loadedTested": false,
+          "physicalPickReleaseConfirmed": false,
+          "speedFactorPercent": 50,
+          "speedLPercent": 20,
+          "accLPercent": 5,
+          "finalPose": [
+            256.2395,
+            -0.01311,
+            142.57915,
+            102.97152
+          ],
+          "outputsAtEnd": 0,
+          "alarmAtEnd": 0,
+          "note": "2026-10-19 逐段逆解检查及Sync/实际到位通过，DO2吸气、DO1短吹气后关闭，返回P1。未由传感器或现场确认实际取放成功。"
+        },
+        "returnSequence": [
+          "P6",
+          "P1",
+          "P7"
+        ],
+        "resetVerification": "待验证新增末段：高位返回P1后竖直到P7",
+        "runMode": "single"
+      },
+      {
+        "id": "minute-maid-450ml",
+        "name": "果粒橙 450 mL",
+        "executionEnabled": false,
+        "effectiveContactHeightMm": 275,
+        "deltaZMm": 130,
+        "plannedTravelZ": 141.58,
+        "status": "已按用户瓶高计算；待逆解、全程净空和实际接触位置验证，未执行",
+        "points": {
+          "P1": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 141.58,
+            "r": 102.98,
+            "zRule": "runtimeTransitZ"
+          },
+          "P2": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 77.6,
+            "r": 102.98,
+            "zRule": "-52.40 + deltaZ"
+          },
+          "P3": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 141.58,
+            "r": 102.98,
+            "zRule": "runtimeTransitZ"
+          },
+          "P4": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 141.58,
+            "r": 160.68,
+            "zRule": "runtimeTransitZ"
+          },
+          "P5": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 91.58,
+            "r": 160.68,
+            "zRule": "-38.42 + deltaZ"
+          },
+          "P6": {
+            "x": 246.6,
+            "y": 188.44,
+            "z": 141.58,
+            "r": 160.68,
+            "zRule": "runtimeTransitZ"
+          },
+          "P7": {
+            "x": 256.24,
+            "y": -0.01,
+            "z": 127.6,
+            "r": 102.98,
+            "zRule": "pickZ + 50"
+          }
+        },
+        "bottleHeightMm": 275,
+        "recessDepthMm": 0,
+        "recessDepthSource": "用户确认：其他三种瓶子没有凹陷",
+        "effectiveHeightRule": "bottleHeightMm",
+        "returnPoint": "P7",
+        "plannedTravelZRule": "max(pickZ, placeZ) + 50",
+        "releaseSequence": [
+          {
+            "action": "dwell",
+            "durationMs": 500
+          },
+          {
+            "action": "output",
+            "output": 2,
+            "value": 0
+          },
+          {
+            "action": "dwell",
+            "durationMs": 200
+          },
+          {
+            "action": "output",
+            "output": 1,
+            "value": 1
+          },
+          {
+            "action": "dwell",
+            "durationMs": 300
+          },
+          {
+            "action": "output",
+            "output": 1,
+            "value": 0
+          },
+          {
+            "action": "dwell",
+            "durationMs": 500
+          }
+        ],
+        "heightSource": "用户提供厘米值换算为毫米，2026-10-19",
+        "verification": {
+          "motionTested": false,
+          "loadedTested": false,
+          "note": "高度变化较大；不得直接套用可乐已通过的可达性结论，不能擅自降低通行高度。"
+        },
+        "returnSequence": [
+          "P6",
+          "P1",
+          "P7"
+        ],
+        "resetVerification": "待验证新增末段：高位返回P1后竖直到P7",
+        "runMode": "single"
+      }
+    ],
+    "runMode": "single",
+    "repeatCount": 1
+  }
+}

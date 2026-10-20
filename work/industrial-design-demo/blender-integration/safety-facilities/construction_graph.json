@@ -1,0 +1,138 @@
+{
+  "schema_version": "1.0",
+  "part_graph_status": "analysis_required",
+  "parts": [
+    {
+      "id": "existing_scene_receiver_scope",
+      "role": "helper",
+      "construction": "inspect_and_map_existing_scene_objects",
+      "form_level": "helper",
+      "physical_function": "non_geometric",
+      "separation_policy": "non_geometric",
+      "separation_reason": "non_geometric",
+      "construction_method": "inspect_and_map_existing_scene_objects",
+      "connection_method": "not_applicable",
+      "combination_level": "NOT_APPLICABLE",
+      "bevel_policy": {
+        "classes": [],
+        "method": "not_applicable",
+        "widths": {}
+      },
+      "modifier_stack_intent": [],
+      "asset_provenance": {},
+      "final_object_name": "unresolved",
+      "blockout_proxy": false,
+      "topology_status": "not_applicable",
+      "blockout_object_names": [],
+      "assembly_interfaces": [],
+      "topology_evidence": {
+        "construction_operations": [],
+        "connected_component_count": null,
+        "evaluated_bevel_geometry": null,
+        "boolean_cleanup_passed": null,
+        "primitive_retained_reason": null,
+        "wireframe": null
+      },
+      "native_system": "NOT_APPLICABLE",
+      "source_objects": [],
+      "semantic_inputs": {},
+      "generated_dependents": [],
+      "code_role": "none",
+      "application_policy": "not_applicable",
+      "native_component_evidence": {
+        "status": "not_applicable",
+        "official_sources": [
+          "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/principled.html"
+        ]
+      }
+    }
+  ],
+  "relationships": [],
+  "unclassified_visible_intersections_allowed": false,
+  "modeling_contract": {
+    "analysis_before_mutation": true,
+    "minimum_viable_analysis_allows_reversible_blockout": true,
+    "part_analysis_required_before_formal_topology": true,
+    "primitive_blockout_is_final": false,
+    "continuous_shell_requires_single_component": true,
+    "difficulty_is_valid_separation_reason": false,
+    "functional_or_detail_before_transition_allowed": false,
+    "material_or_lighting_may_conceal_geometry_failure": false,
+    "wireframe_acceptance_required": true,
+    "real_bevel_geometry_required": true,
+    "shape_grammar_before_primitive_creation": true,
+    "native_generator_comparison_required": true,
+    "manual_assembly_requires_documented_exception": true,
+    "python_is_orchestration_layer": true,
+    "native_component_ownership_required": true,
+    "manual_count_driven_fragments_allowed": false
+  },
+  "construction_archetypes": [],
+  "construction_method_decision": {
+    "shape_grammar_review_required": true,
+    "detected_archetypes": [],
+    "parameter_owners": {},
+    "native_generator_comparisons": [],
+    "fallback_when_no_archetype_matches": "inspect the form and declare unique topology, deformation, distribution, simulation, assembly, or shading ownership before primitive creation",
+    "native_component_decision": {
+      "status": "planned",
+      "primary_system": "SHADER_NODES",
+      "parameter_owners": {},
+      "source_policy": "one semantic source/control object per dependent system",
+      "python_role": "orchestration",
+      "application_policy": "keep_non_destructive",
+      "fallback_reason": null,
+      "scene_design_required": false,
+      "system_choice": {
+        "comparison_required": false,
+        "direct_candidate": "SHADER_NODES",
+        "node_candidate": null,
+        "selected_system": "SHADER_NODES",
+        "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+        "rejected_alternative": "No credible node alternative was identified at route selection.",
+        "node_justification": [],
+        "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+      },
+      "official_sources": [
+        "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/principled.html"
+      ],
+      "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+    }
+  },
+  "design_owner": "not_applicable",
+  "native_component_decision": {
+    "status": "planned",
+    "primary_system": "SHADER_NODES",
+    "parameter_owners": {},
+    "source_policy": "one semantic source/control object per dependent system",
+    "python_role": "orchestration",
+    "application_policy": "keep_non_destructive",
+    "fallback_reason": null,
+    "scene_design_required": false,
+    "system_choice": {
+      "comparison_required": false,
+      "direct_candidate": "SHADER_NODES",
+      "node_candidate": null,
+      "selected_system": "SHADER_NODES",
+      "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+      "rejected_alternative": "No credible node alternative was identified at route selection.",
+      "node_justification": [],
+      "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+    },
+    "official_sources": [
+      "https://docs.blender.org/manual/en/5.2/render/shader_nodes/shader/principled.html"
+    ],
+    "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+  },
+  "local_asset_library": {
+    "status": "unavailable",
+    "requested": true,
+    "request_origin": "router_node_candidate",
+    "root": null,
+    "eligible_catalogs": [],
+    "candidate_policy": "Candidate library was not found; do not install, append, or assume assets."
+  },
+  "code_role": "orchestration",
+  "application_policy": "keep_non_destructive",
+  "fallback_reason": null
+}

@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "description": "MG400 实机反馈简化模型映射；仅影响显示，不下发机械臂指令。角度单位为度。",
+  "feedbackField": "q_actual",
+  "staleAfterMs": 1500,
+  "bindings": [
+    {
+      "target": "j1",
+      "axis": "y",
+      "weights": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "j2",
+      "axis": "z",
+      "weights": [
+        0,
+        -1,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "j3",
+      "axis": "z",
+      "weights": [
+        0,
+        0,
+        -1,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "wrist",
+      "axis": "z",
+      "weights": [
+        0,
+        1,
+        1,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "j4",
+      "axis": "y",
+      "weights": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "offsetDeg": 0
+    }
+  ],
+  "blenderBindings": [
+    {
+      "target": "A_j1.001",
+      "axis": "y",
+      "weights": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "A_j2.001",
+      "axis": "z",
+      "weights": [
+        0,
+        -1,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "A_j3.001",
+      "axis": "z",
+      "weights": [
+        0,
+        0,
+        -1,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "A_j3_1.001",
+      "axis": "z",
+      "weights": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "A_j4_1.001",
+      "axis": "z",
+      "weights": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "A_j4.001",
+      "axis": "y",
+      "weights": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "A_j2_2.001",
+      "axis": "z",
+      "weights": [
+        0,
+        -1,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "A_j3_2.001",
+      "axis": "z",
+      "weights": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "A_j4_2.001",
+      "axis": "z",
+      "weights": [
+        0,
+        0,
+        -1,
+        0
+      ],
+      "offsetDeg": 0
+    }
+  ]
+}

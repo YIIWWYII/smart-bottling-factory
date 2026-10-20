@@ -1,0 +1,7 @@
+interface:
+  display_name: 设备接入检查
+  default_prompt: 检查当前设备的数据接入情况
+enabled: true
+tools:
+  - query_configuration
+  - query_devices

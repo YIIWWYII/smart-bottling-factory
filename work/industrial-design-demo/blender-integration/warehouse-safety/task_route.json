@@ -1,0 +1,212 @@
+{
+  "schema_version": "1.0",
+  "request": "Reusable warehouse safety facilities: sensor enclosure with ventilation Array slots, smoke sensor, gas sensor, fan rotor and dehumidifier, alarm beacon. Web GLB export, retain default scene. Existing MG400 animation reused for boxing.",
+  "deliverable": "animated_asset",
+  "classes": [
+    "fluid_or_volume",
+    "physics_simulation",
+    "regular_repetition"
+  ],
+  "physical_causes": [
+    "buoyancy",
+    "collision",
+    "flow",
+    "pressure"
+  ],
+  "candidates": [
+    {
+      "method": "fluid",
+      "skill": "blender-simulation-effects",
+      "score": 21,
+      "matched_terms": [
+        "smoke"
+      ],
+      "reasons": [
+        "liquid flow",
+        "smoke",
+        "fire",
+        "spray",
+        "volumetric interaction"
+      ],
+      "risks": [
+        "empty domain",
+        "leaking collider",
+        "insufficient resolution"
+      ],
+      "available": null
+    },
+    {
+      "method": "array_instances",
+      "skill": "blender-procedural-systems",
+      "score": 16,
+      "matched_terms": [
+        "array"
+      ],
+      "reasons": [
+        "regular repetition",
+        "modular linear or radial pattern"
+      ],
+      "risks": [
+        "applied duplicate explosion",
+        "origin drift"
+      ],
+      "available": null
+    },
+    {
+      "method": "alternative:ocean",
+      "skill": "blender-production-router",
+      "score": 11,
+      "matched_terms": [],
+      "reasons": [
+        "documented alternative to compare: Ocean"
+      ],
+      "risks": [
+        "requires task-specific prerequisite and downstream compatibility review"
+      ],
+      "available": null
+    },
+    {
+      "method": "alternative:shader_volume",
+      "skill": "blender-production-router",
+      "score": 10,
+      "matched_terms": [],
+      "reasons": [
+        "documented alternative to compare: shader volume"
+      ],
+      "risks": [
+        "requires task-specific prerequisite and downstream compatibility review"
+      ],
+      "available": null
+    }
+  ],
+  "selected_method": "fluid",
+  "selected_skill": "blender-simulation-effects",
+  "secondary_methods": [
+    "array_instances",
+    "alternative:ocean",
+    "alternative:shader_volume"
+  ],
+  "forbidden_substitutions": [
+    "blockout_proxy_as_final_topology",
+    "color_block_partition_as_part_graph",
+    "detail_before_transition_forms",
+    "join_objects_as_topology_fusion",
+    "material_or_lighting_as_geometry_concealment",
+    "primitive_only_formal_modeling",
+    "primitive_stacking_after_blockout",
+    "scene_or_world_reset_without_authorization",
+    "smooth_shading_or_weighted_normal_as_bevel",
+    "static_mesh_as_dynamic_flow",
+    "unclassified_mesh_islands",
+    "unclassified_visible_intersections"
+  ],
+  "prerequisites": [
+    "probe current Blender capabilities",
+    "domain",
+    "flow",
+    "effector",
+    "cache directory",
+    "scale"
+  ],
+  "validation": [
+    "domain bounds",
+    "cache state",
+    "collider leakage",
+    "approved Part Graph and construction methods",
+    "front side top hero clay and wireframe evidence",
+    "formal-topology conversion after Blockout",
+    "topology rollback strike audit"
+  ],
+  "required_specialists": [
+    "blender-production-router",
+    "blender-local-asset-library",
+    "blender-scene-design",
+    "blender-simulation-effects",
+    "blender-geometry-validation"
+  ],
+  "construction_archetypes": [],
+  "construction_method_decision": {
+    "shape_grammar_review_required": true,
+    "detected_archetypes": [],
+    "parameter_owners": {},
+    "native_generator_comparisons": [],
+    "fallback_when_no_archetype_matches": "inspect the form and declare unique topology, deformation, distribution, simulation, assembly, or shading ownership before primitive creation",
+    "native_component_decision": {
+      "status": "planned",
+      "primary_system": "FLUID",
+      "parameter_owners": {},
+      "source_policy": "one semantic source/control object per dependent system",
+      "python_role": "orchestration",
+      "application_policy": "keep_non_destructive",
+      "fallback_reason": null,
+      "scene_design_required": true,
+      "system_choice": {
+        "comparison_required": false,
+        "direct_candidate": "FLUID",
+        "node_candidate": null,
+        "selected_system": "FLUID",
+        "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+        "rejected_alternative": "No credible node alternative was identified at route selection.",
+        "node_justification": [],
+        "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+      },
+      "official_sources": [
+        "https://docs.blender.org/manual/en/5.2/physics/fluid/index.html"
+      ],
+      "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+    }
+  },
+  "design_owner": "blender-scene-design",
+  "native_component_decision": {
+    "status": "planned",
+    "primary_system": "FLUID",
+    "parameter_owners": {},
+    "source_policy": "one semantic source/control object per dependent system",
+    "python_role": "orchestration",
+    "application_policy": "keep_non_destructive",
+    "fallback_reason": null,
+    "scene_design_required": true,
+    "system_choice": {
+      "comparison_required": false,
+      "direct_candidate": "FLUID",
+      "node_candidate": null,
+      "selected_system": "FLUID",
+      "selection_reason": "The current route has one credible owner; do not add a node graph without a concrete control benefit.",
+      "rejected_alternative": "No credible node alternative was identified at route selection.",
+      "node_justification": [],
+      "boolean_policy": "native_boolean_required_for_normal_hard_surface_cuts"
+    },
+    "official_sources": [
+      "https://docs.blender.org/manual/en/5.2/physics/fluid/index.html"
+    ],
+    "official_verification_policy": "search official Blender Manual/API for unfamiliar or version-sensitive components; use cached index plus RNA probing when offline"
+  },
+  "local_asset_library": {
+    "status": "unavailable",
+    "requested": true,
+    "request_origin": "router_node_candidate",
+    "root": null,
+    "eligible_catalogs": [],
+    "candidate_policy": "Candidate library was not found; do not install, append, or assume assets."
+  },
+  "official_doc_resolution": {
+    "schema_version": "1.0",
+    "status": "pending_capability_probe",
+    "version": null,
+    "query": null,
+    "cache_path": null,
+    "declared_sources": [
+      "https://docs.blender.org/manual/en/5.2/physics/fluid/index.html"
+    ],
+    "results": [],
+    "resolved_sources": [
+      "https://docs.blender.org/manual/en/5.2/physics/fluid/index.html"
+    ],
+    "errors": []
+  },
+  "code_role": "orchestration",
+  "application_policy": "keep_non_destructive",
+  "fallback_reason": null,
+  "task_id": "871dfa0230d8",
+  "generated_at": "2026-10-12T10:14:23.148345+00:00"
+}

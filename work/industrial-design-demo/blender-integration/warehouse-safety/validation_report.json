@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-10-12T10:14:23.148452+00:00",
+  "overall_status": "WARN",
+  "checks": [
+    {
+      "name": "GLB export",
+      "status": "PASS",
+      "evidence": "model-validation.json: 3 assets, 47 parts"
+    },
+    {
+      "name": "browser integration",
+      "status": "PASS",
+      "evidence": "C:/Users/Public/downstream-warehouse-check.png"
+    },
+    {
+      "name": "related behavior tests",
+      "status": "PASS",
+      "evidence": "26 tests passed: material-flow, logistics, safety-scenarios, alarm-rules"
+    },
+    {
+      "name": "production build",
+      "status": "PASS",
+      "evidence": "C:/Users/Public/downstream-build.log"
+    }
+  ],
+  "thresholds": {},
+  "intentional_exceptions": [],
+  "not_evaluated": [
+    "full mesh topology audit",
+    "physical hardware control",
+    "industrial safety certification"
+  ],
+  "repair_suggestions": [
+    "Run blender-geometry-validation after scene execution"
+  ]
+}

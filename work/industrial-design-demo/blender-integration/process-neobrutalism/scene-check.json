@@ -1,0 +1,12 @@
+{
+  "scene": "Process_Neobrutalism",
+  "projection": "PERSP",
+  "stage_count": 9,
+  "objects": 857,
+  "flow": [
+    "01>02>03>05>06>07>08>09",
+    "04>05"
+  ],
+  "source_preserved": true,
+  "render": "E:\\2026\u6311\u6218\u676f\\\u5de5\u4e1a\u6c99\u76d82026\\\u6570\u5b57\u5c55\u677f\u524d\u540e\u7aef\\work\\industrial-design-demo\\blender-integration\\process-neobrutalism\\process-preview.png"
+}

@@ -1,0 +1,515 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "瓶安当前平台工具",
+    "version": "2.0.0",
+    "description": "当前平台数据、双轨检索和待确认变更；不开放确认执行接口"
+  },
+  "servers": [
+    {
+      "url": "http://host.docker.internal:8094"
+    }
+  ],
+  "paths": {
+    "/tools/search_knowledge": {
+      "post": {
+        "operationId": "search_knowledge",
+        "summary": "检索已审核资料，返回依据和版本",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  },
+                  "query": {
+                    "type": "string",
+                    "description": "必填字符串"
+                  },
+                  "device_model": {
+                    "type": "string",
+                    "description": "可选，设备型号/平台设备编号，精确限制资料适用范围"
+                  },
+                  "alarm_code": {
+                    "type": "string",
+                    "description": "可选，告警编码，优先精确匹配"
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/query_products": {
+      "post": {
+        "operationId": "query_products",
+        "summary": "产品与当前批次、任务计划和完成量",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/query_devices": {
+      "post": {
+        "operationId": "query_devices",
+        "summary": "设备实测数据、设定参数及允许的参数编号；可按关键词筛选",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  },
+                  "query": {
+                    "type": "string",
+                    "description": "可选设备或参数关键词"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/query_production": {
+      "post": {
+        "operationId": "query_production",
+        "summary": "按日期查询当前数据模式的历史产量和小时分布，缺记录不算零",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  },
+                  "from": {
+                    "type": "string",
+                    "description": "必填 YYYY-MM-DD"
+                  },
+                  "to": {
+                    "type": "string",
+                    "description": "必填 YYYY-MM-DD"
+                  }
+                },
+                "required": [
+                  "from",
+                  "to"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/query_logs": {
+      "post": {
+        "operationId": "query_logs",
+        "summary": "当前未恢复告警和近期记录；默认告警日志，可选控制或任务记录；不是完整历史",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "可选 alarm/control/task，默认alarm"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/query_tasks": {
+      "post": {
+        "operationId": "query_tasks",
+        "summary": "当前角色可见的工程任务及其进度",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/query_configuration": {
+      "post": {
+        "operationId": "query_configuration",
+        "summary": "查看当前数据模式与设备连接状态，不提供凭证",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/query_commands": {
+      "post": {
+        "operationId": "query_commands",
+        "summary": "查询当前用户的确认单和执行回读结果",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/propose_change": {
+      "post": {
+        "operationId": "propose_change",
+        "summary": "仅生成待人工确认单，不执行。一次一项，先查当前值；确认后由后端执行并回读",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "description": "parameter | line | data_mode"
+                  },
+                  "controlId": {
+                    "type": "string",
+                    "description": "parameter 时必填查询获得的编号"
+                  },
+                  "value": {
+                    "type": "string",
+                    "description": "参数数字，或 line 的 pause/resume，或 data_mode 的 simulation/real"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "必填变更原因"
+                  }
+                },
+                "required": [
+                  "scope",
+                  "kind",
+                  "value",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/list_skills": {
+      "post": {
+        "operationId": "list_skills",
+        "summary": "列出平台可用技能的名称和用途，由智能体自主选择",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/use_skill": {
+      "post": {
+        "operationId": "use_skill",
+        "summary": "加载技能的说明与允许工具，然后继续调用工具完成目标，不执行控制命令",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "description": "平台请求的scope原样传入；Coze独立预览可留空，只读"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "技能名称，来自 list_skills 或 availableSkills"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "真实查询结果或待确认单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

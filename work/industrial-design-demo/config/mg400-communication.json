@@ -1,0 +1,12 @@
+{
+  "description": "通信默认值；已有设备数据库中的 IP/端口优先。修改后重启，不自动连接。",
+  "host": "192.168.1.6",
+  "dashboardPort": 29999,
+  "feedbackPort": 30004,
+  "motionPort": 30003,
+  "connectTimeoutMs": 3000,
+  "commandTimeoutMs": 3000,
+  "transport": "tcp",
+  "protocol": "dobot-mg400-4axis-20240419",
+  "platformManaged": true
+}

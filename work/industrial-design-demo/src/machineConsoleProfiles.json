@@ -1,0 +1,209 @@
+[
+  {
+    "id": "wash",
+    "title": "清洗输送操作台",
+    "kind": "desk",
+    "color": [
+      0.3,
+      0.47,
+      0.51
+    ],
+    "screen": [
+      1.7,
+      2.0,
+      4.6,
+      2.35
+    ],
+    "deck": [
+      0,
+      -0.9,
+      8.8,
+      2.7
+    ],
+    "material": "brushed-steel"
+  },
+  {
+    "id": "gas",
+    "title": "气体分析控制柜",
+    "kind": "cabinet",
+    "color": [
+      0.32,
+      0.42,
+      0.52
+    ],
+    "screen": [
+      1.2,
+      1.85,
+      4.1,
+      2.6
+    ],
+    "deck": [
+      0,
+      -1.2,
+      7.1,
+      2.7
+    ],
+    "material": "powder-ivory"
+  },
+  {
+    "id": "vision",
+    "title": "视觉检测监视台",
+    "kind": "vision",
+    "color": [
+      0.1,
+      0.17,
+      0.24
+    ],
+    "screen": [
+      1.7,
+      2,
+      4.8,
+      2.6
+    ],
+    "deck": [
+      0,
+      -1.1,
+      9.0,
+      2.7
+    ],
+    "material": "anodized-blue"
+  },
+  {
+    "id": "mix",
+    "title": "配液温控柜",
+    "kind": "cabinet",
+    "color": [
+      0.2,
+      0.38,
+      0.33
+    ],
+    "screen": [
+      1.2,
+      1.85,
+      4.1,
+      2.6
+    ],
+    "deck": [
+      0,
+      -1.2,
+      7.1,
+      2.7
+    ],
+    "material": "satin-steel"
+  },
+  {
+    "id": "fill",
+    "title": "灌装计量操作台",
+    "kind": "desk",
+    "color": [
+      0.57,
+      0.63,
+      0.65
+    ],
+    "screen": [
+      1.7,
+      2.0,
+      4.6,
+      2.35
+    ],
+    "deck": [
+      0,
+      -0.9,
+      8.8,
+      2.7
+    ],
+    "material": "polished-steel"
+  },
+  {
+    "id": "quality",
+    "title": "成品检测监视台",
+    "kind": "vision",
+    "color": [
+      0.25,
+      0.31,
+      0.39
+    ],
+    "screen": [
+      1.7,
+      2,
+      4.8,
+      2.6
+    ],
+    "deck": [
+      0,
+      -1.1,
+      9.0,
+      2.7
+    ],
+    "material": "graphite"
+  },
+  {
+    "id": "pack",
+    "title": "装箱机手持操作器",
+    "kind": "pendant",
+    "color": [
+      0.86,
+      0.57,
+      0.11
+    ],
+    "screen": [
+      1.2,
+      1.9,
+      4.0,
+      2.25
+    ],
+    "deck": [
+      0,
+      -1.05,
+      7.1,
+      2.65
+    ],
+    "material": "polymer"
+  },
+  {
+    "id": "agv",
+    "title": "AGV 车载终端",
+    "kind": "tablet",
+    "color": [
+      0.76,
+      0.3,
+      0.08
+    ],
+    "screen": [
+      1.2,
+      1.8,
+      4.5,
+      2.5
+    ],
+    "deck": [
+      0,
+      -1.2,
+      7.8,
+      2.55
+    ],
+    "material": "coated-steel"
+  },
+  {
+    "id": "warehouse",
+    "title": "仓储调度工作台",
+    "kind": "warehouse",
+    "color": [
+      0.21,
+      0.34,
+      0.48
+    ],
+    "screen": [
+      1.7,
+      2.1,
+      4.6,
+      2.45
+    ],
+    "deck": [
+      0,
+      -1.1,
+      9.0,
+      2.6
+    ],
+    "material": "enamel"
+  }
+]

@@ -1,0 +1,24 @@
+{
+  "scope": "PBR material refit on preserved geometry; no hardware changes",
+  "source_preserved": "../factory_terminals.blend",
+  "editable_copy": "factory_realistic.blend",
+  "exports": 10,
+  "web_motion_tracks": 37,
+  "missing_track_bindings": 0,
+  "device_codes_preserved": 9,
+  "render": "Cycles 24 samples denoised",
+  "browser": "WebGL PBR environment, real-time shadows, selection and shared state",
+  "limitations": [
+    "Realistic industrial visualization, not photographic reconstruction",
+    "Overview image is a static render; telemetry remains in adjacent live indicators",
+    "Physical device position tracking is not connected"
+  ],
+  "checks": [
+    "Production build passed",
+    "11 daily metrics and logistics tests passed",
+    "Desktop light/dark reviewed",
+    "390px mobile and 1024px station layout checked",
+    "Station 2D switch and control preview opened; no command submitted",
+    "Task scheduling and running lanes use original task data"
+  ]
+}

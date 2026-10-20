@@ -1,0 +1,68 @@
+[
+  {
+    "id": "wash",
+    "width": 2.7,
+    "depth": 1.607,
+    "withinFootprint": true
+  },
+  {
+    "id": "gas",
+    "width": 1.8,
+    "depth": 1.123,
+    "withinFootprint": true
+  },
+  {
+    "id": "vision",
+    "width": 1.8,
+    "depth": 1.076,
+    "withinFootprint": true
+  },
+  {
+    "id": "beverage",
+    "width": 2.7,
+    "depth": 1.551,
+    "withinFootprint": true
+  },
+  {
+    "id": "filler",
+    "width": 1.8,
+    "depth": 0.871,
+    "withinFootprint": true
+  },
+  {
+    "id": "secondary",
+    "width": 1.8,
+    "depth": 1.076,
+    "withinFootprint": true
+  },
+  {
+    "id": "robot",
+    "width": 1.8,
+    "depth": 0.689,
+    "withinFootprint": true
+  },
+  {
+    "id": "rack-0",
+    "width": 3.6,
+    "depth": 1.428,
+    "withinFootprint": true
+  },
+  {
+    "id": "rack-1",
+    "width": 3.6,
+    "depth": 1.428,
+    "withinFootprint": true
+  },
+  {
+    "id": "rack-2",
+    "width": 3.6,
+    "depth": 1.428,
+    "withinFootprint": true
+  },
+  {
+    "id": "agv",
+    "width": 1.2,
+    "depth": 0.767,
+    "withinFootprint": true
+  }
+]

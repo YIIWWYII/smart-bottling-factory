@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {alarmRules,classifyAlarm,evaluateAlarms,alarmChanges} from './src/alarmRules.js';
+import {capabilities} from './src/controlCapabilities.js';
+import {stages} from './src/data.js';
+const controls=Object.fromEntries(capabilities.map(c=>[c.id,c.type==='NUMBER'?Number(c.initial):c.initial]));
+const states=stages.map(s=>({value:s.value,target:s.target,mode:'running',source:'simulation',quality:'simulated'}));
+test('each rule covers exact thresholds, normal and invalid readings',()=>{for(const r of alarmRules){for(const [key,level,direction] of [['low','warning','low'],['high','warning','high'],['criticalLow','critical','low'],['criticalHigh','critical','high']])if(r[key]!=null)assert.deepEqual(classifyAlarm(r,r[key]),{level,direction,threshold:r[key]},r.id+key);assert.equal(classifyAlarm(r,NaN),null);}});
+test('defaults are normal and light supports low/high and recovery',()=>{assert.equal(evaluateAlarms({states,controls}).length,0);let prev=[];for(const [v,kind,level] of [[40,'trigger','warning'],[25,'change','critical'],[100,'change','critical'],[70,'clear',null]]){const next=evaluateAlarms({states,controls:{...controls,'VIS-LIGHT-01:lightIntensity':v}});assert.equal(alarmChanges(prev,next)[0]?.kind,kind);assert.equal(next[0]?.level||null,level);assert.equal(alarmChanges(next,next).length,0);prev=next;}});
+test('offline and real readings never use simulation setpoints',()=>{const real=states.map(s=>({...s,source:'real',quality:'live'}));assert.equal(evaluateAlarms({states:real,controls:{...controls,'VIS-LIGHT-01:lightIntensity':20}}).length,0);real[1].value=.8;assert.equal(evaluateAlarms({states:real,controls})[0].level,'critical');real[1].quality='offline';assert.equal(evaluateAlarms({states:real,controls}).length,0);});
+test('fill deviation follows product target; missing is not zero',()=>{const s=structuredClone(states);s[4].target=350;s[4].value=357;assert.equal(evaluateAlarms({states:s,controls})[0].level,'warning');s[4].value=null;assert.equal(evaluateAlarms({states:s,controls}).length,0);});

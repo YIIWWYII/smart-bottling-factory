@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-10-09T11:22:27.997867+00:00",
+  "overall_status": "PASS_WITH_LIMITATIONS",
+  "checks": [
+    {
+      "name": "five facility roots",
+      "result": "pass"
+    },
+    {
+      "name": "empty meshes",
+      "result": "none among 56 scene meshes"
+    },
+    {
+      "name": "protected Cube Camera Light",
+      "result": "present"
+    },
+    {
+      "name": "preview and browser placement",
+      "result": "reviewed"
+    },
+    {
+      "name": "scenario and alarm tests",
+      "result": "7 passed"
+    }
+  ],
+  "thresholds": {},
+  "intentional_exceptions": [],
+  "not_evaluated": [
+    "physical device control",
+    "full manifold topology audit",
+    "thermodynamic simulation"
+  ],
+  "repair_suggestions": []
+}

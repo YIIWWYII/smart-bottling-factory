@@ -1,0 +1,9 @@
+ultralytics==8.3.221
+anomalib==2.2.0
+opencv-python==4.11.0.86
+numpy==2.2.6
+fastapi==0.115.12
+uvicorn==0.34.2
+python-multipart==0.0.20
+pytest==8.3.5
+httpx==0.28.1

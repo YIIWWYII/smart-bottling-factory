@@ -1,0 +1,5 @@
+{
+  "description": "数据接收策略。TCP 主动推送完整反馈帧；解析定义见 mg400-protocol.json。",
+  "mode": "push",
+  "feedbackStaleAfterMs": 1500
+}

@@ -1,0 +1,333 @@
+{
+  "id": "dobot-mg400-4axis-20240419",
+  "description": "MG400 四轴协议；修改不能代替设备协议适配。",
+  "feedback": {
+    "frameBytes": 1440,
+    "byteOrder": "LE",
+    "lengthOffset": 0,
+    "magicOffset": 48,
+    "magic": "0x0123456789abcdef",
+    "fields": [
+      [
+        "message_size",
+        0,
+        "H"
+      ],
+      [
+        "digital_inputs",
+        8,
+        "Q"
+      ],
+      [
+        "digital_outputs",
+        16,
+        "Q"
+      ],
+      [
+        "robot_mode",
+        24,
+        "Q"
+      ],
+      [
+        "timestamp",
+        32,
+        "Q"
+      ],
+      [
+        "test_value",
+        48,
+        "Q"
+      ],
+      [
+        "speed_scaling",
+        64,
+        "d"
+      ],
+      [
+        "v_main",
+        80,
+        "d"
+      ],
+      [
+        "v_robot",
+        88,
+        "d"
+      ],
+      [
+        "i_robot",
+        96,
+        "d"
+      ],
+      [
+        "q_target",
+        192,
+        "6d"
+      ],
+      [
+        "qd_target",
+        240,
+        "6d"
+      ],
+      [
+        "qdd_target",
+        288,
+        "6d"
+      ],
+      [
+        "i_target",
+        336,
+        "6d"
+      ],
+      [
+        "m_target",
+        384,
+        "6d"
+      ],
+      [
+        "q_actual",
+        432,
+        "6d"
+      ],
+      [
+        "qd_actual",
+        480,
+        "6d"
+      ],
+      [
+        "i_actual",
+        528,
+        "6d"
+      ],
+      [
+        "motor_temperatures",
+        864,
+        "6d"
+      ],
+      [
+        "joint_modes",
+        912,
+        "6d"
+      ],
+      [
+        "v_actual",
+        960,
+        "6d"
+      ],
+      [
+        "m_actual",
+        1120,
+        "6d"
+      ],
+      [
+        "tool_vector_actual",
+        624,
+        "6d"
+      ],
+      [
+        "tcp_speed_actual",
+        672,
+        "6d"
+      ],
+      [
+        "tcp_force",
+        720,
+        "6d"
+      ],
+      [
+        "tool_vector_target",
+        768,
+        "6d"
+      ],
+      [
+        "tcp_speed_target",
+        816,
+        "6d"
+      ],
+      [
+        "hand_type",
+        1008,
+        "4B"
+      ],
+      [
+        "user_index",
+        1012,
+        "B"
+      ],
+      [
+        "tool_index",
+        1013,
+        "B"
+      ],
+      [
+        "user_coord",
+        1200,
+        "6d"
+      ],
+      [
+        "tool_coord",
+        1248,
+        "6d"
+      ],
+      [
+        "target_quaternion",
+        1352,
+        "4d"
+      ],
+      [
+        "actual_quaternion",
+        1384,
+        "4d"
+      ],
+      [
+        "run_queued_cmd",
+        1014,
+        "B"
+      ],
+      [
+        "pause_cmd_flag",
+        1015,
+        "B"
+      ],
+      [
+        "trace_index",
+        1296,
+        "d"
+      ],
+      [
+        "velocity_ratio",
+        1016,
+        "B"
+      ],
+      [
+        "acceleration_ratio",
+        1017,
+        "B"
+      ],
+      [
+        "jerk_ratio",
+        1018,
+        "B"
+      ],
+      [
+        "xyz_velocity_ratio",
+        1019,
+        "B"
+      ],
+      [
+        "r_velocity_ratio",
+        1020,
+        "B"
+      ],
+      [
+        "xyz_acceleration_ratio",
+        1021,
+        "B"
+      ],
+      [
+        "r_acceleration_ratio",
+        1022,
+        "B"
+      ],
+      [
+        "xyz_jerk_ratio",
+        1023,
+        "B"
+      ],
+      [
+        "r_jerk_ratio",
+        1024,
+        "B"
+      ],
+      [
+        "brake_status",
+        1025,
+        "B"
+      ],
+      [
+        "enable_status",
+        1026,
+        "B"
+      ],
+      [
+        "drag_status",
+        1027,
+        "B"
+      ],
+      [
+        "running_status",
+        1028,
+        "B"
+      ],
+      [
+        "error_status",
+        1029,
+        "B"
+      ],
+      [
+        "jog_status",
+        1030,
+        "B"
+      ],
+      [
+        "robot_type",
+        1031,
+        "B"
+      ],
+      [
+        "load",
+        1168,
+        "d"
+      ],
+      [
+        "center_x",
+        1176,
+        "d"
+      ],
+      [
+        "center_y",
+        1184,
+        "d"
+      ],
+      [
+        "center_z",
+        1192,
+        "d"
+      ]
+    ]
+  },
+  "commands": {
+    "power": {
+      "template": "PowerOn()"
+    },
+    "enable": {
+      "template": "EnableRobot()"
+    },
+    "disable": {
+      "template": "DisableRobot()"
+    },
+    "clear": {
+      "template": "ClearError()"
+    },
+    "pause": {
+      "template": "PauseScript()"
+    },
+    "resume": {
+      "template": "ContinueScript()"
+    },
+    "stop": {
+      "template": "StopScript()"
+    },
+    "run": {
+      "template": "RunScript({project})",
+      "parameter": "project",
+      "type": "projectName"
+    },
+    "speed": {
+      "template": "SpeedFactor({value})",
+      "parameter": "value",
+      "type": "integer",
+      "min": 1,
+      "max": 100
+    }
+  }
+}

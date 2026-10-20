@@ -1,0 +1,12 @@
+{
+  "architecture": "Exported and loaded in web viewer",
+  "objects": 147,
+  "vertices": 51316,
+  "preserved_original_blend": true,
+  "visual_checks": [
+    "3D environment loaded",
+    "2D zones and blocked mask visible",
+    "legend toggles work"
+  ],
+  "limitation": "Demo map, not a surveyed physical layout"
+}

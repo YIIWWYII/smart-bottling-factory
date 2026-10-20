@@ -1,0 +1,7 @@
+/* Keep engineering navigation independent of document scroll. */
+@media(min-width:761px){
+ .demo-shell .admin-app.engineering-refined{display:block;padding-left:240px}
+ .demo-shell .admin-app.engineering-refined .admin-sidebar{position:fixed;left:0;top:var(--engineering-nav-top,0px);bottom:12px;width:232px;height:calc(100dvh - var(--engineering-nav-top,0px) - 12px);max-height:calc(100dvh - var(--engineering-nav-top,0px) - 12px);z-index:15;overflow-y:auto;overscroll-behavior:contain;box-sizing:border-box}
+}
+.demo-shell .app-wordmark{font-family:inherit;letter-spacing:.02em}
+.demo-shell .ai-launch{white-space:nowrap}

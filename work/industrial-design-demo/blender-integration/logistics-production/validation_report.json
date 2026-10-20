@@ -1,0 +1,18 @@
+{
+  "status": "PASS_WITH_LIMITS",
+  "checks": {
+    "source_materials_reused": true,
+    "source_scene_preserved": true,
+    "all_11_footprints_within_bounds": true,
+    "render_inspected": true,
+    "browser_models_loaded": true,
+    "browser_2d_3d_shared_state": true,
+    "mysql_restart_and_inventory_tests": true
+  },
+  "limits": [
+    "Demonstration coordinates, no site survey",
+    "Single vehicle, no dynamic obstacle sensing",
+    "No physical hardware control",
+    "Blender preview route is static; runtime route belongs to application"
+  ]
+}
