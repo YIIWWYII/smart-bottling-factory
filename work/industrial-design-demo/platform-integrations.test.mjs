@@ -29,6 +29,43 @@ function mock(){
  return {ops,fetcher,context,get writes(){return writes;}};
 }
 const req=(suffix,method='POST',actor='admin')=>({url:'/api/ai/integrations'+suffix,method,headers:{actor}});
+test('camera discovery validates capture contract, builds stream addresses and denies viewers',async()=>{
+ const m=mock();const integration=createIntegrations(m.ops,{fetcher:async url=>({ok:true,json:async()=>url.endsWith('/health')?{contract:'bottleworks-capture-v1'}:{devices:[{id:'0',name:'USB camera'},{id:'../bad',name:'invalid'}]}})});
+ const r=await integration.route(req('/capture-discover'),{baseUrl:'http://localhost:8097'});
+ assert.deepEqual(r.devices,[{id:'0',name:'USB camera',previewUrl:'http://localhost:8097/cameras/0/stream'}]);
+ await assert.rejects(integration.route(req('/capture-discover','POST','viewer'),{baseUrl:'http://localhost:8097'}));
+ const wrong=createIntegrations(m.ops,{fetcher:async()=>({ok:true,json:async()=>({contract:'other'})})});
+ await assert.rejects(wrong.route(req('/capture-discover'),{baseUrl:'http://localhost:8097'}),/不是摄像头/);
+});
+test('global review is retained despite passing individual cameras; incomplete evidence cannot pass',()=>{
+ const r=inspectDemo(input,{version:'demo',rejectCamera:null});
+ assert.equal(validateInspection(input,{...r,verdict:'review',reason:'展开失败'}).verdict,'review');
+ assert.throws(()=>validateInspection(input,{...r,coverageComplete:false}));
+ assert.throws(()=>validateInspection(input,{...r,cap:{status:'review'}}));
+ assert.throws(()=>validateInspection(input,{...r,panoramaUrl:'javascript:alert(1)'}));
+});
+test('external job survives page access, syncs results once and requires advertised capability',async()=>{
+ const m=mock();const routes=[];
+ const i=createIntegrations(m.ops,{fetcher:async(url,options)=>{
+  routes.push(url);const job={jobId:'j1',batchId:'batch1',status:'running'};
+  return {ok:true,json:async()=>url.endsWith('/health')?{contract:'bottleworks-vision-v1',capabilities:['inspection-jobs-v1']}:url.endsWith('/start')?job:url.endsWith('/stop')?{...job,status:'stopped'}:{...job,results:[inspectDemo(input,{version:'demo',rejectCamera:null})]}};
+ }});
+ await i.route(req('/config'),{kind:'vision',mode:'whole-bottle',baseUrl:'http://external',enabled:true,workflowId:'',version:'v1'});
+ await i.route(req('/vision-job'),{action:'start',batchId:'batch1'});
+ assert.equal((await i.route(req('','GET'),{})).visionJob.jobId,'j1');
+ const monitor=await i.route(req('/vision-monitor','GET','viewer'),{});
+ assert.equal(monitor.records.length,1);assert.equal(monitor.records[0].bottleId,'b1');
+ assert.equal(monitor.job.jobId,'j1');assert.ok(!JSON.stringify(monitor).includes('private'));
+ const callsBefore=routes.length;
+ await Promise.all([i.route(req('/vision-monitor','GET','viewer'),{}),i.route(req('/vision-monitor','GET','operator'),{})]);
+ assert.equal(routes.length,callsBefore,'two displays reuse recent synchronization');
+ await assert.rejects(i.route(req('/vision-job'),{action:'start',batchId:'batch1'}),/已有/);
+ await i.route(req('/vision-job'),{action:'status'});await i.route(req('/vision-job'),{action:'status'});
+ assert.equal((await i.route(req('','GET'),{})).records.length,1);
+ assert.equal((await i.route(req('/vision-job'),{action:'stop'})).status,'stopped');
+ const unsupported=createIntegrations(m.ops,{fetcher:async()=>({ok:true,json:async()=>({contract:'bottleworks-vision-v1'})})});
+ await assert.rejects(unsupported.route(req('/vision-job'),{action:'start',batchId:'batch1'}),/尚未提供/);
+});
 test('Coze output contract and request body',async()=>{
  let sent;
  const r=await runCoze({enabled:true,baseUrl:'http://localhost',workflowId:'wf'},{question:'问'},async(u,o)=>{sent=JSON.parse(o.body);return {ok:true,json:async()=>({code:0,data:'{"answer":"答"}'})};});
@@ -93,4 +130,25 @@ test('confirmed assistant outcome carries station, before/after, reason and fail
  const failed=commandLogMeta({...cmd,status:'failed',readback:undefined,result:'写入失败'},capabilities);
  assert.equal(failed.after.changes[0].after,15);assert.equal(failed.after.changes[0].requested,30);
  assert.equal(commandLogMeta({...cmd,kind:'line',controlId:undefined},capabilities).stageIndex,null);
+});
+
+test('vision asset slots persist and reject a mismatched model',async()=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'vision-slots-'));
+ try{
+  const m=mock(),i=createIntegrations(m.ops,{fetcher:m.fetcher,uploadRoot:dir});
+  const model=await i.route(req('/package'),{kind:'vision',slot:'yolo',name:'model.onnx',data:Buffer.from('fixture').toString('base64')});
+  await i.route(req('/vision-assets'),{yolo:model.id});
+  await assert.rejects(i.route(req('/vision-assets'),{patchcore:model.id}));
+  await assert.rejects(i.route(req('/package-folder'),{id:model.id}));
+  assert.equal(model.status,'uploaded');
+  const custom=await i.route(req('/package'),{kind:'vision',slot:'model',name:'custom.onnx',data:Buffer.from('fixture').toString('base64')});
+  const program=await i.route(req('/package'),{kind:'vision',slot:'program',name:'detector.zip',data:Buffer.from('fixture').toString('base64')});
+  const selections={models:[{id:'m1',name:'自选模型',packageId:custom.id},{id:'m2',name:'旧模型',packageId:model.id}],programs:[{id:'p1',name:'检测程序',packageId:program.id}]};
+  await i.route(req('/vision-assets'),selections);
+  assert.deepEqual((await m.ops.getAIConfig()).integrations.vision.assets,selections);
+  await assert.rejects(i.route(req('/vision-assets'),{...selections,models:[{id:'m1',name:'错误类别',packageId:program.id}]}));
+  await assert.rejects(i.route(req('/vision-assets'),{...selections,programs:[{id:'m1',name:'重复标识',packageId:program.id}]}));
+  await i.route(req('/vision-assets'),{models:[],programs:[]});
+  assert.deepEqual((await m.ops.getAIConfig()).integrations.vision.assets,{models:[],programs:[]});
+ }finally{await rm(dir,{recursive:true,force:true});}
 });

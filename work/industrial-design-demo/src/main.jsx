@@ -27,7 +27,7 @@ function App(){
   const {ops,error,refresh}=useTwin();
   const alerts=ops?.alerts||[];
   const [route,setRoute]=useState(getRoute),[toast,setToast]=useState(''),[time,setTime]=useState(new Date().toLocaleTimeString('zh-CN',{hour12:false}));
-  const [colorMode,setColorMode]=useState(()=>localStorage.getItem('bottleworks-color-mode')||'dark');
+  const [colorMode,setColorMode]=useState(()=>localStorage.getItem('bottleworks-color-mode')||'light');
   useEffect(()=>{localStorage.setItem('bottleworks-color-mode',colorMode);},[colorMode]);
   useEffect(()=>{recordEvent('page',({display:'数字展板',station:'工位终端',admin:'管理中心'})[route]);},[route]);
   const previousTheme=useRef(colorMode);useEffect(()=>{if(previousTheme.current!==colorMode)recordEvent('theme',colorMode==='dark'?'黑夜模式':'白昼模式');previousTheme.current=colorMode;},[colorMode]);

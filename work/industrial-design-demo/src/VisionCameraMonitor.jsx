@@ -2,7 +2,8 @@ import {createRenderer,renderingProfile} from './renderingPolicy';
 import {materialTravel} from './materialFlow';
 import {productionProduct} from './productionProduct';
 import {productionBottles} from './productionBottle';
-import ActualCameraFeeds,{CameraSourceSettings} from './ActualCameraFeeds';
+import ActualCameraFeeds from './ActualCameraFeeds';
+import VisionInspectionResults from './VisionInspectionResults';
 import './camera-feeds.css';
 import {useEffect,useRef,useState} from 'react';
 import * as THREE from 'three';
@@ -14,12 +15,12 @@ import {inspectionCameras,cameraPosition,inspectionTarget} from './visionCameras
 export default function VisionCameraMonitor({stageIndex=2}){
  const cameras=inspectionCameras(stageIndex),code=stageIndex===5?'secondary':'vision',finished=stageIndex===5;
  const twin=useTwin(),host=useRef(),live=useRef(),[selected,setSelected]=useState(null),[error,setError]=useState(''),[ready,setReady]=useState(false),[stamp,setStamp]=useState('');
- const [viewMode,setViewMode]=useState('simulation');
+ const [viewMode,setViewMode]=useState('actual');
  const sources=twin.ops?.preferences?.cameraSources||[];
- const allowed=(twin.ops?.user?.roles||[twin.ops?.user?.role]).some(r=>['admin','engineer'].includes(r));
+
  const feed=visionFeed(twin,Date.now(),stageIndex);
  live.current={twin,selected,viewMode};
- useEffect(()=>{let disposed=false,renderer,environment,raf,root,observer,visible=true,last=0,stampAt=0,lastView='',lastFlow=null,bottleModels;const el=host.current;setError('');setReady(false);
+ useEffect(()=>{if(viewMode!=='simulation')return;let disposed=false,renderer,environment,raf,root,observer,visible=true,last=0,stampAt=0,lastView='',lastFlow=null,bottleModels;const el=host.current;setError('');setReady(false);
  const release=()=>root?.traverse(o=>{o.geometry?.dispose();for(const m of Array.isArray(o.material)?o.material:[o.material]){if(!m)continue;for(const v of Object.values(m))if(v?.isTexture)v.dispose();m.dispose();}});
  try{renderer=createRenderer({antialias:true,alpha:false});const gl=renderer.getContext(),debug=gl.getExtension('WEBGL_debug_renderer_info'),software=/Basic Render|SwiftShader|llvmpipe|Software/i.test(debug?gl.getParameter(debug.UNMASKED_RENDERER_WEBGL):'');renderer.setPixelRatio(Math.min(devicePixelRatio,software?1:1.5));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;el.appendChild(renderer.domElement);
  const scene=new THREE.Scene();scene.background=new THREE.Color('#859aa7');
@@ -39,7 +40,7 @@ export default function VisionCameraMonitor({stageIndex=2}){
  observer=new IntersectionObserver(([e])=>visible=e.isIntersecting);observer.observe(el);
  }catch(e){setError('当前浏览器无法显示相机画面');}
  return()=>{disposed=true;cancelAnimationFrame(raf);observer?.disconnect();bottleModels?.dispose();release();environment?.dispose();renderer?.dispose();renderer?.forceContextLoss();renderer?.domElement.remove();};
- },[stageIndex]);
+ },[stageIndex,viewMode]);
  const indices=selected==null?[0,1,2,3]:[selected];
- return <section className="vision-monitor"><header><div><h3>{finished?'成品检测 · 四路相机':'空瓶检测 · 四路相机'}</h3><p>顶部 + 环绕瓶身 0° / 120° / 240° · 数据驱动三维监看 · {feed.source==='protocol'?'协议回读':feed.source==='real'?'真实遥测':'模拟数据'}</p></div><time>{feed.online?stamp:'数据离线'}</time></header><nav aria-label="画面来源"><button aria-pressed={viewMode==='simulation'} onClick={()=>setViewMode('simulation')}>模拟画面</button><button aria-pressed={viewMode==='actual'} onClick={()=>setViewMode('actual')}>实际画面</button></nav><nav aria-label="相机画面选择"><button aria-pressed={selected===null} onClick={()=>setSelected(null)}>四路同屏</button>{cameras.map((c,i)=><button key={c.id} aria-pressed={selected===i} onClick={()=>setSelected(i)}>{c.label}</button>)}</nav>{viewMode==='actual'&&<ActualCameraFeeds cameras={cameras} indices={indices} sources={sources}/>}<div hidden={viewMode!=='simulation'}><div className={'vision-feed '+(selected==null?'quad':'single')}><div className="vision-render" ref={host}/><div className="vision-feed-labels">{indices.map(i=>{const c=cameras[i],paused=feed.cameras[i]==='paused';return <div key={c.id} data-paused={paused}><strong>{c.label}<small>{c.id}</small></strong><span>{!feed.online?'等待有效数据':paused?'相机已暂停':ready?feed.cameras[i]==='unknown'?'三维预览 · 相机状态未回传':'三维监看中':'加载中'}</span><small className="camera-inspection-target">{finished?(i===0?'瓶盖到位 / 封口外观':'灌装液位 / 成品外观'):(i===0?'瓶口 / 口沿完整性':'瓶身 / 污渍 / 裂纹')} · 未接入缺陷识别</small></div>;})}</div>{error&&<p role="alert" className="camera-error">{error}</p>}</div></div><CameraSourceSettings key={stageIndex} cameras={cameras} sources={sources} allowed={allowed} save={items=>twin.mutate('/api/ops/cameras',{items})}/><footer><strong>照明单元：{feed.light===null?'未回传（预览照明）':feed.light+'%'}</strong> · 本工位到料数据驱动模型运动，照明数据同步四个视角。</footer></section>;
+ return <section className="vision-monitor"><header><div><h3>{finished?'成品检测 · 四路相机':'空瓶检测 · 四路相机'}</h3><p>顶部 + 环绕瓶身 0° / 120° / 240° · 数据驱动三维监看 · {feed.source==='protocol'?'协议回读':feed.source==='real'?'真实遥测':'模拟数据'}</p></div><time>{feed.online?stamp:'数据离线'}</time></header><nav aria-label="画面来源"><button aria-pressed={viewMode==='simulation'} onClick={()=>setViewMode('simulation')}>模拟画面</button><button aria-pressed={viewMode==='actual'} onClick={()=>setViewMode('actual')}>实际画面</button></nav><nav aria-label="相机画面选择"><button aria-pressed={selected===null} onClick={()=>setSelected(null)}>四路同屏</button>{cameras.map((c,i)=><button key={c.id} aria-pressed={selected===i} onClick={()=>setSelected(i)}>{c.label}</button>)}</nav>{viewMode==='actual'&&<ActualCameraFeeds cameras={cameras} indices={indices} sources={sources}/>}<div hidden={viewMode!=='simulation'}><div className={'vision-feed '+(selected==null?'quad':'single')}><div className="vision-render" ref={host}/><div className="vision-feed-labels">{indices.map(i=>{const c=cameras[i],paused=feed.cameras[i]==='paused';return <div key={c.id} data-paused={paused}><strong>{c.label}<small>{c.id}</small></strong><span>{!feed.online?'等待有效数据':paused?'相机已暂停':ready?feed.cameras[i]==='unknown'?'三维预览 · 相机状态未回传':'三维监看中':'加载中'}</span><small className="camera-inspection-target">{finished?(i===0?'瓶盖到位 / 封口外观':'灌装液位 / 成品外观'):(i===0?'瓶口 / 口沿完整性':'瓶身 / 污渍 / 裂纹')} · 未接入缺陷识别</small></div>;})}</div>{error&&<p role="alert" className="camera-error">{error}</p>}</div></div><VisionInspectionResults stageIndex={stageIndex}/><footer><strong>照明单元：{feed.light===null?'未回传（预览照明）':feed.light+'%'}</strong> · 本工位到料数据驱动模型运动，照明数据同步四个视角。</footer></section>;
 }

@@ -1,0 +1,15 @@
+import {useEffect,useState} from 'react';
+import {api} from './TwinState';
+import './camera-feeds.css';
+const labels={pass:'通过',review:'待复检',reject:'不合格',missing:'缺图',error:'检测异常'};
+const cameras={'top':'顶部','side-0':'侧面 0°','side-120':'侧面 120°','side-240':'侧面 240°'};
+export default function VisionInspectionResults({stageIndex=2,processedOnly=false}){
+ const [state,setState]=useState(null),[error,setError]=useState('');
+ useEffect(()=>{let alive=true,timer;const controller=new AbortController();
+  const refresh=async()=>{try{if(!document.hidden){const data=await api('/api/ai/integrations/vision-monitor',undefined,controller.signal);if(alive){setState(data);setError('');}}}catch(e){if(alive)setError(e.message);}finally{if(alive)timer=setTimeout(refresh,2500);}};
+  refresh();return()=>{alive=false;clearTimeout(timer);controller.abort();};
+ },[]);
+ const records=(state?.records||[]).filter(r=>(r.stageIndex??2)===stageIndex),r=records[0];
+ if(processedOnly)return <section className="vision-shared-results"><header><h3>本次检测结果</h3><span>{error||state?.error?'同步异常':state?.enabled?'自动同步':'程序未启用'}</span></header>{(error||state?.error)&&<p role="alert">{error||state.error} · 以下为上次结果</p>}<div className="vision-processed-grid">{[['panoramaUrl','瓶身展开图（码区遮罩）'],['overlayUrl','缺陷标注'],['heatmapUrl','异常热力图']].map(([key,title])=><figure key={key}><figcaption>{title}</figcaption>{r?.[key]?<img src={r[key]} alt={title}/>:<p>等待检测程序返回{key==='panoramaUrl'?'已遮罩的展开图':key==='overlayUrl'?'缺陷框图':'热力图'}</p>}</figure>)}</div><article className="vision-result-summary"><h3>综合分析</h3><strong>{!r?'等待检测':({pass:'正常',reject:'异常',review:'待复检',missing:'检测未完成',error:'检测未完成'})[r.verdict]||'检测未完成'}{r?.demo?' · 演示数据':''}</strong>{r&&<><p>瓶号 {r.bottleId} · 批次 {r.batchId} · {r.createdAt?new Date(r.createdAt).toLocaleString():'时间未提供'}</p><p>{r.error||r.reason||'程序未提供判定依据'}</p><p>耗时 {r.durationMs==null?'未提供':r.durationMs+' ms'} · 版本 {r.version||'未提供'}</p></>}</article></section>;
+ return <section className="vision-shared-results"><header><h3>实时识别结果</h3><span>{error||state?.error?'同步异常':state?.enabled?'自动同步':'视觉服务未启用'}</span></header>{(error||state?.error)&&<p role="status">{error||state.error} · 以下保留上次结果</p>}{!r?<p>暂无本工位检测结果，等待外部视觉服务返回。</p>:<><div className="vision-result-summary"><strong>{labels[r.verdict]||'检测失败'}{r.demo?' · 演示数据':''}</strong><span>瓶号 {r.bottleId} · 批次 {r.batchId}</span><time>{r.createdAt?new Date(r.createdAt).toLocaleString():'时间未提供'} · 最近一瓶结果</time></div><p>{r.error||r.reason}</p><p>版本 {r.version||'未提供'} · 端到端耗时 {r.durationMs==null?'未提供':r.durationMs+' ms'}</p><div className="vision-result-cameras">{r.cameras?.map(c=><article key={c.cameraId}><strong>{cameras[c.cameraId]} · {labels[c.status]||c.status}</strong><p>{c.reason}</p>{(c.overlayUrl||c.imageUrl)&&<img src={c.overlayUrl||c.imageUrl} alt={cameras[c.cameraId]+'本次检测图'}/>}{c.heatmapUrl&&<img src={c.heatmapUrl} alt="异常热力图"/>}</article>)}</div>{['body','cap'].map(k=>r[k]&&<p key={k}>{k==='body'?'瓶身':'瓶盖'}：{labels[r[k].status]||'未提供'} · {r[k].reason}</p>)}{r.panoramaUrl&&<figure><img src={r.panoramaUrl} alt="本次瓶身展开图"/><figcaption>本次瓶身展开图</figcaption></figure>}</>}</section>;
+}

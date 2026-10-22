@@ -10,12 +10,13 @@ export function normalizeVisionCameras(rows,base,validateUrl){
  });
 }
 export async function inspectCameraServices(config,input,request){
+ if(config.mode==='whole-bottle')return request(config.baseUrl,'/inspect',config.token,{...input,...(config.assets?{assets:config.assets}:{})});
  if(visionCameraIds.some(id=>!input.images.some(i=>i.cameraId===id))){
   return {requestId:input.requestId,bottleId:input.bottleId,batchId:input.batchId,verdict:'review',demo:false,
    reason:'四机位采集不完整，未调用检测模型',preflight:{passed:false,inferenceSkipped:true},
    cameras:visionCameraIds.map(cameraId=>({cameraId,status:input.images.some(i=>i.cameraId===cameraId)?'review':'missing',reason:'四机位采集不完整，等待补图'}))};
  }
- if(!config.cameras?.length)return request(config.baseUrl,'/inspect',config.token,input);
+ if(!config.cameras?.length)return request(config.baseUrl,'/inspect',config.token,{...input,...(config.assets?{assets:config.assets}:{})});
  const groups=new Map();
  for(const camera of config.cameras){const key=JSON.stringify([camera.baseUrl,camera.modelName]);if(!groups.has(key))groups.set(key,{camera,ids:[]});groups.get(key).ids.push(camera.id);}
  const parts=await Promise.all([...groups.values()].map(async({camera,ids})=>{

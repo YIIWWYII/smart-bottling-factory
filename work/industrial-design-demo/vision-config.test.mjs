@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import {normalizeVisionCameras,inspectCameraServices,visionCameraIds} from './vision-config.mjs';
 const cameras=visionCameraIds.map((id,i)=>({id,baseUrl:i?'http://shared':'http://top',modelName:i?'side':'top',connection:'bottleworks-http'}));
 const input={requestId:'one',bottleId:'b',batchId:'batch',images:visionCameraIds.map(cameraId=>({cameraId,data:'image'}))};
+test('whole bottle service receives all views once and preserves global review and evidence',async()=>{
+ let calls=0;
+ const r=await inspectCameraServices({mode:'whole-bottle',baseUrl:'http://whole',cameras},input,async(url,route,token,body)=>{
+  calls++;assert.equal(url,'http://whole');assert.equal(body.images.length,4);
+  return {...body,verdict:'review',reason:'展开覆盖不足',panoramaUrl:'http://whole/image.jpg',cameras:visionCameraIds.map(cameraId=>({cameraId,status:'pass'}))};
+ });
+ assert.equal(calls,1);assert.equal(r.verdict,'review');assert.equal(r.panoramaUrl,'http://whole/image.jpg');
+});
 
 test('incomplete capture returns review before any service call',async()=>{
  let calls=0;

@@ -4,6 +4,8 @@ import {parseSkillCommand} from './src/assistantSkills.js';
 import {runNativeAgent} from './coze-agent.mjs';
 import {runAgent,createAgentTools} from './assistant-agent.mjs';
 import {randomUUID,createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -51,13 +53,37 @@ export function validateInspection(input,result){
   for(const key of ['imageUrl','heatmapUrl','overlayUrl'])if(c[key]&&!/^https?:\/\//.test(c[key])&&!/^data:image\/(png|jpeg|webp);base64,/.test(c[key]))fail('检测证据图片地址无效。',502);
  }
  const missing=cameraIds.filter(id=>!supplied.includes(id)||!ids.includes(id)||result.cameras.find(c=>c.cameraId===id)?.status==='missing');
- const verdict=result.cameras.some(c=>c.status==='reject')?'reject':missing.length||result.cameras.some(c=>c.status!=='pass')?'review':'pass';
- if(result.verdict!==verdict)fail('整瓶判定不符合四机位规则，未按通过结果入库。',502);
- return {...result,missing,verdict};
+ if(!['pass','review','reject'].includes(result.verdict))fail('整瓶判定无效。',502);
+ if(result.verdict==='pass'&&(missing.length||result.cameras.some(c=>c.status!=='pass')||result.coverageComplete===false||result.modelsReady===false||[result.body,result.cap].some(r=>r&&r.status!=='pass')))fail('整瓶通过结果缺少完整检测依据，未入库。',502);
+ for(const key of ['panoramaUrl','overlayUrl','heatmapUrl'])if(result[key]&&!/^https?:\/\//.test(result[key])&&!/^data:image\/(png|jpeg|webp);base64,/.test(result[key]))fail('检测证据图片地址无效。',502);
+ return {...result,missing};
 }
 
 // Stored alongside the existing AI configuration in MySQL; uploaded files are private.
 export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handoffs'),fetcher=fetch}={}){
+ let monitorPending=null,monitorAt=0,monitorError='';
+ async function monitor(){
+  if(!monitorPending&&Date.now()-monitorAt>2000){
+   monitorPending=exclusive(async()=>{
+    const {state}=await read(),job=state.visionJob,v=state.vision;
+    monitorError='';
+    if(!v.enabled||!job||!['starting','running','stopping'].includes(job.status))return;
+    if(job.baseUrl!==v.baseUrl){monitorError='检测任务的服务地址已变化';return;}
+    try{
+     const response=await requestService(v.baseUrl,'/jobs/'+encodeURIComponent(job.jobId),v.token,undefined,fetcher);
+     if(response.jobId!==job.jobId||response.batchId!==job.batchId||!['starting','running','stopping','stopped','completed','failed'].includes(response.status)||!Array.isArray(response.results))throw Error('视觉任务返回格式或编号不一致');
+     const checked=response.results.map(raw=>{
+      if(raw.batchId!==job.batchId||typeof raw.requestId!=='string'||!raw.requestId||typeof raw.bottleId!=='string'||!raw.bottleId)throw Error('检测记录编号无效');
+      return validateInspection({...raw,images:cameraIds.map(cameraId=>({cameraId}))},raw);
+     });
+     for(const row of checked)if(!state.records.some(r=>r.requestId===row.requestId))state.records.unshift({...row,status:'completed',createdAt:new Date().toISOString(),jobId:job.jobId});
+     state.records=state.records.slice(0,200);state.visionJob={...job,status:response.status};await save(state);
+    }catch(e){monitorError=e.message;}
+   }).finally(()=>{monitorAt=Date.now();monitorPending=null;});
+  }
+  if(monitorPending)await monitorPending;
+  const {state}=await read();return {enabled:!!state.vision.enabled,records:state.records,job:state.visionJob?{jobId:state.visionJob.jobId,status:state.visionJob.status}:null,error:monitorError,checkedAt:monitorAt};
+ }
  let queue=Promise.resolve();
  const exclusive=fn=>{const result=queue.then(fn);queue=result.catch(()=>{});return result;};
  const read=async()=>{const root=await ops.getAIConfig()||{};return {root,state:{coze:{enabled:false},vision:{enabled:false},packages:[],records:[],commands:[],...root.integrations}};};
@@ -99,6 +125,7 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
   const p=req.url.split('?')[0],write=req.method==='POST',user=ops.actor(req);
   if(!p.startsWith('/api/ai/integrations'))return undefined;
   if(!['GET','POST'].includes(req.method))fail('不支持的请求方法。',405);
+  if(p.endsWith('/vision-monitor')&&!write){ops.requireRole(user,['admin','engineer','operator','viewer']);return monitor();}
   if(p.endsWith('/commands')&&!write){const {state}=await read();return state.commands.filter(c=>c.actor===user.id);}
   if(p.endsWith('/command')&&write)return exclusive(async()=>{
    const {state}=await read(),cmd=state.commands?.find(c=>c.id===body.id);
@@ -132,14 +159,33 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    cmd.finishedAt=Date.now();await save(state);await ops.log(user,'AI 建议参数调整结果',`${cmd.title} / ${cmd.reason} / ${cmd.result}`,cmd.status,commandLogMeta(cmd,ctx.capabilities));return cmd;
   });
   ops.requireRole(user,['admin','engineer']);
+  if(p.endsWith('/capture-start')&&write){
+   const base='http://127.0.0.1:8097';
+   const ready=async()=>{try{const r=await fetcher(base+'/health',{signal:AbortSignal.timeout(800)});return r.ok&&(await r.json()).contract==='bottleworks-capture-v1';}catch{return false;}};
+   if(await ready())return {baseUrl:base};
+   let startupError='';
+   const child=spawn(process.env.CAPTURE_PYTHON||'python',[fileURLToPath(new URL('./vision/camera_capture.py',import.meta.url))],{windowsHide:true,stdio:['ignore','ignore','pipe']});
+   child.on('error',e=>{startupError=e.message;});child.stderr.on('data',data=>{startupError=(startupError+data.toString()).slice(-800);});child.unref();
+   for(let i=0;i<12;i++){await new Promise(resolve=>setTimeout(resolve,500));if(await ready())return {baseUrl:base};}
+   fail('采集服务未启动。请确认平台电脑的Python已安装opencv-python，可设置CAPTURE_PYTHON指定环境。'+(startupError.includes('Address already in use')?'端口8097被占用。':''),502);
+  }
+  if(p.endsWith('/capture-discover')&&write){
+   const base=serviceUrl(body.baseUrl);
+   const health=await requestService(base,'/health','',undefined,fetcher);
+   if(health.contract!=='bottleworks-capture-v1')fail('此地址不是摄像头采集服务，请检查端口8097。',502);
+   const data=await requestService(base,'/cameras','',undefined,fetcher);
+   if(!Array.isArray(data.devices))fail('采集服务未返回设备列表。',502);
+   return {devices:data.devices.filter(d=>/^\d{1,2}$/.test(d.id)).map(d=>({id:d.id,name:String(d.name||d.id),previewUrl:base+'/cameras/'+d.id+'/stream'}))};
+  }
   if(p==='/api/ai/integrations'&&!write){const {state}=await read();return publicState(state);}
   if(p.endsWith('/config')&&write)return exclusive(async()=>{
    ops.requireRole(user,['admin']);if(!['coze','vision'].includes(body.kind))fail('未知接入类型。');
    const {state}=await read(),old=state[body.kind]||{},baseUrl=serviceUrl(body.baseUrl);
+   if(body.kind==='vision'&&state.visionJob&&!['stopped','completed','failed'].includes(state.visionJob.status)&&(baseUrl!==old.baseUrl||!body.enabled))fail('请先停止当前视觉任务，再停用或更换服务地址。',409);
    if(typeof body.enabled!=='boolean'||typeof body.workflowId!=='string'||body.workflowId.length>150)fail('配置格式错误。');
    if(body.botId!==undefined&&(typeof body.botId!=='string'||!/^\d{1,30}$|^$/.test(body.botId)))fail('智能体ID格式无效。');
    if(body.kind==='coze'&&body.enabled&&!body.workflowId.trim()&&!body.botId)fail('填写已发布智能体ID。');
-   state[body.kind]={agentName:String(body.agentName||old.agentName||'').slice(0,100),...(body.kind==='vision'?{cameraMode:body.cameraMode==='individual'?'individual':'shared',cameras:body.cameras?normalizeVisionCameras(body.cameras,baseUrl,serviceUrl):old.cameras}:{}),botId:body.kind==='coze'?(body.botId??old.botId??''):'',baseUrl,enabled:body.enabled,workflowId:body.workflowId.trim(),version:String(body.version||'').slice(0,100),token:body.token|| (baseUrl===old.baseUrl?old.token:'')};
+   state[body.kind]={agentName:String(body.agentName||old.agentName||'').slice(0,100),...(body.kind==='vision'?{assets:old.assets||{},mode:body.mode==='whole-bottle'?'whole-bottle':'legacy',cameraMode:body.cameraMode==='individual'?'individual':'shared',cameras:body.cameras?normalizeVisionCameras(body.cameras,baseUrl,serviceUrl):old.cameras}:{}),botId:body.kind==='coze'?(body.botId??old.botId??''):'',baseUrl,enabled:body.enabled,workflowId:body.workflowId.trim(),version:String(body.version||'').slice(0,100),token:body.token|| (baseUrl===old.baseUrl?old.token:'')};
    await save(state);await ops.log(user,'保存'+body.kind+'服务配置','连接尚需测试');return publicState(state);
   });
   if(p.endsWith('/test')&&write){
@@ -149,25 +195,83 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
     if(out.goalStatus==='incomplete')fail(out.answer,502);
     if(out.operation)fail('连接测试返回了写操作建议，未执行。',409);detail=out.answer;
    }else if(body.kind==='vision'){
-    const selected=state.vision.cameras?.find(c=>c.id===body.cameraId);const r=await requestService(selected?.baseUrl||state.vision.baseUrl,'/health',state.vision.token,undefined,fetcher);if(r.status!=='ready'||r.contract!=='bottleworks-vision-v1')fail('视觉服务未就绪或接口契约不匹配。',502);detail=`${r.engine||'视觉服务'} / ${r.version||'未报告版本'} · ${selected?.modelName||'默认模型'} · 仅连接测试，需图像识别验证`;
+    const selected=state.vision.mode==='whole-bottle'?null:state.vision.cameras?.find(c=>c.id===body.cameraId);const r=await requestService(selected?.baseUrl||state.vision.baseUrl,'/health',state.vision.token,undefined,fetcher);if(r.status!=='ready'||r.contract!=='bottleworks-vision-v1')fail('视觉服务未就绪或接口契约不匹配。',502);detail=`${r.engine||'视觉服务'} / ${r.version||'未报告版本'} · ${selected?.modelName||'整瓶检测'} · 仅连接测试，需图像识别验证`;
    }else fail('未知接入类型。');
    await ops.log(user,'服务连接测试',body.kind+' / '+detail);return {ok:true,detail,time:new Date().toISOString()};
   }
+  if(p.endsWith('/package-folder')&&write){
+   ops.requireRole(user,['admin']);
+   if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket?.remoteAddress))fail('请在平台电脑上打开文件夹。',403);
+   const {state}=await read(),item=state.packages.find(x=>x.id===body.id);if(!item)fail('文件不存在。',404);
+   const target=path.join(uploadRoot,item.id);await fs.access(target);
+   if(process.platform!=='win32')fail('当前系统不支持资源管理器。',409);
+   await new Promise((resolve,reject)=>{const child=spawn('explorer.exe',[target],{windowsHide:true});child.once('error',reject);child.once('spawn',resolve);});
+   return {ok:true};
+  }
+  if(p.endsWith('/vision-assets')&&write)return exclusive(async()=>{
+   ops.requireRole(user,['admin']);const {state}=await read();
+   if(state.visionJob&&!['stopped','completed','failed'].includes(state.visionJob.status))fail('先停止检测，再更换模型或程序。',409);
+   const selections={};
+   if(Array.isArray(body.models)&&Array.isArray(body.programs)){
+    const ids=new Set();for(const group of ['models','programs']){
+     if(body[group].length>32)fail('每类最多添加32项。');
+     selections[group]=body[group].map(row=>{
+      if(!row||typeof row.id!=='string'||!row.id||row.id.length>100||ids.has(row.id)||typeof row.name!=='string'||!row.name.trim()||row.name.length>100)fail('请为每项填写名称，且条目标识不能重复。');ids.add(row.id);
+      if(!state.packages.some(p=>p.id===row.packageId&&p.kind==='vision'&&(group==='programs'?p.slot==='program':['model','yolo','patchcore'].includes(p.slot))))fail('请选择对应类别的文件。');
+      return {id:row.id,name:row.name.trim(),packageId:row.packageId};
+     });
+    }
+   }else{
+    for(const slot of ['yolo','patchcore','program']){const id=body[slot]||'';if(id&&!state.packages.some(x=>x.id===id&&x.kind==='vision'&&x.slot===slot))fail('请选择对应槽位的文件。');selections[slot]=id;}
+   }
+   state.vision.assets=selections;await save(state);return {ok:true};
+  });
   if(p.endsWith('/package')&&write)return exclusive(async()=>{
    if(!['coze','vision'].includes(body.kind)||typeof body.name!=='string'||!body.name.trim()||body.name.length>180||typeof body.data!=='string'||!body.data.length||!/^[A-Za-z0-9+/]*={0,2}$/.test(body.data))fail('请选择有效的交付文件。');
    const bytes=Buffer.from(body.data,'base64');if(bytes.length>24*1024*1024)fail('单个交付文件不能超过24MB。',413);
-   const item={id:randomUUID(),kind:body.kind,name:path.basename(body.name),size:bytes.length,version:String(body.version||'未标注').slice(0,100),status:'uploaded',createdAt:new Date().toISOString()};
-   await fs.mkdir(uploadRoot,{recursive:true});await fs.writeFile(path.join(uploadRoot,item.id),bytes);
+   if(body.kind==='vision'&&body.slot!==undefined&&!['model','yolo','patchcore','program'].includes(body.slot))fail('请选择模型或程序槽位。');
+   if(['.','..',''].includes(path.basename(body.name)))fail('文件名无效。');
+   const item={id:randomUUID(),slot:body.slot,kind:body.kind,name:path.basename(body.name),size:bytes.length,version:String(body.version||'未标注').slice(0,100),status:'uploaded',createdAt:new Date().toISOString()};
+   await fs.mkdir(uploadRoot,{recursive:true});await fs.mkdir(path.join(uploadRoot,item.id),{recursive:true});await fs.writeFile(path.join(uploadRoot,item.id,item.name),bytes);
    const {state}=await read();state.packages=[item,...state.packages||[]];await save(state);
    await ops.log(user,'上传交付成果',item.kind+' / '+item.name+'；文件已保存，尚未在服务中加载');return item;
   });
   if(p.endsWith('/activate')&&write)return exclusive(async()=>{
    const {state}=await read(),item=state.packages.find(x=>x.id===body.id);if(!item)fail('交付文件不存在。',404);
    if(item.kind==='coze')fail('Coze 原生工作流请在 Coze Studio 中导入并发布，然后在本页填写工作流标识并测试连接。文件保存不代表已发布。',409);
-   const data=(await fs.readFile(path.join(uploadRoot,item.id))).toString('base64');
-   const camera=state.vision.cameras?.find(c=>c.id===body.cameraId);const r=await requestService(camera?.baseUrl||state.vision.baseUrl,'/packages/load',state.vision.token,{name:item.name,version:item.version,data,modelName:camera?.modelName,cameraId:body.cameraId},fetcher);
+   const file=path.join(uploadRoot,item.id);const data=(await fs.readFile((await fs.stat(file)).isDirectory()?path.join(file,item.name):file)).toString('base64');
+   const camera=state.vision.cameras?.find(c=>c.id===body.cameraId);const r=await requestService(camera?.baseUrl||state.vision.baseUrl,'/packages/load',state.vision.token,{name:item.name,version:item.version,data,modelName:camera?.modelName,cameraId:body.cameraId,slot:item.slot,packageId:item.id},fetcher);
    if(r.status!=='ready'||!r.version)fail('视觉服务未确认模型加载完成。',502);
    item.status='loaded';item.loadedVersion=r.version;state.vision.version=r.version;await save(state);await ops.log(user,'视觉成果加载',item.name+' / '+r.version);return item;
+  });
+  if(p.endsWith('/vision-job')&&write)return exclusive(async()=>{
+   const {state}=await read(),v=state.vision;
+   if(!v.enabled||v.mode!=='whole-bottle')fail('请先保存并启用整瓶视觉服务。',409);
+   if(!['start','status','stop'].includes(body.action))fail('未知检测任务操作。');
+   const health=await requestService(v.baseUrl,'/health',v.token,undefined,fetcher);
+   if(health.contract!=='bottleworks-vision-v1'||!health.capabilities?.includes('inspection-jobs-v1'))fail('外部视觉服务尚未提供连续采集任务接口；仍可上传图片测试。',409);
+   let job=state.visionJob;
+   if(body.action==='start'){
+    if(job&&!['stopped','completed','failed'].includes(job.status))fail('已有检测任务，请先查询或停止。',409);
+    if(typeof body.batchId!=='string'||!body.batchId.trim()||body.batchId.length>120)fail('请填写批次编号。');
+    job=await requestService(v.baseUrl,'/jobs/start',v.token,{requestId:randomUUID(),batchId:body.batchId.trim(),assets:v.assets||{}},fetcher);
+    if(typeof job.jobId!=='string'||!job.jobId||job.batchId!==body.batchId.trim())fail('服务未返回有效任务编号和批次。',502);
+    job={...job,baseUrl:v.baseUrl};
+   }else{
+    if(!job?.jobId)fail('没有已保存的检测任务。',409);
+    if(job.baseUrl!==v.baseUrl)fail('服务地址已变化，请恢复原地址管理原任务。',409);
+    const response=await requestService(v.baseUrl,'/jobs/'+encodeURIComponent(job.jobId)+(body.action==='stop'?'/stop':''),v.token,body.action==='stop'?{}:undefined,fetcher);
+    if(response.jobId!==job.jobId||response.batchId!==job.batchId)fail('返回的任务编号或批次不一致。',502);
+    if(response.results!==undefined&&!Array.isArray(response.results))fail('任务结果格式无效。',502);
+    for(const raw of response.results||[]){
+     if(raw.batchId!==job.batchId||!raw.requestId||!raw.bottleId)fail('任务检测记录缺少编号或批次不一致。',502);
+     const checked=validateInspection({...raw,images:cameraIds.map(cameraId=>({cameraId}))},raw);
+     if(!state.records.some(r=>r.requestId===checked.requestId))state.records.unshift({...checked,status:'completed',createdAt:new Date().toISOString(),jobId:job.jobId});
+    }
+    job={...job,...response,results:undefined};state.records=state.records.slice(0,200);
+   }
+   if(!['running','stopped','completed','failed','starting','stopping'].includes(job.status))fail('服务返回任务状态无效。',502);
+   state.visionJob=job;await save(state);await ops.log(user,'外部视觉任务',body.action+' / '+job.jobId);return job;
   });
   if(p.endsWith('/inspect')&&write){
    const {state}=await read();if(!state.vision.enabled)fail('请先配置并启用视觉服务。',409);
