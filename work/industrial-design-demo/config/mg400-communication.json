@@ -1,5 +1,5 @@
 {
-  "description": "通信默认值；已有设备数据库中的 IP/端口优先。修改后重启，不自动连接。",
+  "description": "MG400 通信配置。platformManaged=true 时，以本文件为准；断开后重新进入配置页或再次连接时读取，保存不会自动连接。",
   "host": "192.168.1.6",
   "dashboardPort": 29999,
   "feedbackPort": 30004,

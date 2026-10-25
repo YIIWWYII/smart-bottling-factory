@@ -2,12 +2,14 @@ import {readSkillConfig} from './skill-config.mjs';
 import {parseSkillCommand,configuredSkills} from './src/assistantSkills.js';
 import http from 'node:http';
 import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {agentTools} from './assistant-agent.mjs';
 
 function readToolToken(){
- const configPath='F:/BottleAI/config/platform-agent.json';
- fs.mkdirSync('F:/BottleAI/config',{recursive:true});
+ const configPath=fileURLToPath(new URL('./config/platform-agent.json',import.meta.url));
+ fs.mkdirSync(path.dirname(configPath),{recursive:true});
  if(!fs.existsSync(configPath))fs.writeFileSync(configPath,JSON.stringify({toolToken:randomBytes(32).toString('hex')}));
  return JSON.parse(fs.readFileSync(configPath,'utf8')).toolToken;
 }
@@ -36,10 +38,11 @@ export function startCozeTools(ops,integrations,{port=8094,token=readToolToken()
     const catalog=readSkillConfig().filter(s=>s.enabled);
     let result;
     if(name==='list_skills')result=catalog.map(({name,description})=>({name,description}));
-    else{const skill=catalog.find(s=>s.name===args.name||s.id===args.name);if(!skill)throw Error('技能不存在或已停用');if(session?.skill&&session.skill.name!==skill.name)throw Error('本次已选定技能，不允许切换以扩大工具权限');if(session)session.skill=skill;result={name:skill.name,instructions:skill.instructions,allowedTools:skill.tools,note:'按说明继续调用工具验证结果；写入仍需人工确认。'};}
+    else{const skill=catalog.find(s=>s.name===args.name||s.id===args.name);if(!skill)throw Error('技能不存在或已停用');if(session?.skill&&session.skill.name!==skill.name)throw Error('本次已选定技能，不允许切换以扩大工具权限');if(session)session.skill=skill;result={name:skill.name,instructions:skill.instructions,allowedTools:skill.tools,requiredTools:skill.requiredTools||[],note:'按说明继续调用工具验证结果；写入仍需人工确认。'};}
     if(session)session.trace.push({tool:name,arguments:args,status:'success',at:new Date().toISOString(),result});
     return send(200,{result:JSON.stringify(result)});
    }
+   if(session?.readOnly&&name==='propose_change')throw Error('自动告警分析仅允许只读查询');
    if(session?.skill&&!session.skill.tools.includes(name))throw Error('当前技能不允许调用此工具');
    if(session?.skill?.name==='参数调整'&&name==='propose_change'&&args.kind!=='parameter')throw Error('参数调整技能只允许数值参数提案');
    if(name==='propose_change'&&session.operation)return send(200,{result:JSON.stringify(session.operation)});
@@ -47,7 +50,10 @@ export function startCozeTools(ops,integrations,{port=8094,token=readToolToken()
    const actorReq=session?.req||{headers:{cookie:'bw_demo_actor=viewer'}};
    const result=await ops.withRequest(actorReq,()=>integrations.agentTool(actorReq,name,args));
    if(session){session.trace.push({tool:name,arguments:args,at:new Date().toISOString(),status:'success',result});if(name==='propose_change')session.operation=result;}
-   send(200,{result:JSON.stringify(result)});
+   // Keep the raw hourly array in the trace for charts; provide explicit time
+   // labels to the model so it does not have to count array positions.
+   const modelResult=name==='query_production'?{...result,rows:result.rows.map(({hourly,...row})=>row)}:result;
+   send(200,{result:JSON.stringify(modelResult)});
   }catch(e){send(400,{error:e.status||e.message?e.message:'Tool failed'});}
  });
  const bridgeKey=Symbol.for('bottle.coze.bridge'),previous=globalThis[bridgeKey];globalThis[bridgeKey]=server;
@@ -56,11 +62,12 @@ export function startCozeTools(ops,integrations,{port=8094,token=readToolToken()
 
 export async function runNativeAgent(config,req,question,context,history,fetcher=fetch){
  const command=parseSkillCommand(question,context,configuredSkills(config.skills));
- const scope=randomBytes(24).toString('hex'),session={req,expires:Date.now()+180000,calls:0,trace:[],operation:null,skill:command?.skill};sessions.set(scope,session);
+ const scope=randomBytes(24).toString('hex'),session={req,expires:Date.now()+180000,calls:0,trace:[],operation:null,skill:command?.skill,readOnly:context.automaticAlarm===true};sessions.set(scope,session);
  const base=config.baseUrl.replace(/\/$/,''),headers={'Content-Type':'application/json',Authorization:'Bearer '+config.token};
  let chat;
  const needsEvidence=!!command||context.selectionLocked||(/(当前|今天|查询|查看|告警|调整|切换|启动|暂停)/.test(question)&&/(工位|产线|设备|VOC|产量|生产|水洗|告警|模式|任务)/i.test(question));
  const requiresLive=command?.skill.name==='生产数据分析'||(/当前|今天|现在|实时|多少|剩余/.test(question)&&/产量|库存|设备|任务|参数|温度|浓度|告警|生产|水洗/.test(question)&&!/是什么|什么意思|含义|口径/.test(question));
+ const missingRequired=()=> (session.skill?.requiredTools||[]).filter(name=>!session.trace.some(t=>t.tool===name&&t.status==='success'));
  const hasLive=()=>session.trace.some(t=>t.status==='success'&&!['search_knowledge','list_skills','use_skill'].includes(t.tool));
  const request=async(path,body)=>{const r=await fetcher(base+path,{method:body?'POST':'GET',headers,...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});const j=await r.json();if(!r.ok||j.code)throw Error('Coze智能体接口未完成：'+(j.msg||r.status));return j;};
  try{
@@ -72,9 +79,9 @@ export async function runNativeAgent(config,req,question,context,history,fetcher
     if(response.ok){selectionKnowledge=await response.json();if(selectionKnowledge.documents?.length)session.trace.push({tool:'search_knowledge',arguments:{query},at:new Date().toISOString(),status:'success',result:selectionKnowledge});}
    }catch{selectionKnowledge={message:'平台说明检索暂不可用，不能据此猜测功能。'};}
   }
-  const userContent=JSON.stringify({question:command?.question||question,...(command?{skill:{name:command.skill.name,instructions:command.skill.instructions,allowedTools:command.skill.tools,toolCalling:'必须直接调用工具并将本次scope原样传入；取得结果后再回答。选中对象的时间范围优先于默认今天。'}}:{}),availableSkills:configuredSkills(config.skills).filter(s=>s.enabled!==false).map(({name,description})=>({name,description})),skillSelection:'根据问题从availableSkills自主选择匹配的技能，先直接调用use_skill工具，参数name填写技能名称、scope原样传入本次scope。收到说明后继续调用允许的工具。不要输出计划或内部推理；一般问题无须技能。',scope,context:{page:context.page,selectionObject:context.selectionObject,selectionKnowledge,answerRules:'选中内容是本平台对象，优先按平台资料解释用途和所在页面。资料仅作说明，查询当前值、产品配方、任务、产量、告警时必须再调用对应实时工具。引用资料标题和版本；没有匹配资料明确缺少什么，不编造功能，不把平台标题一律当成设备型号。修改仍仅生成待人工确认单。',selection:context.selectionLocked?context.target:null,now:new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+'+08:00',timeZone:'Asia/Shanghai'},history:history.slice(-4)});
+  const userContent=JSON.stringify({question:command?.question||question,...(command?{skill:{name:command.skill.name,instructions:command.skill.instructions,allowedTools:command.skill.tools,toolCalling:'必须直接调用工具并将本次scope原样传入；取得结果后再回答。选中对象的时间范围优先于默认今天。'}}:{}),availableSkills:configuredSkills(config.skills).filter(s=>s.enabled!==false).map(({name,description})=>({name,description})),skillSelection:'根据问题从availableSkills自主选择匹配的技能，先直接调用use_skill工具，参数name填写技能名称、scope原样传入本次scope。收到说明后继续调用允许的工具。不要输出计划或内部推理；一般问题无须技能。',scope,context:{page:context.page,automaticAlarm:context.automaticAlarm===true,alarm:context.automaticAlarm===true?context.alarm:undefined,readOnlyRule:context.automaticAlarm===true?'这是平台主动发送的告警事件。仅可查询数据、资料和技能，不能生成提案或执行写入；报告事件时间与数据来源，结束事件与当前告警分开说明。':undefined,selectionObject:context.selectionObject,selectionKnowledge,answerRules:'选中内容是本平台对象，优先按平台资料解释用途和所在页面。资料仅作说明，查询当前值、产品配方、任务、产量、告警时必须再调用对应实时工具。引用资料标题和版本；没有匹配资料明确缺少什么，不编造功能，不把平台标题一律当成设备型号。修改仍仅生成待人工确认单。',selection:context.selectionLocked?context.target:null,now:new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+'+08:00',timeZone:'Asia/Shanghai'},history:command?[]:history.slice(-4)});
   for(let attempt=0;attempt<2;attempt++){
-  const content=attempt===0?userContent:userContent+'\n上次未取得本次查询结果。先根据问题选择可用技能并调用use_skill，已加载则继续调用允许的查询工具，scope必须原样使用上述scope。不要输出内部思考或虚构结果。';
+  const content=attempt===0?userContent:userContent+'\n已完成工具：'+session.trace.filter(t=>t.status==='success').map(t=>t.tool).join('、')+'；尚需完成：'+missingRequired().join('、')+'。请直接调用缺少的工具，不重复已完成项。\n上次未取得完整的本次查询结果。先根据问题选择可用技能并调用use_skill，已加载则继续调用允许的查询工具，scope必须原样使用上述scope。不要输出内部思考或虚构结果。';
   const started=await request('/v3/chat',{bot_id:config.botId,user_id:'platform-'+scope,stream:false,auto_save_history:true,additional_messages:[{role:'user',content,content_type:'text'}]});chat=started.data;
   while(chat.status!=='completed'){
    if(['failed','cancelled','requires_action'].includes(chat.status))throw Error('智能体未完成：'+(chat.last_error?.msg||chat.status));
@@ -83,8 +90,17 @@ export async function runNativeAgent(config,req,question,context,history,fetcher
   }
   const listed=await request('/v3/chat/message/list?conversation_id='+chat.conversation_id+'&chat_id='+chat.id);
   const messages=listed.data||listed.Messages||[];
-  const answer=messages.filter(m=>m.type==='answer'&&m.role==='assistant').map(m=>m.content).join('\n');
-  if(attempt===0&&session.skill&&!session.skill.tools.includes('propose_change')&&(!session.trace.some(t=>!['list_skills','use_skill'].includes(t.tool))||(requiresLive&&!hasLive()))&&!session.operation)continue;
+  let answer=messages.filter(m=>m.type==='answer'&&m.role==='assistant').map(m=>m.content).join('\n');
+  // The workflow publishes its final state as well as its answer. Preserve
+  // an unfinished state even when an earlier tool call returned evidence.
+  let workflowStatus=null;
+  try{const text=answer.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');const output=JSON.parse(text);if(output&&typeof output.answer==='string'&&typeof output.status==='string'){answer=output.answer;workflowStatus=output.status;}}catch{}
+  if(workflowStatus&&workflowStatus!=='completed'){
+   const waiting=workflowStatus==='awaiting_confirmation'&&session.operation;
+   return {answer:answer||'工作流未完成，请查看运行记录。',trace:session.trace,operation:session.operation,goalStatus:waiting?'awaiting_confirmation':workflowStatus==='needs_information'?'needs_information':'incomplete',model:'Coze 自主规划智能体 · Qwen3.5-4B',snapshotAt:context.updated,workflowRunId:chat.id};
+  }
+  if(attempt===0&&session.skill&&(!session.trace.some(t=>!['list_skills','use_skill'].includes(t.tool))||(requiresLive&&!hasLive()))&&!session.operation)continue;
+  if(missingRequired().length){if(attempt===0)continue;throw Error('技能检查尚未完成，缺少：'+missingRequired().join('、'));}
   if(!answer&&attempt===0)continue;
   if(!answer)throw Error('技能查询未完成，智能体没有返回分析结果。请稍后重试。');
   if((needsEvidence||session.skill)&&!session.trace.some(t=>!['list_skills','use_skill'].includes(t.tool)))throw Error('本次没有获得绑定当前请求的工具依据，不能确认平台状态。请重新提问。');

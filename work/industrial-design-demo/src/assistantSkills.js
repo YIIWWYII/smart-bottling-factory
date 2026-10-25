@@ -38,6 +38,7 @@ export function validateSkillSettings(rows){
   for(const [k,max] of [['description',300],['example',200],['instructions',6000]])if(typeof row[k]!=='string'||!row[k].trim()||row[k].length>max)throw Error(k+' 不能为空且最多'+max+'字');
   if(typeof row.enabled!=='boolean'||!Array.isArray(row.tools)||!row.tools.length||row.tools.some(t=>!skillTools.includes(t)))throw Error('启用状态或工具列表无效');
   if(row.id!==undefined&&!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(row.id))throw Error('技能目录名需小写字母、数字和短横线');
-  return {...(row.id?{id:row.id}:{}),name:row.name,description:row.description.trim(),example:row.example.trim(),instructions:row.instructions.trim(),enabled:row.enabled,tools:[...new Set(row.tools)]};
+  if(row.requiredTools!==undefined&&(!Array.isArray(row.requiredTools)||row.requiredTools.some(t=>!row.tools.includes(t)||t==='propose_change')))throw Error('完成检查只能要求已允许的只读工具');
+  return {...(row.id?{id:row.id}:{}),name:row.name,description:row.description.trim(),example:row.example.trim(),instructions:row.instructions.trim(),enabled:row.enabled,tools:[...new Set(row.tools)],requiredTools:[...new Set(row.requiredTools||[])]};
  });
 }

@@ -20,3 +20,6 @@ build-check.log
 .runtime/
 __pycache__/
 *.pyc
+
+config/platform-agent.json
+public/uploads/equipment/

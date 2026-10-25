@@ -1,6 +1,18 @@
 import {bindBlenderMG400} from './mg400Blender.js';
 import * as THREE from 'three';
+import {loadingRobotPlacement} from './builtinPlacements.js';
 export const loadingAssetCode='MG400-TEACH-01';
+// This table is part of the default factory scene, even before a robot GLB is uploaded.
+export function createLoadingTable(root){
+ const group=new THREE.Group();group.name='LoadingRobotTable';root.add(group);
+ const top=new THREE.MeshStandardMaterial({color:0xdce6ec,metalness:.32,roughness:.42});
+ const frame=new THREE.MeshStandardMaterial({color:0x586e7d,metalness:.62,roughness:.35});
+ const {x,y,z}=loadingRobotPlacement;
+ const box=(name,size,position,material)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(...size),material);mesh.name=name;mesh.position.set(...position);mesh.castShadow=true;mesh.receiveShadow=true;mesh.userData.webDevice='wash';group.add(mesh);};
+ box('Loading table surface',[1.2,.07,.85],[x,y-.035,z],top);
+ for(const dx of [-.52,.52])for(const dz of [-.34,.34])box('Loading table leg',[.06,y-.07,.06],[x+dx,(y-.07)/2,z+dz],frame);
+ return group;
+}
 // Authored MG400 cycle: pick at 2s, release at 6.2s. Coordinates in the wash station frame.
 export function createLoadingZone(wash,gltf){
  if(!wash||!gltf)return null;
@@ -38,8 +50,10 @@ export function createLoadingZone(wash,gltf){
  let applyActual=null,mappingError='正在加载 Blender 映射',disposed=false,physicalMode=false;bindBlenderMG400(robot,{hidePayload:false}).then(fn=>{if(!disposed){applyActual=fn;mappingError='';}}).catch(e=>{mappingError=e.message;});
  let elapsed=0;
  return {zone,bottleTargets,update(delta,state,paused,enabled=true,material=null,physical=null){
-  zone.visible=enabled;if(!enabled)return;
-  const usePhysical=!!physical?.config?.host;robot.visible=true;
+  zone.visible=true;
+  robot.visible=enabled;
+  if(!enabled)return;
+  const usePhysical=!!physical?.config?.host;
   if(usePhysical){if(!physicalMode){mixer.stopAllAction();robot.traverse(n=>{if(n.name.replaceAll('.','').startsWith('Authored_Bottle'))n.visible=false;});physicalMode=true;}const valid=applyActual?.(physical);zone.userData.phase=mappingError||(valid?physical.phase:"实机反馈中断 · 姿态保留");zone.userData.motionSource="MG400 实际关节反馈";return;}
   if(physicalMode){action?.reset().play();robot.traverse(n=>{if(n.name.replaceAll('.','').startsWith('Authored_Bottle'))n.visible=true;});physicalMode=false;}
   const online=state?.quality!=='offline'&&state?.source&&(!state.receivedAt||Date.now()-state.receivedAt<10000);

@@ -15,5 +15,5 @@ test('authored MG400 bottle reaches belt, preserves pause and hides disabled ass
  const before=zone.zone.userData.cycleTime;zone.update(.5,state,true);assert.equal(zone.zone.userData.cycleTime,before);
  zone.update(.5,{...state,quality:'offline'},false);assert.equal(zone.zone.userData.cycleTime,before);
  zone.update(.5,state,false);assert.ok(bottle.position.x>.314534);
- zone.update(.1,state,false,false);assert.equal(zone.zone.visible,false);zone.dispose();
+ zone.update(.1,state,false,false);assert.equal(zone.zone.visible,true);assert.equal(zone.zone.getObjectByName('Loading_MG400').visible,false);zone.dispose();
 });

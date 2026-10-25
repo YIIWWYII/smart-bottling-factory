@@ -3,8 +3,9 @@ import {createDownstream} from './downstreamMechanics';
 import {materialStage,materialProgress,materialTravel,preprocessingPhase} from './materialFlow';
 import {productionProduct} from './productionProduct';
 import {productionBottles} from './productionBottle';
-import {createLoadingZone,loadingAssetCode} from './loadingZone';
+import {createLoadingZone,createLoadingTable,loadingAssetCode} from './loadingZone';
 import {createSceneAssets} from './sceneAssets';
+import {isTeachingRobotAsset} from './builtinPlacements';
 import {enableTouchOrbit} from './touchInteraction';
 import {installVisionCameras} from './visionCameras';
 import {linkageInfo} from './safetyScenarios';
@@ -57,7 +58,7 @@ function batchStatic(root,animated){
 export default function BlenderScene({stationFraming=false,device=null,paused=false,onDeviceSelect,compact=false,selected=null,autoFocus=false,deviceStates=null,showMarkers=false,onTwinSelect,sceneAssets=null,editAssetId=null,onAssetSelect,onPlacementChange,transformMode="translate"}){
  const twin=useTwin();
  const mg400State=useRef(null);
- useEffect(()=>{let alive=true,timer;mg400State.current=null;if(twin?.dataMode==='simulation'||(device&&device!=='wash'))return;const poll=async()=>{try{if(!document.hidden){const result=await api('/api/ops/mg400');if(alive)mg400State.current=result;}}catch{if(mg400State.current)mg400State.current={...mg400State.current,online:false,feedback:null};}finally{if(alive)timer=setTimeout(poll,100);}};poll();return()=>{alive=false;clearTimeout(timer);};},[twin?.dataMode,device]);
+ useEffect(()=>{let alive=true,timer;mg400State.current=null;if(device&&device!=='wash')return;const poll=async()=>{try{if(!document.hidden){const result=await api('/api/ops/mg400');if(alive)mg400State.current=result;}}catch{if(mg400State.current)mg400State.current={...mg400State.current,display:{online:false,feedback:null}};}finally{if(alive)timer=setTimeout(poll,250);}};poll();return()=>{alive=false;clearTimeout(timer);};},[device]);
  const markerRefs=useRef([]),linkageRefs=useRef({});
  const activeLinks=(twin?.safetyCases||[]).map(linkageInfo).filter(s=>s&&s.action&&s.phase!=='resolved'&&(!device||deviceCodes[s.stageIndex]===device));
  const host=useRef(),state=useRef({paused,onDeviceSelect}),reset=useRef(()=>{});
@@ -72,11 +73,11 @@ export default function BlenderScene({stationFraming=false,device=null,paused=fa
   let focusGoal=null,lastFocus=null,lastLook=null,viewportFit=null,userMoved=false,dirty=true,lastRender=0,lastState=null;
   const colors={running:0x51dcb8,warning:0xffa447,fault:0xff4f62,stopped:0x7d8b9f};
   setStatus('loading');
-  try{renderer=createRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});}catch{setStatus('error');return;}
+   try{renderer=createRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});}catch{setStatus('error');return;}
   const gl=renderer.getContext(),debug=gl.getExtension("WEBGL_debug_renderer_info");const gpu=debug?gl.getParameter(debug.UNMASKED_RENDERER_WEBGL):"";const softwareGPU=/Basic Render|SwiftShader|llvmpipe|Software/i.test(gpu);el.dataset.gpu=gpu;el.dataset.renderProfile=softwareGPU?"software-balanced":"hardware";
   let pixelRatio=Math.min(Math.max(window.devicePixelRatio||1,1),Math.min(renderingProfile.dpr,softwareGPU?1:2));renderer.setPixelRatio(pixelRatio);el.dataset.pixelRatio=String(pixelRatio);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=device?.95:.85;renderer.shadowMap.enabled=!softwareGPU;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;
   renderer.domElement.setAttribute('aria-label',device?'Blender 设备交互模型':'Blender 完整产线交互模型');el.appendChild(renderer.domElement);
-  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(device?36:38,1,.05,400);
+   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(device?36:38,1,.05,400);
   const coverTarget=new THREE.Vector3();
   const pmrem=new THREE.PMREMGenerator(renderer),room=new RoomEnvironment();environment=pmrem.fromScene(room,.04);scene.environment=environment.texture;scene.environmentIntensity=.75;room.dispose();pmrem.dispose();
   scene.add(new THREE.HemisphereLight(0xf2f6ff,0x647787,device?.65:.65));const sun=new THREE.DirectionalLight(device?0xffe8d3:0xffffff,device?2.2:1.65);sun.position.set(...(device?[8,20,12]:[-6,14,9]));sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-24;sun.shadow.camera.right=24;sun.shadow.camera.top=24;sun.shadow.camera.bottom=-24;sun.shadow.camera.far=80;sun.shadow.normalBias=.035;scene.add(sun);
@@ -96,11 +97,11 @@ export default function BlenderScene({stationFraming=false,device=null,paused=fa
   };
   renderer.domElement.addEventListener('pointerdown',down);renderer.domElement.addEventListener('pointerup',up);
   const contextLost=e=>{e.preventDefault();setStatus('error');};renderer.domElement.addEventListener('webglcontextlost',contextLost);
-  const loadingAsset=state.current.assets.find(a=>a.code===loadingAssetCode&&a.enabled&&a.modelUrl);
-  const loadingModel=loadingAsset&&(!device||device==='wash'||device==='robot')?new GLTFLoader().loadAsync(loadingAsset.modelUrl):Promise.resolve(null);
+   const loadingAsset=state.current.assets.find(a=>a.code===loadingAssetCode&&a.modelUrl);
+   const loadingModel=loadingAsset&&(!device||device==='wash'||device==='robot')?new GLTFLoader().loadAsync(loadingAsset.modelUrl).catch(error=>{console.warn('Optional MG400 model unavailable:',error);return null;}):Promise.resolve(null);
   Promise.all([loadModel(device||'hall'),loadMotion(),loadFacilities(device),loadingModel]).then(([gltf,data,auxiliary,loader])=>{
    if(disposed)return;
-   dirty=true;root=gltf.scene.clone(true);downstream=createDownstream(root,loader);installVisionCameras(root);el.dataset.visionCameraCount=String(root.getObjectByName('Asset_vision')?.children.filter(o=>o.name.startsWith('VisionRig_')).length||0);
+   dirty=true;root=gltf.scene.clone(true);createLoadingTable(root);downstream=createDownstream(root,loader);installVisionCameras(root);el.dataset.visionCameraCount=String(root.getObjectByName('Asset_vision')?.children.filter(o=>o.name.startsWith('VisionRig_')).length||0);
    const equipmentBounds=stationFraming?new THREE.Box3():null;
    if(equipmentBounds){root.updateMatrixWorld(true);root.traverse(o=>{if(!o.isMesh)return;for(let n=o;n;n=n.parent)if(n.name.startsWith('Product_'))return;let visible=true;for(let n=o;n;n=n.parent)if(!n.visible)visible=false;if(visible){o.geometry.computeBoundingBox();equipmentBounds.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));}});}
    facilities=attachFacilities(root,auxiliary);if(equipmentBounds)for(const name of auxiliary.map(a=>a.name))equipmentBounds.expandByObject(root.getObjectByName('Auxiliary_'+name));
@@ -209,8 +210,8 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
    }
    downstream?.update(flow,state.current.logistics,state.current.paused);
    bottleModels?.update(state.current.product);
-   loadingZone?.update(delta,state.current.deviceStates[0],state.current.paused,state.current.assets.some(a=>a.code===loadingAssetCode&&a.enabled),flow?{present:!!flow.loader,progress:materialProgress(flow,flow.loader),running:flow.running}: {present:false,progress:0,running:false},mg400State.current);if(loadingZone){el.dataset.loadingPhase=loadingZone.zone.userData.phase;el.dataset.loadingTime=String(loadingZone.zone.userData.cycleTime);}
-   placedAssets?.update(state.current.assets,state.current.protocol,delta,state.current.paused,state.current.editAssetId,state.current.transformMode,code=>processes(code));
+   loadingZone?.update(delta,state.current.deviceStates[0],state.current.paused,state.current.assets.some(a=>a.code===loadingAssetCode&&a.enabled)&&!state.current.assets.some(a=>isTeachingRobotAsset(a)&&a.code!==loadingAssetCode&&a.stageIndex===0&&a.enabled&&a.modelUrl&&a.placement?.enabled),flow?{present:!!flow.loader,progress:materialProgress(flow,flow.loader),running:flow.running}: {present:false,progress:0,running:false},mg400State.current?.display?.source==='real'?mg400State.current:null);if(loadingZone){el.dataset.loadingPhase=loadingZone.zone.userData.phase;el.dataset.loadingTime=String(loadingZone.zone.userData.cycleTime);}
+   placedAssets?.update(state.current.assets,state.current.protocol,delta,state.current.paused,state.current.editAssetId,state.current.transformMode,code=>processes(code),mg400State.current);
    facilities?.update(delta,state.current.safetyCases);
    alarmIndicators?.update(clock.elapsedTime,state.current.deviceStates.flatMap(s=>s.alarms||[]),window.matchMedia('(prefers-reduced-motion: reduce)').matches,state.current.deviceStates);
    const washState=state.current.deviceStates[0],washFeedback={'PT-WASH-01:washFlow':washState?.measurements?.washFlow??(flow?state.current.controls['PT-WASH-01:washFlow']:0),'PT-AIR-01:airFlow':washState?.measurements?.airFlow??(flow?state.current.controls['PT-AIR-01:airFlow']:0),'PT-WASH-01:runState':washActive?'RUNNING':'PAUSED','PT-AIR-01:runState':washActive?'RUNNING':'PAUSED'};

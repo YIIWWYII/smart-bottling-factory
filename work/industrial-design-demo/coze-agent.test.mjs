@@ -3,6 +3,25 @@ import assert from 'node:assert/strict';
 import {once} from 'node:events';
 import {startCozeTools,runNativeAgent} from './coze-agent.mjs';
 
+test('automatic alarm includes the occurrence and blocks proposals without relying on a chosen skill',async()=>{
+ let writes=0;const server=startCozeTools({withRequest:(_req,fn)=>fn()},{agentTool:async(_req,name)=>{if(name==='propose_change')writes++;return {alarms:[]};}},{port:0,token:'alarm-test'});
+ await once(server,'listening');
+ try{
+  const fetcher=async(url,options)=>{
+   if(url.endsWith('/v3/chat')){
+    const payload=JSON.parse(JSON.parse(options.body).additional_messages[0].content);
+    assert.equal(payload.context.automaticAlarm,true);assert.equal(payload.context.alarm.id,'new-alarm');assert.match(payload.context.readOnlyRule,/不能生成提案/);
+    const call=name=>fetch('http://127.0.0.1:'+server.address().port+'/tools/'+name,{method:'POST',headers:{Authorization:'Bearer alarm-test','Content-Type':'application/json'},body:JSON.stringify({scope:payload.scope,kind:'line',value:'pause'})});
+    assert.equal((await call('propose_change')).status,400);assert.equal((await call('query_logs')).status,200);
+    return {ok:true,json:async()=>({data:{id:'run',conversation_id:'conversation',status:'completed'}})};
+   }
+   return {ok:true,json:async()=>({Messages:[{type:'answer',role:'assistant',content:'已查询告警记录'}]})};
+  };
+  const result=await runNativeAgent({baseUrl:'http://coze',botId:'bot',token:'token'},{headers:{cookie:'bw_demo_actor=viewer'}},'分析当前告警',{automaticAlarm:true,alarm:{id:'new-alarm'}},[],fetcher);
+  assert.equal(writes,0);assert.equal(result.operation,null);assert.equal(result.goalStatus,'completed');
+ }finally{await new Promise(resolve=>server.close(resolve));}
+});
+
 test('native agent tool bridge: authenticated reads, preview cannot write, scoped proposal bound to caller',async()=>{
  let writes=0,actor;
  const server=startCozeTools({withRequest:(req,fn)=>{actor=req.headers.cookie;return fn();}},{agentTool:async(req,name,args)=>{if(name==='propose_change'){writes++;return {id:'proposal',actor:actor,status:'pending',value:args.value};}return {value:0.12};}},{port:0,token:'secret'});
@@ -118,5 +137,25 @@ test('agent autonomously loads a skill and its tool permissions apply to this re
   };
   const result=await runNativeAgent({baseUrl:'http://coze',botId:'bot',token:'token'},{headers:{}},'分析告警',{},[],fetcher);
   assert.equal(result.goalStatus,'completed');assert.deepEqual(result.trace.map(t=>t.tool),['use_skill','query_logs']);
+ }finally{await new Promise(resolve=>server.close(resolve));}
+});
+
+test('workflow final status survives native chat even when an earlier query succeeded',async()=>{
+ const server=startCozeTools({withRequest:(_req,fn)=>fn()},{agentTool:async()=>({alarms:[]})},{port:0,token:'status-test'});
+ await once(server,'listening');
+ try{
+  for(const status of ['incomplete','needs_information','blocked','preview_only','awaiting_confirmation','completed']){
+   const fetcher=async(url,options)=>{
+    if(url.endsWith('/v3/chat')){
+     const payload=JSON.parse(JSON.parse(options.body).additional_messages[0].content);
+     await fetch('http://127.0.0.1:'+server.address().port+'/tools/query_logs',{method:'POST',headers:{Authorization:'Bearer status-test','Content-Type':'application/json'},body:JSON.stringify({scope:payload.scope})});
+     return {ok:true,json:async()=>({data:{id:'run',conversation_id:'conversation',status:'completed'}})};
+    }
+    return {ok:true,json:async()=>({Messages:[{type:'answer',role:'assistant',content:JSON.stringify({status,answer:'本次查询返回正文'})}]})};
+   };
+   const result=await runNativeAgent({baseUrl:'http://coze',botId:'bot',token:'token'},{headers:{}},'分析当前告警',{automaticAlarm:true},[],fetcher);
+   assert.equal(result.goalStatus,status==='completed'?'completed':status==='needs_information'?'needs_information':'incomplete');
+   assert.equal(result.answer,'本次查询返回正文');assert.equal(result.trace[0].tool,'query_logs');assert.equal(result.operation,null);
+  }
  }finally{await new Promise(resolve=>server.close(resolve));}
 });

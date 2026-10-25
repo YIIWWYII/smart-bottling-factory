@@ -1,7 +1,8 @@
 import {loadingAssetCode} from './loadingZone';
+import {bindBlenderMG400} from './mg400Blender.js';
 import {mapDevice} from './course-coding/deviceMapping';
 import {advanceAnimation} from './course-coding/animationLink';
-import {builtinPlacements,isBuiltinAsset} from './builtinPlacements';
+import {builtinPlacements,isBuiltinAsset,isTeachingRobotAsset} from './builtinPlacements';
 import {TransformControls} from 'three/addons/controls/TransformControls.js';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
@@ -19,7 +20,7 @@ export function createSceneAssets(root,device,codes,scene,camera,renderer,orbit,
  transform.addEventListener('objectChange',()=>{if(transform.mode==='scale'&&transform.object){const o=transform.object;const v=Math.max(.001,Math.min(100,o.scale.x));o.scale.setScalar(v);}});
  const release=e=>{if(e.builtin)return;e.model?.removeFromParent();e.mixer?.stopAllAction();e.model?.traverse(o=>{o.geometry?.dispose();for(const m of [o.material].flat().filter(Boolean)){for(const v of Object.values(m))if(v?.isTexture)v.dispose();m.dispose();}});};
  return {
-  update(assets,protocol,delta,paused,editId,mode,canProcess=()=>true){
+  update(assets,protocol,delta,paused,editId,mode,canProcess=()=>true,mg400Status=null){
    if(selected!==editId){selected=editId;focused=null;transform.detach();}
    if(lastMode!==mode){lastMode=mode;transform.setMode(mode||'translate');}transform.showX=mode!=='rotate';transform.showZ=mode==='translate';transform.showY=mode!=='scale';outline.visible=false;
    if(lastAssets!==assets){lastAssets=assets;active=assets.filter(a=>(isBuiltinAsset(a)||(a.enabled&&a.modelUrl&&a.placement?.enabled))&&(!device||codes[a.stageIndex]===device));
@@ -37,11 +38,13 @@ export function createSceneAssets(root,device,codes,scene,camera,renderer,orbit,
       if(disposed||entries.get(a.id)!==e){release(e);return;}
       e.model.name='PlacedAsset_'+a.id;e.model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.userData.webDevice=codes[a.stageIndex];}});
       root.add(e.model);e.mixer=new THREE.AnimationMixer(e.model);e.clips=g.animations;e.actions=g.animations.map(c=>e.mixer.clipAction(c));
+      if(isTeachingRobotAsset(a)&&a.stageIndex===0)bindBlenderMG400(e.model).then(apply=>{if(!disposed&&entries.get(a.id)===e)e.applyMG400=apply;}).catch(error=>{e.error=error.message;});
      },undefined,err=>{e.error=String(err);console.error('场景资产加载失败',a.name,err);});}
     if(!e.model)continue;
     const p=a.placement||builtinPlacements[a.stageIndex];e.model.visible=a.enabled&&p.enabled;if(!e.model.visible&&transform.object===e.model)transform.detach();if(!transform.dragging){e.model.position.set(p.x,p.y,p.z);e.model.rotation.y=THREE.MathUtils.degToRad(p.rotation);e.model.scale.setScalar(e.loading?p.scale/3:p.scale);}
     if(a.id===editId&&e.model.visible){outline.setFromObject(e.model);outline.visible=true;if(transform.object!==e.model)transform.attach(e.model);if(focused!==a.id){focused=a.id;root.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(e.model),center=box.getCenter(new THREE.Vector3()),distance=Math.max(5,box.getSize(new THREE.Vector3()).length()*2);orbit.target.copy(center);camera.position.copy(center).add(new THREE.Vector3(1,.8,1).normalize().multiplyScalar(distance));orbit.update();}}
     if(e.builtin)continue;
+    if(isTeachingRobotAsset(a)&&a.stageIndex===0){e.applyMG400?.(mg400Status?.display);e.model.userData.binding={source:mg400Status?.display?.source||'offline',mappingError:e.error||''};continue;}
     const state=mapDevice(protocol,Date.now(),p);
     const clip=p.animationName||e.clips?.[0]?.name;
     if(e.activeClip!==clip){e.mixer.stopAllAction();const action=e.actions?.find(x=>x.getClip().name===clip);action?.reset().play();e.activeClip=clip;e.clipMissing=!!clip&&!action;}

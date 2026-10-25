@@ -1,10 +1,11 @@
 import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {alarmRules} from './src/alarmRules.js';
 import {capabilities} from './src/controlCapabilities.js';
 import {productDefaults} from './src/product-resources.js';
 import {stages} from './src/data.js';
 
-const root=process.env.BOTTLE_KNOWLEDGE_ROOT||'F:/BottleAI/knowledge';
+const root=process.env.BOTTLE_KNOWLEDGE_ROOT||fileURLToPath(new URL('../../../数据与模型/知识库/表格与索引/',import.meta.url));
 const version='2026-10-19';
 fs.mkdirSync(root,{recursive:true});
 const devices=[...new Set([...capabilities.map(c=>c.device),...stages.map(s=>s.code)])].map(id=>({id,model:id,source:'平台设备编号（未提供厂商型号）',version}));

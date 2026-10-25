@@ -1,5 +1,5 @@
 """Local dual-track retrieval: indexed tables + Chinese embedding search. No device writes."""
-import json, sqlite3, threading
+import json, sqlite3, threading, re, os
 from pathlib import Path
 import numpy as np
 from fastembed import TextEmbedding
@@ -7,9 +7,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import uvicorn
 
-ROOT=Path('F:/BottleAI/knowledge')
+PACKAGE=Path(__file__).resolve().parents[3]
+ROOT=Path(os.environ.get('BOTTLE_KNOWLEDGE_ROOT', str(PACKAGE/'数据与模型/知识库/表格与索引')))
 SOURCE=ROOT/'platform-knowledge.json'
-CACHE=Path('F:/BottleAI/models/embeddings')
+CACHE=Path(os.environ.get('BOTTLE_EMBEDDING_CACHE', str(PACKAGE/'数据与模型/知识库/向量模型缓存')))
 model=TextEmbedding('BAAI/bge-small-zh-v1.5',cache_dir=str(CACHE),local_files_only=True)
 lock=threading.Lock()
 app=FastAPI(title='瓶安双轨知识检索')
@@ -39,6 +40,12 @@ class Query(BaseModel):
 def knowledge(body:Query):
     exact=[]
     with sqlite3.connect(database) as c:
+        # An explicitly written, known device ID also selects the table records.
+        # Ambiguous queries keep the original unfiltered retrieval behavior.
+        if not body.device_model:
+            known=[row[0] for row in c.execute('SELECT DISTINCT model FROM devices') if row[0]]
+            matches=[value for value in known if re.search(r'(?<![A-Za-z0-9_-])'+re.escape(value)+r'(?![A-Za-z0-9_-])',body.query,re.I)]
+            if len(matches)==1:body=body.model_copy(update={'device_model':matches[0]})
         for table in ['devices','alarms','thresholds']:
             conditions=[];values=[]
             if body.device_model:conditions.append('model=?');values.append(body.device_model)
@@ -76,4 +83,4 @@ def support():return 1
 @app.get('/health')
 def health():return {'ok':True,'chunks':len(chunks),'tables':['devices','alarms','thresholds'],'embedding':'BAAI/bge-small-zh-v1.5'}
 
-if __name__=='__main__':uvicorn.run(app,host='0.0.0.0',port=8891)
+if __name__=='__main__':uvicorn.run(app,host=os.environ.get('BOTTLE_KNOWLEDGE_HOST','0.0.0.0'),port=int(os.environ.get('BOTTLE_KNOWLEDGE_PORT','8891')))

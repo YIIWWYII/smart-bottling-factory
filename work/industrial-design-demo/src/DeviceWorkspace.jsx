@@ -2,20 +2,21 @@ import {useEffect,useState} from 'react';
 import {api,useTwin} from './TwinState';
 import {stages} from './data';
 import MG400Panel from './MG400Panel';
+import {isTeachingRobotAsset} from './builtinPlacements';
 import ExhibitModel from './ExhibitModel';
 import './mg400.css';
 
 const modes={dobot:'TCP · Dobot MG400',tcp:'TCP · 自定义协议',modbus:'Modbus TCP',http:'HTTP · 网关上报',mqtt:'MQTT',opcua:'OPC UA'};
 const defaults={tcp:0,modbus:502,http:80,mqtt:1883,opcua:4840};
 function DeviceEditor({asset}){
- const twin=useTwin(),isRobot=asset.code==='MG400-TEACH-01';
+ const twin=useTwin(),isRobot=isTeachingRobotAsset(asset);
  const [links,setLinks]=useState(null),[mode,setMode]=useState(isRobot?'dobot':'http'),[draft,setDraft]=useState(null),[view,setView]=useState('config'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[reading,setReading]=useState(null);
  const allowed=(twin.ops?.user?.roles||[]).some(r=>['admin','engineer'].includes(r));
  const load=async()=>{const result=await api('/api/ops/device-links');const items=result.items.filter(l=>l.deviceId===asset.code);setLinks(items);return items;};
  const choose=(protocol,items=links)=>{setMode(protocol);setReading(null);setMessage('');setDraft(items?.find(l=>l.protocol===protocol)||{deviceId:asset.code,protocol,host:'',port:defaults[protocol]||0,unitId:1,enabled:false,topic:'',nodeId:'',note:''});};
  useEffect(()=>{let active=true;load().then(items=>{if(active)choose(isRobot?'dobot':items[0]?.protocol||'http',items);}).catch(e=>active&&setMessage(e.message));return()=>{active=false;};},[asset.code]);
  const selector=<label className="mg400-ip">连接模式<select disabled={busy||!allowed} value={mode} onChange={e=>choose(e.target.value)}>{Object.entries(modes).filter(([key])=>key!=='dobot'||isRobot).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>;
- if(isRobot&&mode==='dobot')return <MG400Panel configuration connectionSelector={selector}/>;
+ if(isRobot&&mode==='dobot')return <MG400Panel configuration asset={asset}/>;
  const save=async(action)=>{setBusy(true);setMessage('');try{const result=await twin.mutate('/api/ops/device-links',{...draft,action});if(action==='test'){setReading(result);setMessage('读取完成，未下发控制命令');}else{const items=await load();choose(mode,items);setMessage('已保存当前设备的连接配置');}}catch(e){setMessage(e.message);}finally{setBusy(false);}};
  const live=twin.ops?.protocol?.devices?.find(d=>d.id===asset.code),http=twin.ops?.connectionStates?.find(c=>c.deviceId===asset.code),online=mode==='modbus'?twin.ops?.protocol?.enabled&&live?.online:mode==='http'&&links?.some(l=>l.protocol==='http'&&l.enabled)&&http?.status==='live';
  return <section className="mg400-panel"><header><div><h3>{asset.name}</h3><span>{asset.code} · {stages[asset.stageIndex]?.name}</span></div><strong>{online?'数据在线':'未连接 / 待适配'}</strong></header><nav className="mg400-tabs" aria-label="设备工作区"><button aria-pressed={view==='operate'} onClick={()=>setView('operate')}>设备操作</button><button aria-pressed={view==='config'} onClick={()=>setView('config')}>连接配置</button></nav>

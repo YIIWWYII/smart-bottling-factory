@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { providers } from './src/modelProviders.js';
 import { createOperations } from './operations-server.mjs';
+import {createAutomaticAlarmAnalysis} from './automatic-alarms.mjs';
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 export function aiPlugin(env){
  const file=path.resolve('.local-ai.json');let ops,integrations;
@@ -38,7 +39,13 @@ export function aiPlugin(env){
  }catch(e){await ops.holdFailure('自动换品未完成：'+e.message);throw e;}
  };
  let active=0;
- return {name:'local-ai-hub',async configureServer(server){ops=await createOperations(env);integrations=createIntegrations(ops);const toolServer=startCozeTools(ops,integrations);server.httpServer?.once('close',()=>toolServer.close());const timer=setInterval(()=>ops.tick().catch(e=>console.error('MySQL tick failed:',e.code||e.message)),2000);timer.unref();server.httpServer?.once('close',()=>{clearInterval(timer);ops.close().catch(console.error);});
+ return {name:'local-ai-hub',async configureServer(server){ops=await createOperations(env);integrations=createIntegrations(ops);const toolPort=Number(env.COZE_TOOL_PORT||8094);if(!Number.isInteger(toolPort)||toolPort<1024||toolPort>65535)throw Error('COZE_TOOL_PORT must be an integer from 1024 to 65535');const toolServer=startCozeTools(ops,integrations,{port:toolPort});server.httpServer?.once('close',()=>toolServer.close());
+ const alarmEvents=()=>ops.snapshot().states.flatMap(s=>s.alarms||[]);
+ const alarmRequest={headers:{cookie:'bw_demo_actor=viewer','x-client-page':'automatic-alarm'}};
+ const automaticAlarms=createAutomaticAlarmAnalysis({initialEvents:alarmEvents(),analyze:async event=>{
+  active++;try{return await ops.withRequest(alarmRequest,()=>integrations.chat(alarmRequest,'自动告警分析：请核查当前告警与设备数据，并检索适用知识，说明依据、可能原因和人工检查步骤。只查询，不生成调整提案，不执行操作。',{page:'automatic-alarm',automaticAlarm:true,alarm:event,updated:new Date().toISOString(),source:event.dataMode},[]));}finally{active--;}
+ },onResult:row=>ops.log(null,'AI 自动告警分析',`${row.event.id} / ${row.event.time} / ${row.event.title} / ${row.answer.slice(0,700)}`,row.status==='completed'?'成功':'未完成',{category:'ai',source:'automatic-alarm',stageIndex:row.event.stageIndex,alarmEventId:row.event.id,workflowRunId:row.workflowRunId})});
+ const timer=setInterval(async()=>{try{await ops.tick();const c=await read();automaticAlarms.observe(alarmEvents(),c.integrations?.coze?.enabled&&!!c.integrations.coze.botId);if(active<2)void automaticAlarms.process().catch(e=>console.error('Automatic alarm analysis:',e.message));}catch(e){console.error('MySQL tick failed:',e.code||e.message);}},2000);timer.unref();server.httpServer?.once('close',()=>{clearInterval(timer);ops.close().catch(console.error);});
  server.middlewares.use((req,res,next)=>ops.withRequest(req,async()=>{
  if(!req.url?.startsWith('/api/ai/')&&!req.url?.startsWith('/api/ops/'))return next();
  const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(data));};
@@ -61,6 +68,7 @@ export function aiPlugin(env){
  return reply(200,result);
  }
  const c=await read(),user=ops.actor(req);
+ if(req.url==='/api/ai/alarm-analyses'&&req.method==='GET')return reply(200,automaticAlarms.list());
  if(req.url==='/api/ai/skills'&&req.method==='GET')return reply(200,readSkillConfig(c.skills));
  if(req.url==='/api/ai/skills'&&req.method==='POST'){ops.requireRole(user,['admin']);let skills;try{skills=writeSkillConfig(body.skills);}catch(e){fail(e.message);}await ops.log(user,'修改助手技能配置','更新技能启用状态与补充要求');return reply(200,skills);}
  if(req.url==='/api/ai/tools'&&req.method==='GET')return reply(200,nativeToolSchemas.map(t=>({name:t.name,description:t.description,arguments:Object.fromEntries(Object.entries(t.parameters.properties).filter(([k])=>k!=='scope').map(([k,v])=>[k,v.description]))})));

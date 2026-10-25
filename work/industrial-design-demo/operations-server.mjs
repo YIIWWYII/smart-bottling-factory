@@ -2,6 +2,7 @@ import {createManualControl} from './mg400-manual.mjs';
 import {readTestFeedback,stopTest,requestTestSpeed} from './mg400-test-feedback.mjs';
 import {MG400,defaultMG400,validateMG400,applyMG400Files} from './mg400.mjs';
 import {createMG400ConfigStore,mg400Files} from './mg400-config-store.mjs';
+import {loadingRobotPlacement} from './src/builtinPlacements.js';
 import {spawn} from 'node:child_process';
 import {secondaryMetrics,validateStationFeedback} from './src/stationTelemetry.js';
 import {createMaterialFlow,advanceMaterialFlow,materialStage,preprocessingPhase,stationRate} from './src/materialFlow.js';
@@ -57,6 +58,21 @@ export async function createOperations(env=process.env){
  const saveMG400Speed=value=>{const current=mg400Store.read();const motion={...current.values.motion,platform:{...current.values.motion.platform,defaultSpeedPercent:value},liveTest:{...current.values.motion.liveTest,speedFactorPercent:value}};mg400Store.save('motion',motion,current.raw.motion);mg400.config.speed=value;};
  const mg400FileView=()=>{const data=mg400Store.read();if(!mg400.status().connected)mg400.config=applyMG400Files(data.values);return {files:Object.entries(mg400Files).map(([key,name])=>({key,name,path:mg400Store.path(key),content:data.raw[key]})),config:mg400.config};};
  db.dataMode??='simulation';db.realStages??=[];db.profiles??={};
+ // Keep the physical control status unchanged. Only the workstation card receives display data.
+ const mg400DisplayStatus=()=>{
+  const physical=readTestFeedback()||mg400.status();
+  const fallback=db.dataMode==='mixed'&&!physical.online;
+  if(db.dataMode==='real'||(db.dataMode==='mixed'&&physical.online))
+   return {...physical,display:{...physical,source:'real'}};
+
+  const running=db.states[0]?.mode==='running',step=running?Math.sin(db.tick/3):0;
+  return {...physical,display:{
+   source:'simulation',fallback,online:true,receivedAt:Date.now(),phase:running?'模拟运行':'模拟待机',
+   feedback:{robot_mode:running?7:5,speed_scaling:20,error_status:false,digital_outputs:0,
+    tool_vector_actual:[220,0,Math.round(150+step*8),50],
+    q_actual:[0,Math.round(15+step*3),-20,50]}
+  }};
+ };
  for(const c of capabilities)db.controls[c.id]??=c.type==='NUMBER'?Number(c.initial):c.initial;
  db.safetyCases??=[];db.connections??=defaultConnections();db.telemetry??={};db.sourceStates??={};
  db.protocolConnection??={host:'127.0.0.1',port:15020};
@@ -152,7 +168,7 @@ const defaults=[
   if(p.startsWith('/api/ops/mg400')){
    if(write){requireRole(user,['admin','engineer','operator']);if(!canControl(user,0))fail('需要预处理工位操作权限',403);}
    for(const event of mg400.drain())log(null,'MG400 状态',event.detail,event.result,{category:event.result==='告警'?'alarm':'control',stageIndex:0,device:'MG400-TEACH-01'});
-   if(p==='/api/ops/mg400'&&!write)return readTestFeedback()||mg400.status();
+   if(p==='/api/ops/mg400'&&!write)return mg400DisplayStatus();
    if(p==='/api/ops/mg400/test-stop'&&write)return stopTest();
    if(p==='/api/ops/mg400/test-speed'&&write){if(body.confirmed!==true||db.dataMode==='simulation'||db.interlock)fail('请确认真实模式及速度修改');const result=await requestTestSpeed(body.value);saveMG400Speed(body.value);log(user,'MG400 测试改速',String(body.value),'已受理',{stageIndex:0});return result;}
    if(write&&readTestFeedback()&&['connect','prepare','execute','disconnect'].some(action=>p==='/api/ops/mg400/'+action))fail('空载测试正在独占通信，请先停止测试',409);
@@ -398,7 +414,7 @@ const defaults=[
     if(bytes.length<12||bytes.length>20*1024*1024||bytes.toString('ascii',0,4)!=='glTF'||bytes.readUInt32LE(4)!==2||bytes.readUInt32LE(8)!==bytes.length)fail('请上传有效的 GLB 2.0 模型（可包含动画）。');
     const dir=path.resolve('public/uploads/equipment');fs.mkdirSync(dir,{recursive:true});const filename=randomUUID()+'.glb';fs.writeFileSync(path.join(dir,filename),bytes);modelUrl='/uploads/equipment/'+filename;modelName=String(body.modelName||'设备模型.glb').slice(0,150);
    }
-   const imageUrl=body.imageUrl??old?.imageUrl??'';if(typeof imageUrl!=='string'||imageUrl.length>2000000||(imageUrl&&!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$|^\/(?!\/)/.test(imageUrl)))fail('图片请使用 PNG/JPEG/WebP，最大 1.4 MB。');const item={placement:old?.placement,imageUrl,modelUrl,modelName,id:old?.id||randomUUID(),version:(old?.version||0)+1,name:body.name.trim(),code:body.code.trim(),stageIndex:body.stageIndex,enabled:body.enabled!==false,note:String(body.note||'').slice(0,2000),updatedAt:now()};
+   const imageUrl=body.imageUrl??old?.imageUrl??'';if(typeof imageUrl!=='string'||imageUrl.length>2000000||(imageUrl&&!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$|^\/(?!\/)/.test(imageUrl)))fail('图片请使用 PNG/JPEG/WebP，最大 1.4 MB。');const deviceType=old?.deviceType||(body.deviceType==='mg400'?'mg400':'');const item={deviceType,placement:old?.placement||(deviceType==='mg400'&&body.stageIndex===0?{...loadingRobotPlacement}:undefined),imageUrl,modelUrl,modelName,id:old?.id||randomUUID(),version:(old?.version||0)+1,name:body.name.trim(),code:body.code.trim(),stageIndex:body.stageIndex,enabled:body.enabled!==false,note:String(body.note||'').slice(0,2000),updatedAt:now()};
    if(old)db.assets[db.assets.indexOf(old)]=item;else db.assets.push(item);log(user,old?'修改设备资产':'新增设备资产',item.name,'成功',{before:old||null,after:item});return item;
   }
   if(['/api/ops/products','/api/ops/materials'].includes(p)&&write){
@@ -528,7 +544,7 @@ const defaults=[
   if(!Number.isFinite(args.confidence)||args.confidence<db.auto.minConfidence||args.confidence>1)fail('识别置信度不足。',409);
   return standard(user).apply({...args,confirmed:true});
  };
- const route=(req,res,body)=>req.method==='GET'&&new URL(req.url,'http://localhost').pathname==='/api/ops/mg400'?Promise.resolve(readTestFeedback()||mg400.status()):atomic(()=>handleRoute(req,res,body));
+ const route=(req,res,body)=>req.method==='GET'&&new URL(req.url,'http://localhost').pathname==='/api/ops/mg400'?Promise.resolve(mg400DisplayStatus()):atomic(()=>handleRoute(req,res,body));
  const holdFailure=reason=>{if(db.auto.enabled){pause();db.auto.enabled=false;log(null,'自动识别中断',reason+'；已暂停，转人工');for(let i=0;i<stages.length;i++)log(null,'AI 工位暂停',reason+'；已暂停，转人工','成功',{category:'ai',stageIndex:i,after:{execution:'已暂停，转人工'}});}};
  syncThresholdAlarms();save();
  log(null,'服务启动','MySQL 数据库已连接','成功',{source:'system'});

@@ -24,7 +24,7 @@ export function createSkillStore(root,legacyPath){
    if(meta.name!==d.name)throw Error(d.name+' 的 name 与目录名不一致');
    const config=path.join(root,d.name,'agents','platform.yaml');
    const settings=fs.existsSync(config)?YAML.parse(fs.readFileSync(config,'utf8'))||{}:{};
-   return {id:d.name,name:settings.interface?.display_name||meta.name,description:meta.description,instructions,example:settings.interface?.default_prompt||'使用'+(settings.interface?.display_name||meta.name),enabled:settings.enabled!==false,tools:settings.tools||['search_knowledge']};
+   return {id:d.name,name:settings.interface?.display_name||meta.name,description:meta.description,instructions,example:settings.interface?.default_prompt||'使用'+(settings.interface?.display_name||meta.name),enabled:settings.enabled!==false,tools:settings.tools||['search_knowledge'],requiredTools:settings.requiredTools||[]};
   });
   return validateSkillSettings(rows);
  }
@@ -39,7 +39,7 @@ export function createSkillStore(root,legacyPath){
    const config=path.join(dir,'agents','platform.yaml');
    if(fs.existsSync(config))settings=YAML.parse(fs.readFileSync(config,'utf8'))||{};
    fs.writeFileSync(fileFor(s.id),'---\n'+YAML.stringify({...meta,name:s.id,description:s.description})+'---\n\n'+s.instructions+'\n');
-   fs.writeFileSync(config,YAML.stringify({...settings,interface:{...settings.interface,display_name:s.name,default_prompt:s.example},enabled:s.enabled,tools:s.tools}));
+   fs.writeFileSync(config,YAML.stringify({...settings,interface:{...settings.interface,display_name:s.name,default_prompt:s.example},enabled:s.enabled,tools:s.tools,requiredTools:s.requiredTools||[]}));
   }
   for(const d of fs.readdirSync(root,{withFileTypes:true}))if(d.isDirectory()&&!d.name.startsWith('.')&&fs.existsSync(fileFor(d.name))&&!skills.some(s=>s.id===d.name)){
    const archive=path.join(root,'.deleted');fs.mkdirSync(archive,{recursive:true});fs.renameSync(path.join(root,d.name),path.join(archive,d.name+'-'+randomUUID()));

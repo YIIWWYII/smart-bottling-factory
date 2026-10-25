@@ -1,0 +1,64 @@
+.station-app .control-instrument .mg400-status-card {
+    margin: 0 0 16px;
+    padding: 16px 0;
+    color: #eaf1fc;
+    border-bottom: 1px solid #41516b;
+}
+.mg400-status-card header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.mg400-status-card h3 {
+    margin: 0;
+    font-size: 19px;
+    color: #eaf1fc;
+}
+.mg400-status-card small,
+.mg400-status-card footer {
+    color: #a7bdd7;
+    font-size: 12px;
+}
+.mg400-state { margin-left: auto; font-size: 14px; }
+.mg400-state.online { color: #67dbe9; }.mg400-state.simulated { color: #ffca7a; }
+.mg400-state.fault { color: #ff9ca7; }
+.mg400-state.offline { color: #bccbde; }
+.mg400-status-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+}
+.mg400-status-metrics > div {
+    padding: 14px;
+    background: #0c1928;
+    border: 1px solid #465976;
+    border-radius: 8px;
+}
+.mg400-status-metrics > div:last-child {
+    grid-column: 1 / -1;
+}
+.mg400-status-metrics span {
+    display: block;
+    font-size: 13px;
+    color: #bdcde1;
+}
+.mg400-status-metrics strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 22px;
+    color: #b4d8f4;
+}
+.mg400-status-card summary { cursor: pointer; font-size: 14px; }
+.mg400-status-card dl {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+.mg400-status-card dt { color: #bdcde1; font-size: 12px; }
+.mg400-status-card dd { margin: 0; font-size: 15px; }
+.mg400-status-card footer { margin-top: 12px; }
+@media (max-width: 600px) {
+    .mg400-status-metrics { grid-template-columns: 1fr; }
+    .mg400-status-metrics > div:last-child { grid-column: auto; }
+}

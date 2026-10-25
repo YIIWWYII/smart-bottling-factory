@@ -1,4 +1,5 @@
 import {stages} from './src/data.js';
+const beijingTime=value=>Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+'+08:00':null;
 
 // Only these server-owned tools are reachable. The model cannot choose an HTTP route.
 export const agentTools=[
@@ -68,13 +69,13 @@ export function createAgentTools(ops,req,{proposal,commands}){
     const valid=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
     if(!valid(args.from)||!valid(args.to)||args.from>args.to)throw Error('需要有效起止日期 YYYY-MM-DD');
     if(Date.parse(args.to)-Date.parse(args.from)>30*86400000)throw Error('单次最多31天，请分段查询');
-    const data=await get('/api/ops/management'),rows=data.daily.filter(d=>d.day>=args.from&&d.day<=args.to);
+    const data=await get('/api/ops/management'),rows=data.daily.filter(d=>d.day>=args.from&&d.day<=args.to).map(d=>({...d,hourlyRecords:(d.hourly||[]).flatMap((produced,hour)=>produced===null?[]:[{time:String(hour).padStart(2,'0')+':00',produced}])}));
     return {from:args.from,to:args.to,dataMode:ops.snapshot().dataMode,unit:'瓶',recordedDays:rows.length,produced:rows.length?rows.reduce((n,d)=>n+d.produced,0):null,rows,note:'北京时间；只累计已记录增量，未记录不是0，不代表全天完整覆盖；实采产量未接入时不能用模拟值补齐。'};
    }
    case 'query_logs':{
     const category=args.category||'alarm';if(!['alarm','control','task'].includes(category))throw Error('日志类别必须为alarm/control/task');
     const c=await get('/api/ops/context'),logs=await get('/api/ops/logs?limit=12&category='+category),active=c.alerts.filter(a=>!a.done&&!a.resolvedAt);
-    return {activeCount:active.length,alerts:active.slice(0,12).map(a=>({id:a.id,title:a.title,detail:a.detail,time:a.time,stageIndex:a.stageIndex,value:a.value,unit:a.unit,threshold:a.threshold})),logs:{category,total:logs.total,items:logs.items.map(x=>({id:x.id,time:x.time,action:x.action,result:x.result,detail:String(x.detail||'').slice(0,160)}))},coverage:'当前未恢复告警与最多12条历史记录分开；历史事件不是当前故障；未返回全量遥测快照'};
+    return {activeCount:active.length,alerts:active.slice(0,12).map(a=>({id:a.id,title:a.title,detail:a.detail,time:a.time,timeBeijing:beijingTime(a.time),stageIndex:a.stageIndex,value:a.value,unit:a.unit,threshold:a.threshold})),logs:{category,total:logs.total,items:logs.items.map(x=>({id:x.id,time:x.time,timeBeijing:beijingTime(x.time),action:x.action,result:x.result,detail:String(x.detail||'').slice(0,160)}))},coverage:'当前未恢复告警与最多12条历史记录分开；历史事件不是当前故障；未返回全量遥测快照'};
    }
    case 'query_tasks':{const data=await get('/api/ops/tasks');return {total:data.items.length,items:data.items.slice(0,40).map(task),coverage:'当前角色可见任务，最多40条'};}
    case 'query_configuration':{const c=await get('/api/ops/context');return {dataMode:c.dataMode,connections:c.connectionStates?.map(x=>({stageIndex:x.stageIndex,deviceId:x.deviceId,status:x.status})),supportedChanges:['数值参数','整线启动/暂停（仅已接入的模式）','模拟/真实数据模式（管理员）'],unsupported:['数据库账号地址','任意配置代码','未接通的真实设备控制网关']};}
