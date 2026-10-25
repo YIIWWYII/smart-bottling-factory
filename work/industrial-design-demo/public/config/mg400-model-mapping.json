@@ -160,5 +160,106 @@
       ],
       "offsetDeg": 0
     }
+  ],
+  "practiceBindings": [
+    {
+      "target": "P_j1.001",
+      "axis": "y",
+      "weights": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "P_j2.001",
+      "axis": "y",
+      "weights": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "P_j3.001",
+      "axis": "y",
+      "weights": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "P_j3_1.001",
+      "axis": "y",
+      "weights": [
+        0,
+        -1,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "P_j4_1.001",
+      "axis": "y",
+      "weights": [
+        0,
+        0,
+        -1,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "P_j4.001",
+      "axis": "y",
+      "weights": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "P_j2_2.001",
+      "axis": "y",
+      "weights": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "P_j3_2.001",
+      "axis": "y",
+      "weights": [
+        0,
+        -1,
+        0,
+        0
+      ],
+      "offsetDeg": 0
+    },
+    {
+      "target": "P_j4_2.001",
+      "axis": "y",
+      "weights": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "offsetDeg": 0
+    }
   ]
 }

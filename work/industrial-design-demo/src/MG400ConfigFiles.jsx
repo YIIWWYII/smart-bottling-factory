@@ -31,7 +31,7 @@ export default function MG400ConfigFiles({canConfigure,connected,onSaved}){
  if(!canConfigure)return <p>仅管理员和工艺工程师可打开机械臂配置。</p>;
  return <section className="mg400-file-editor">
   <nav aria-label="机械臂配置分类">{Object.entries(labels).map(([id,label])=><button key={id} aria-pressed={key===id} onClick={()=>setKey(id)}>{label}</button>)}</nav>
-  {file&&<div className="mg400-actions"><strong>{file.name}</strong><label className="mg400-upload">上传 JSON 配置文件<input type="file" accept=".json,application/json" disabled={busy||connected} onChange={upload}/></label><button type="button" disabled={busy} onClick={openFolder}>{busy?'正在打开…':'打开所在文件夹'}</button>{key==='trajectories'&&<a href={`${import.meta.env.BASE_URL}trajectory-planner.html`} target="_blank" rel="noreferrer">取放点位生成器</a>}</div>}
+  {file&&<><p>当前已加载：<strong>{file.name}</strong>。平台自带初始配置；上传用于替换当前文件，文件选择框不会回显已保存的文件。</p><div className="mg400-actions"><label className="mg400-upload">上传 JSON 配置文件<input type="file" accept=".json,application/json" disabled={busy||connected} onChange={upload}/></label><button type="button" disabled={busy} onClick={openFolder}>{busy?'正在打开…':'打开所在文件夹'}</button>{key==='trajectories'&&<a href={`${import.meta.env.BASE_URL}trajectory-planner.html`} target="_blank" rel="noreferrer">取放点位生成器</a>}</div></>}
   {connected&&<p>机械臂通信已连接。先断开通信，再上传配置文件。</p>}
   {message&&<p role="alert">{message}</p>}
  </section>;

@@ -70,7 +70,7 @@ export async function createOperations(env=process.env){
    source:'simulation',fallback,online:true,receivedAt:Date.now(),phase:running?'模拟运行':'模拟待机',
    feedback:{robot_mode:running?7:5,speed_scaling:20,error_status:false,digital_outputs:0,
     tool_vector_actual:[220,0,Math.round(150+step*8),50],
-    q_actual:[0,Math.round(15+step*3),-20,50]}
+    q_actual:[Math.round(step*20),Math.round(15+step*12),Math.round(-20+step*8),Math.round(50+step*18)]}
   }};
  };
  for(const c of capabilities)db.controls[c.id]??=c.type==='NUMBER'?Number(c.initial):c.initial;

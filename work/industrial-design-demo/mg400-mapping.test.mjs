@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {bindMG400Mapping} from './src/mg400Mapping.js';
+import {bindBlenderMG400} from './src/mg400Blender.js';
+import {Bone,Group} from 'three';
 const config=JSON.parse(readFileSync(new URL('./public/config/mg400-model-mapping.json',import.meta.url)));
 const targets=()=>Object.fromEntries(['j1','j2','j3','wrist','j4'].map(name=>[name,{rotation:{x:0,y:0,z:0}}]));
 const status=q=>({online:true,receivedAt:1000,feedback:{q_actual:q}});
@@ -29,4 +31,16 @@ test('invalid configuration cannot partially apply',()=>{
  for(const mutate of [c=>c.bindings[0].target='unknown',c=>c.bindings[0].axis='w',c=>c.bindings[0].weights=[1],c=>c.bindings[0].offsetDeg='10',c=>c.bindings.pop(),c=>c.bindings.push(c.bindings[0]),c=>c.version=2]){
   const c=structuredClone(config);mutate(c);assert.throws(()=>bindMG400Mapping(c,targets()),/MG400/);
  }
+});
+
+test('uploaded practice skeleton follows simulated J1 without moving its base',async()=>{
+ const root=new Group(),base=new Group();base.name='base_link';root.add(base);
+ for(const binding of config.practiceBindings){const bone=new Bone();bone.name=binding.target.replaceAll('.','');root.add(bone);}
+ const update=await bindBlenderMG400(root,{config});
+ const j1=root.getObjectByName('P_j1001');
+ root.updateMatrixWorld(true);const before=base.matrixWorld.clone();
+ assert.equal(update({online:true,receivedAt:Date.now(),feedback:{q_actual:[20,25,-15,60]}}),true);
+ root.updateMatrixWorld(true);
+ assert.ok(Math.abs(j1.rotation.y-20*Math.PI/180)<1e-12);
+ assert.ok(base.matrixWorld.equals(before));
 });
