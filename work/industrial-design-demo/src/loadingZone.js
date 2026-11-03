@@ -53,8 +53,8 @@ export function createLoadingZone(wash,gltf){
   zone.visible=true;
   robot.visible=enabled;
   if(!enabled)return;
-  const usePhysical=!!physical?.config?.host;
-  if(usePhysical){if(!physicalMode){mixer.stopAllAction();robot.traverse(n=>{if(n.name.replaceAll('.','').startsWith('Authored_Bottle'))n.visible=false;});physicalMode=true;}const valid=applyActual?.(physical);zone.userData.phase=mappingError||(valid?physical.phase:"实机反馈中断 · 姿态保留");zone.userData.motionSource="MG400 实际关节反馈";return;}
+  const useFeedback=!!physical;
+  if(useFeedback){if(!physicalMode){mixer.stopAllAction();robot.traverse(n=>{if(n.name.replaceAll('.','').startsWith('Authored_Bottle'))n.visible=false;});physicalMode=true;}const valid=applyActual?.(physical);zone.userData.phase=mappingError||(valid?physical.phase:'反馈中断 · 姿态保留');zone.userData.motionSource=physical.source==='simulation'?'MG400 模拟关节数据':'MG400 实际关节反馈';return;}
   if(physicalMode){action?.reset().play();robot.traverse(n=>{if(n.name.replaceAll('.','').startsWith('Authored_Bottle'))n.visible=true;});physicalMode=false;}
   const online=state?.quality!=='offline'&&state?.source&&(!state.receivedAt||Date.now()-state.receivedAt<10000);
   const running=online&&!paused&&['running','warning'].includes(state.mode);

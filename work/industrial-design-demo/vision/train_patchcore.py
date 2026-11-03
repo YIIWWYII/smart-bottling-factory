@@ -11,7 +11,7 @@ from pipeline import make_patchcore, preprocess, tensor_image, CAMERAS
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--normal', required=True, help='Human-confirmed normal training images; no validation/test images')
-    p.add_argument('--camera', choices=CAMERAS, required=True)
+    p.add_argument('--camera', choices=(*CAMERAS, 'single-image'), required=True)
     p.add_argument('--output', required=True)
     p.add_argument('--ratio', type=float, default=.05)
     p.add_argument('--experimental-small-set', action='store_true')
@@ -19,7 +19,8 @@ def main():
     if not 0 < args.ratio <= 1:
         p.error('--ratio must be in (0, 1]')
     root = Path(os.environ.get('VISION_DATA', '/data'))
-    cfg = json.loads((root/'config.json').read_text())['cameras'][args.camera]['preprocess']
+    config = json.loads((root/'config.json').read_text())
+    cfg = (config['singleImage'] if args.camera == 'single-image' else config['cameras'][args.camera])['preprocess']
     files = sorted(x for x in Path(args.normal).iterdir() if x.suffix.lower() in ['.jpg', '.png', '.jpeg'])
     files = list({hashlib.sha256(f.read_bytes()).hexdigest(): f for f in files}.values())
     if len(files) < 5 and not (args.experimental_small_set and len(files) >= 2):

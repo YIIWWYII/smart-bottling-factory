@@ -4,7 +4,10 @@ import fs from 'node:fs/promises';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {createLoadingZone} from './src/loadingZone.js';
-test('authored MG400 bottle reaches belt, preserves pause and hides disabled asset',async()=>{
+import {createMG400Simulation} from './mg400-simulation.mjs';
+test('authored MG400 bottle reaches belt, preserves pause and hides disabled asset',async(t)=>{
+ const mapping=JSON.parse(await fs.readFile('public/config/mg400-model-mapping.json','utf8'));
+ t.mock.method(globalThis,'fetch',async()=>({ok:true,json:async()=>mapping}));
  const bytes=await fs.readFile('public/uploads/equipment/d1adc589-9bff-4065-b7e0-01a4d41b9395.glb');
  const gltf=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
  const wash=new THREE.Group(),zone=createLoadingZone(wash,gltf);
@@ -16,4 +19,34 @@ test('authored MG400 bottle reaches belt, preserves pause and hides disabled ass
  zone.update(.5,{...state,quality:'offline'},false);assert.equal(zone.zone.userData.cycleTime,before);
  zone.update(.5,state,false);assert.ok(bottle.position.x>.314534);
  zone.update(.1,state,false,false);assert.equal(zone.zone.visible,true);assert.equal(zone.zone.getObjectByName('Loading_MG400').visible,false);zone.dispose();
+});
+test('loading scene applies simulated and real joint feedback to the imported GLB',async(t)=>{
+ const mapping=JSON.parse(await fs.readFile('public/config/mg400-model-mapping.json','utf8'));
+ t.mock.method(globalThis,'fetch',async()=>({ok:true,json:async()=>mapping}));
+ const bytes=await fs.readFile('public/uploads/equipment/d1adc589-9bff-4065-b7e0-01a4d41b9395.glb');
+ const gltf=await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+ const wash=new THREE.Group(),zone=createLoadingZone(wash,gltf);
+ t.after(()=>zone.dispose());
+ await new Promise(resolve=>setImmediate(resolve));
+ const joint=gltf.scene.getObjectByName('A_j1001')||gltf.scene.getObjectByName('A_j1.001');
+ assert.ok(joint);
+ const basePosition=gltf.scene.position.clone(),baseRotation=gltf.scene.quaternion.clone();
+ const state={mode:'running',quality:'simulated',source:'simulation'},sim=createMG400Simulation();
+ const physical={online:false,connected:false,feedback:null};
+ const start=Date.now()-1000;
+ zone.update(.1,state,false,true,null,sim.status('mixed',physical,state,false,start).display);
+ const before=joint.rotation.y;
+ zone.update(.1,state,false,true,null,sim.status('mixed',physical,state,false,start+1000).display);
+ assert.notEqual(joint.rotation.y,before);
+ assert.equal(zone.zone.userData.motionSource,'MG400 模拟关节数据');
+ const live={online:true,receivedAt:Date.now(),phase:'实机运行',feedback:{q_actual:[30,20,10,40]}};
+ zone.update(.1,state,false,true,null,sim.status('mixed',live,state).display);
+ assert.ok(Math.abs(joint.rotation.y-Math.PI/6)<1e-12);
+ assert.equal(zone.zone.userData.motionSource,'MG400 实际关节反馈');
+ assert.ok(gltf.scene.position.equals(basePosition));
+ assert.ok(gltf.scene.quaternion.equals(baseRotation));
+ const actualPose=joint.rotation.y;
+ zone.update(.1,state,false,true,null,sim.status('real',physical,state).display);
+ assert.equal(joint.rotation.y,actualPose);
+ assert.equal(zone.zone.userData.phase,'反馈中断 · 姿态保留');
 });

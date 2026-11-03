@@ -27,3 +27,11 @@ test('missing historical records return null, not zero; invalid dates rejected',
  await assert.rejects(run('query_production',{from:'2026-02-31',to:'2026-10-18'}));
  await assert.rejects(run('query_tasks',{url:'/api/ops/control'}));
 });
+
+test('production hours carry explicit Beijing labels and preserve recorded zero',async()=>{
+ const hourly=Array(24).fill(null);hourly[9]=0;hourly[17]=72;
+ const run=createAgentTools({route:async()=>({daily:[{day:'2026-10-22',produced:72,hourly}]}),snapshot:()=>({dataMode:'simulation'})},{headers:{}},{});
+ const r=await run('query_production',{from:'2026-10-22',to:'2026-10-22'});
+ assert.deepEqual(r.rows[0].hourlyRecords,[{time:'09:00',produced:0},{time:'17:00',produced:72}]);
+ assert.equal(r.rows[0].hourly[10],null);
+});

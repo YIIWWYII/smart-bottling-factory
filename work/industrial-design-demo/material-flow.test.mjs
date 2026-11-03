@@ -1,9 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createMaterialFlow,advanceMaterialFlow,materialStage,materialProgress,materialTravel,gasInspectionCapacity,stationRate,preprocessingPhase} from './src/materialFlow.js';
+import {createMaterialFlow,advanceMaterialFlow,materialStage,materialProgress,materialTravel,gasInspectionCapacity,stationRate,preprocessingPhase,simulatedMaterialStages} from './src/materialFlow.js';
 const task=(plan=12)=>({id:'test',plan,done:0});
 const options={running:true,bottles:1000,liquid:1000,volume:.5,packSize:12};
 const count=f=>(f.loader?.count||0)+f.stages.flat().reduce((n,t)=>n+t.count,0)+f.completed;
+
+test('mixed fallback completes a carton and retains positions through pause and resume',()=>{
+ const states=Array.from({length:9},()=>({source:'simulation'})),mask=simulatedMaterialStages('mixed',states);
+ assert.deepEqual(mask,Array(9).fill(true));
+ const f=createMaterialFlow(task(2)),mixed={...options,packSize:2,simulatedStages:mask};
+ advanceMaterialFlow(f,{...mixed,seconds:20});assert.ok(f.stages[0].length);
+ const before=JSON.stringify([f.loader,f.stages,f.elapsed,f.prep]);
+ advanceMaterialFlow(f,{...mixed,seconds:40,running:false});assert.equal(JSON.stringify([f.loader,f.stages,f.elapsed,f.prep]),before);
+ for(let i=0;i<500&&f.completed<2;i++)advanceMaterialFlow(f,mixed);
+ assert.equal(f.completed,2);assert.equal(count(f),f.issued);
+});
+
+test('real feedback freezes its simulated tokens and blocks synthetic handoffs',()=>{
+ const states=Array.from({length:9},()=>({source:'simulation'}));states[1].source='real';
+ const f=createMaterialFlow(task()),mask=simulatedMaterialStages('mixed',states);
+ advanceMaterialFlow(f,{...options,simulatedStages:mask,seconds:60});
+ assert.equal(f.stages[0].length,1);assert.equal(f.stages[1].length,0);assert.equal(f.stages[2].length,0);
+ const elapsed=f.stages[0][0].elapsed;states[0].source='real';
+ const realMask=simulatedMaterialStages('mixed',states);
+ advanceMaterialFlow(f,{...options,simulatedStages:realMask,seconds:20});
+ assert.equal(f.stages[0][0].elapsed,elapsed);assert.equal(materialStage(f,0).phase,'unknown');
+ assert.equal(materialProgress(f,f.stages[0][0],Date.now()+2000),elapsed/f.stages[0][0].duration);
+ const physical=createMaterialFlow(task());advanceMaterialFlow(physical,{...options,simulatedStages:simulatedMaterialStages('real',states),seconds:60});
+ assert.equal(physical.issued,0);assert.equal(physical.prep,0);
+});
 test('empty start, physical ordering and conservation through a complete carton',()=>{
  const f=createMaterialFlow(task());assert.equal(count(f),0);assert.equal(materialStage(f,4).processing,false);
  advanceMaterialFlow(f,{...options,seconds:2});assert.ok(f.loader);assert.ok(f.stages.every(q=>q.length===0));assert.equal(f.completed,0);

@@ -101,7 +101,7 @@ export default function BlenderScene({stationFraming=false,device=null,paused=fa
    const loadingModel=loadingAsset&&(!device||device==='wash'||device==='robot')?new GLTFLoader().loadAsync(loadingAsset.modelUrl).catch(error=>{console.warn('Optional MG400 model unavailable:',error);return null;}):Promise.resolve(null);
   Promise.all([loadModel(device||'hall'),loadMotion(),loadFacilities(device),loadingModel]).then(([gltf,data,auxiliary,loader])=>{
    if(disposed)return;
-   dirty=true;root=gltf.scene.clone(true);createLoadingTable(root);downstream=createDownstream(root,loader);installVisionCameras(root);el.dataset.visionCameraCount=String(root.getObjectByName('Asset_vision')?.children.filter(o=>o.name.startsWith('VisionRig_')).length||0);
+   dirty=true;root=gltf.scene.clone(true);if(!device||device==='wash')createLoadingTable(root);downstream=createDownstream(root,loader);installVisionCameras(root);el.dataset.visionCameraCount=String(root.getObjectByName('Asset_vision')?.children.filter(o=>o.name.startsWith('VisionRig_')).length||0);
    const equipmentBounds=stationFraming?new THREE.Box3():null;
    if(equipmentBounds){root.updateMatrixWorld(true);root.traverse(o=>{if(!o.isMesh)return;for(let n=o;n;n=n.parent)if(n.name.startsWith('Product_'))return;let visible=true;for(let n=o;n;n=n.parent)if(!n.visible)visible=false;if(visible){o.geometry.computeBoundingBox();equipmentBounds.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));}});}
    facilities=attachFacilities(root,auxiliary);if(equipmentBounds)for(const name of auxiliary.map(a=>a.name))equipmentBounds.expandByObject(root.getObjectByName('Auxiliary_'+name));
@@ -153,8 +153,8 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
    root.traverse(o=>{if(!o.isMesh||!o.userData.webDevice||Array.isArray(o.material))return;const old=o.material;const m=old.clone();m.onBeforeCompile=old.onBeforeCompile;m.customProgramCacheKey=old.customProgramCacheKey;materials.add(m);o.material=m;deviceMeshes.push({mesh:o,material:m,base:m.color.clone(),emission:m.emissive.clone(),code:o.userData.webDevice});});
    const selectionBox=new THREE.Box3Helper(new THREE.Box3(),0x6badff);selectionBox.visible=false;scene.add(selectionBox);geometries.add(selectionBox.geometry);materials.add(selectionBox.material);
    root.userData.selectionBox=selectionBox;
-   const fit=()=>{if(!device){camera.zoom=1;const angle=THREE.MathUtils.degToRad(camera.fov/2);const distance=Math.max(30,16/Math.tan(angle)/Math.min(camera.aspect,1.8));camera.position.copy(coverTarget).add(new THREE.Vector3(12,20,29).normalize().multiplyScalar(distance));controls.target.copy(coverTarget);camera.updateProjectionMatrix();controls.update();return;}if(stationFraming){
-    const direction=new THREE.Vector3(.25,.22,1.8).normalize();
+   const fit=()=>{if(!device){camera.zoom=1;const direction=new THREE.Vector3(12,20,29).normalize();camera.position.copy(direction);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);const rotation=camera.quaternion.clone().invert(),tanY=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));let distance=0;for(const x of [-1,1])for(const y of [-1,1])for(const z of [-1,1]){const corner=new THREE.Vector3(x*extent.x/2,y*extent.y/2,z*extent.z/2).applyQuaternion(rotation);distance=Math.max(distance,corner.z+Math.abs(corner.x)/(tanY*camera.aspect*.96),corner.z+Math.abs(corner.y)/(tanY*.96));}camera.position.copy(coverTarget).add(direction.multiplyScalar(distance));controls.target.copy(coverTarget);camera.updateProjectionMatrix();controls.update();return;}if(stationFraming){
+    const direction=new THREE.Vector3(.1,.14,1.8).normalize();
     camera.position.copy(direction);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);
     const framingCenter=equipmentBounds.getCenter(new THREE.Vector3()).sub(center);
     const rotation=camera.quaternion.clone().invert(),tanY=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
@@ -172,21 +172,21 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
    const changed=lastState?.deviceStates!==snapshot.deviceStates||lastState?.controls!==snapshot.controls||lastState?.assets!==snapshot.assets||lastState?.selected!==snapshot.selected||lastState?.paused!==snapshot.paused||lastState?.editAssetId!==snapshot.editAssetId||lastState?.transformMode!==snapshot.transformMode;
    lastState=snapshot;if(changed){dirty=true;renderer.shadowMap.needsUpdate=true;}
    const liveWash=snapshot.deviceStates[0],washPhase=liveWash?.washPhase??(snapshot.materialFlow?(liveWash?.measurements?.washFlow>0?'rinse':liveWash?.measurements?.airFlow>0?'air':preprocessingPhase(snapshot.materialFlow,snapshot.controls)):'waiting'),washActive=liveWash?.quality!=='offline'&&liveWash?.mode==='running'&&['rinse','air'].includes(washPhase)&&((liveWash.measurements?.washFlow||0)>0||(liveWash.measurements?.airFlow||0)>0);
-   const moving=!!mg400State.current?.online||!snapshot.paused&&(snapshot.deviceStates.some((s,i)=>(!device||deviceCodes[i]===device)&&stationCanAnimate(s,false))||(!device||device==='wash')&&washActive);
+   const moving=!!mg400State.current?.display?.online||!snapshot.paused&&(snapshot.deviceStates.some((s,i)=>(!device||deviceCodes[i]===device)&&stationCanAnimate(s,false))||(!device||device==='wash')&&washActive);
    const effects=snapshot.safetyCases.some(c=>c.phase!=='resolved')||snapshot.deviceStates.some(s=>s.alarms?.length);
    controls.update();
    if(!dirty&&!moving&&!effects&&!focusGoal&&clock.elapsedTime-lastRender<.25)return;
-   const flow=snapshot.materialFlow;const processes=code=>{const index=deviceCodes.indexOf(code);return flow?materialStage(flow,index).processing:state.current.deviceStates[index]?.material?.processing===true;};
+   const flow=snapshot.materialFlow;const processes=code=>{const index=deviceCodes.indexOf(code);return flow&&flow.simulatedStages?.[index]!==false?materialStage(flow,index).processing:state.current.deviceStates[index]?.material?.processing===true;};
    const frameElapsed=clock.elapsedTime-lastRender,delta=Math.min(frameElapsed,.1);lastRender=clock.elapsedTime;dirty=false;frames++;frameMs+=frameElapsed;for(const {code,action} of actions){const mode=state.current.deviceStates?.[deviceCodes.indexOf(code)]?.mode;action.paused=!processes(code)||!stationCanAnimate(state.current.deviceStates?.[deviceCodes.indexOf(code)],state.current.paused);action.timeScale=mechanismRate(code,state.current.controls);
-    if(flow){const index=deviceCodes.indexOf(code),token=flow.stages[index]?.[0];action.paused=true;
+    if(flow&&flow.simulatedStages?.[deviceCodes.indexOf(code)]!==false){const index=deviceCodes.indexOf(code),token=flow.stages[index]?.[0];action.paused=true;
      const progress=index===3?flow.prep/flow.prepDuration:token?Math.max(0,Math.min(1,(materialProgress(flow,token)*token.duration-2)/Math.max(1,token.duration-4))):0;
      action.time=Math.min(action.getClip().duration-.001,progress*action.getClip().duration);
     }}
-   if(flow)mixer?.update(0);if(!state.current.paused){if(!flow)mixer?.update(delta);for(const u of beltUniforms){const mode=state.current.deviceStates?.[deviceCodes.indexOf(u.code)]?.mode;if(stationCanAnimate(state.current.deviceStates?.[deviceCodes.indexOf(u.code)]))u.value+=delta*mechanismRate(u.code,state.current.controls);}}
+   mixer?.update(state.current.paused?0:delta);if(!state.current.paused){for(const u of beltUniforms){const mode=state.current.deviceStates?.[deviceCodes.indexOf(u.code)]?.mode;if(stationCanAnimate(state.current.deviceStates?.[deviceCodes.indexOf(u.code)]))u.value+=delta*mechanismRate(u.code,state.current.controls);}}
    const used=new Map();
    for(const product of products){
     const index=deviceCodes.indexOf(product.code),slot=used.get(index)||0;used.set(index,slot+1);
-    const token=flow?.stages[index]?.[slot];product.object.visible=!!token&&!['robot','agv','warehouse'].includes(product.code);
+    const token=flow?.stages[index]?.[slot];product.object.visible=!!token&&flow.simulatedStages?.[index]!==false&&!['robot','agv','warehouse'].includes(product.code);
     if(!token)continue;
     const progress=materialTravel(flow,token);product.object.position.fromArray(sampleMaterialPass(product.track,progress));if(index===1)product.object.position.x+=(slot-1.5)*.28;product.object.scale.copy(product.baseScale);
     product.object.userData.productTwin={...product.object.userData.productTwin,id:token.id,name:state.current.product?.name||'在制物料',count:token.count};
@@ -210,7 +210,7 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
    }
    downstream?.update(flow,state.current.logistics,state.current.paused);
    bottleModels?.update(state.current.product);
-   loadingZone?.update(delta,state.current.deviceStates[0],state.current.paused,state.current.assets.some(a=>a.code===loadingAssetCode&&a.enabled)&&!state.current.assets.some(a=>isTeachingRobotAsset(a)&&a.code!==loadingAssetCode&&a.stageIndex===0&&a.enabled&&a.modelUrl&&a.placement?.enabled),flow?{present:!!flow.loader,progress:materialProgress(flow,flow.loader),running:flow.running}: {present:false,progress:0,running:false},mg400State.current?.display?.source==='real'?mg400State.current:null);if(loadingZone){el.dataset.loadingPhase=loadingZone.zone.userData.phase;el.dataset.loadingTime=String(loadingZone.zone.userData.cycleTime);}
+   loadingZone?.update(delta,state.current.deviceStates[0],state.current.paused,state.current.assets.some(a=>a.code===loadingAssetCode&&a.enabled)&&!state.current.assets.some(a=>isTeachingRobotAsset(a)&&a.code!==loadingAssetCode&&a.stageIndex===0&&a.enabled&&a.modelUrl&&a.placement?.enabled),flow?{present:!!flow.loader,progress:materialProgress(flow,flow.loader),running:flow.running}: {present:false,progress:0,running:false},mg400State.current?.display);if(loadingZone){el.dataset.loadingPhase=loadingZone.zone.userData.phase;el.dataset.loadingTime=String(loadingZone.zone.userData.cycleTime);}
    placedAssets?.update(state.current.assets,state.current.protocol,delta,state.current.paused,state.current.editAssetId,state.current.transformMode,code=>processes(code),mg400State.current);
    facilities?.update(delta,state.current.safetyCases);
    alarmIndicators?.update(clock.elapsedTime,state.current.deviceStates.flatMap(s=>s.alarms||[]),window.matchMedia('(prefers-reduced-motion: reduce)').matches,state.current.deviceStates);
@@ -226,6 +226,6 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
   {status!=='ready'&&<div className="model-loading" role="status">{status==='loading'?<><span className="model-spinner"/>正在加载 {device?'设备':'产线'}模型</>:<>模型加载失败<button onClick={()=>setRetry(v=>v+1)}>重新加载</button></>}</div>}
   <div className="model-controls"><button onClick={()=>reset.current()} aria-label="复位模型视角" title="复位视角"><RotateCcw size={17}/></button>{!device&&<button onClick={()=>setRunning(v=>!v)} aria-label={running?'暂停产线动画':'恢复产线动画'}>{running?<Pause size={17}/>:<Play size={17}/>}</button>}</div>
   {deviceStates.some((s,i)=>(!device||deviceCodes[i]===device)&&s.alarms?.length>0)&&<details className="model-alarm-panel" open={!!device}><summary>设备告警 · {deviceStates.filter((s,i)=>!device||deviceCodes[i]===device).reduce((n,s)=>n+(s.alarms?.length||0),0)} 项</summary><div>{deviceStates.flatMap((s,i)=>(!device||deviceCodes[i]===device)?(s.alarms||[]):[]).map(a=><article key={a.id} data-level={a.level}><strong>{a.level==='critical'?'严重':'预警'} · {a.title}</strong><span>{a.metric}：{a.value} {a.unit} / {a.direction==='low'?'≤':'≥'} {a.threshold} {a.unit}</span><small>{a.dataSource==='protocol'?'协议仿真回读':a.source==='setting'?'模拟设定值':a.dataSource==='real'?'真实遥测':'模拟读数'} · {a.advice}</small></article>)}</div></details>}
-  {activeLinks.map(s=><div key={s.id} ref={e=>linkageRefs.current[s.id]=e} className="model-linkage-label"><strong>{s.target}</strong><span>{s.sourceName} → {s.phase==='awaiting-reset'?'保护保持':'联动已触发'}</span><small>原因：{s.reason}</small><small>结果：{s.outcome}（模拟）</small></div>)}<span className="model-caption">设备现场 · {device==='warehouse'?'移载入库 · 库位库存同步':paused||!running?'动画暂停':'状态驱动示意'}<small>拖动旋转 · 滚轮缩放 · 点击瓶体查看在制品</small></span>
+  {activeLinks.map(s=><div key={s.id} ref={e=>linkageRefs.current[s.id]=e} className="model-linkage-label"><strong>{s.target}</strong><span>{s.sourceName} → {s.phase==='awaiting-reset'?'保护保持':'联动已触发'}</span><small>原因：{s.reason}</small><small>结果：{s.outcome}（模拟）</small></div>)}{!stationFraming&&<span className="model-caption">{device==='warehouse'?'移载入库 · 库位同步':paused||!running?'动画暂停':'状态驱动示意'}<small>拖动旋转 · 滚轮缩放 · 点击瓶体查看在制品</small></span>}
  </div>;
 }

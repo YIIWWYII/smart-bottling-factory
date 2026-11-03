@@ -159,3 +159,29 @@ test('workflow final status survives native chat even when an earlier query succ
   }
  }finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('skill completion retries missing reads and rejects an incomplete result',async()=>{
+ const skill={name:'设备接入检查',description:'test',example:'test',instructions:'检查配置与读数',enabled:true,tools:['query_configuration','query_devices'],requiredTools:['query_configuration','query_devices']};
+ const server=startCozeTools({withRequest:(_req,fn)=>fn()},{agentTool:async()=>({dataMode:'simulation'})},{port:0,token:'secret'});
+ await once(server,'listening');
+ try{
+  for(const finish of [true,false]){
+   let requests=0;
+   const fetcher=async(url,options)=>{
+    if(url.endsWith('/v3/chat')){
+     const content=JSON.parse(options.body).additional_messages[0].content;
+     const payload=JSON.parse(content.split('\n')[0]);
+     const name=requests++===0?'query_configuration':finish?'query_devices':null;
+     if(name)await fetch('http://127.0.0.1:'+server.address().port+'/tools/'+name,{method:'POST',headers:{Authorization:'Bearer secret','Content-Type':'application/json'},body:JSON.stringify({scope:payload.scope})});
+     if(requests===2)assert.match(content,/尚需完成：query_devices/);
+     return {ok:true,json:async()=>({data:{id:'run',conversation_id:'conversation',status:'completed'}})};
+    }
+    return {ok:true,json:async()=>({Messages:[{type:'answer',role:'assistant',content:'检查完成'}]})};
+   };
+   const result=await runNativeAgent({baseUrl:'http://coze',botId:'bot',token:'token',skills:[skill]},{headers:{}},'/设备接入检查',{},[],fetcher);
+   assert.equal(requests,2);
+   assert.equal(result.goalStatus,finish?'completed':'incomplete');
+   if(!finish)assert.match(result.answer,/缺少：query_devices/);
+  }
+ }finally{await new Promise(resolve=>server.close(resolve));}
+});
