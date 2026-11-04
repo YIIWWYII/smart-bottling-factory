@@ -5,7 +5,7 @@ import { Theme } from '../common/Theme'
 @Component
 struct Index {
   aboutToAppear(): void {
-    router.replaceUrl({ url: 'pages/Workstation' })
+    router.replaceUrl({ url: 'pages/Platform' })
   }
 
   build() {

@@ -8,8 +8,8 @@ import acquisition from './config/mg400-acquisition.json' with {type:'json'};
 
 if(communication.transport!=='tcp'||communication.protocol!==protocol.id||protocol.id!=='dobot-mg400-4axis-20240419')throw Error('不支持的通信方式或设备协议');
 if(acquisition.mode!=='push')throw Error('MG400 反馈仅支持主动推送');
-if(!net.isIP(communication.host))throw Error('通信配置 IP 无效');
-for(const key of ['dashboardPort','feedbackPort','motionPort'])if(!Number.isInteger(communication[key])||communication[key]<1||communication[key]>65535)throw Error(`通信端口无效：${key}`);
+const blankEndpoint=!communication.host&&['dashboardPort','feedbackPort','motionPort'].every(key=>communication[key]===null||communication[key]==='');
+if(!blankEndpoint&&(!net.isIP(communication.host)||!['dashboardPort','feedbackPort','motionPort'].every(key=>Number.isInteger(communication[key])&&communication[key]>=1&&communication[key]<=65535)))throw Error('通信配置须全部留空，或填写有效 IP 和全部端口');
 for(const value of [communication.connectTimeoutMs,communication.commandTimeoutMs,acquisition.feedbackStaleAfterMs])if(!Number.isInteger(value)||value<100||value>60000)throw Error('超时时间须为 100–60000 ms');
 const {frameBytes,lengthOffset,magicOffset,magic,fields:layout}=protocol.feedback;
 if(frameBytes!==1440||protocol.feedback.byteOrder!=='LE'||lengthOffset!==0||magicOffset!==48||magic!=='0x0123456789abcdef')throw Error('MG400 帧定义不匹配');
@@ -18,19 +18,19 @@ for(const [name,offset,format] of layout){
  if(typeof name!=='string'||!Number.isInteger(offset)||offset<0||count<1||offset+count*size>frameBytes)throw Error('反馈字段定义无效：'+name);
 }
 export const mg400Communication=communication; // 断开后重新加载配置时，运动端口也同步更新。
-export const defaultMG400={host:communication.host,dashboardPort:communication.dashboardPort,feedbackPort:communication.feedbackPort,project:trajectories.controller.defaultProject,speed:motion.platform.defaultSpeedPercent};
+export const defaultMG400={host:communication.host,dashboardPort:communication.dashboardPort,feedbackPort:communication.feedbackPort,motionPort:communication.motionPort,project:trajectories.controller.defaultProject,speed:motion.platform.defaultSpeedPercent};
 // Only call while disconnected. All consumers share the validated file values.
 export function applyMG400Files(files){
  Object.assign(communication,files.communication);Object.assign(acquisition,files.acquisition);
  layout.splice(0,layout.length,...files.protocol.feedback.fields);
  Object.assign(protocol.commands,files.protocol.commands);
- Object.assign(defaultMG400,{host:communication.host,dashboardPort:communication.dashboardPort,feedbackPort:communication.feedbackPort,project:files.trajectories.controller.defaultProject,speed:files.motion.platform.defaultSpeedPercent});
+ Object.assign(defaultMG400,{host:communication.host,dashboardPort:communication.dashboardPort,feedbackPort:communication.feedbackPort,motionPort:communication.motionPort,project:files.trajectories.controller.defaultProject,speed:files.motion.platform.defaultSpeedPercent});
  return {...defaultMG400};
 }
 export function validateMG400(input){
  const c={...defaultMG400,...input};
- if(!net.isIP(c.host))throw Error('请输入机械臂 IP 地址');
- for(const k of ['dashboardPort','feedbackPort'])if(!Number.isInteger(c[k])||c[k]<1||c[k]>65535)throw Error('端口须为 1–65535');
+ const endpointKeys=['dashboardPort','feedbackPort','motionPort'],blankEndpoint=!c.host&&endpointKeys.every(k=>c[k]===null||c[k]==='');
+ if(!blankEndpoint&&(!net.isIP(c.host)||!endpointKeys.every(k=>Number.isInteger(c[k])&&c[k]>=1&&c[k]<=65535)))throw Error('通讯配置须全部留空，或填写有效 IP 和全部端口');
  if(c.project&&!/^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(c.project))throw Error('工程名使用字母开头的英文、数字、下划线、点或横线；填写控制器内准确名称');
  if(!Number.isInteger(c.speed)||c.speed<1||c.speed>100)throw Error('速度比例须为 1–100%');
  return Object.fromEntries(Object.keys(defaultMG400).map(k=>[k,c[k]]));
@@ -51,7 +51,7 @@ export class MG400 {
  status(){const online=!!this.dashboard&&!this.dashboard.destroyed&&!!this.feedback&&!this.feedback.destroyed&&Date.now()-this.receivedAt<acquisition.feedbackStaleAfterMs;return {config:this.config,connected:!!this.dashboard&&!this.dashboard.destroyed,online,receivedAt:this.receivedAt||null,phase:online?this.phase:'未连接 / 反馈过期',feedback:online?this.last:null,error:this.error||'',alarmCodes:online&&this.last?.robot_mode===9?this.alarmCodes||'读取中':null,execution:this.execution||null};}
  close(){this.epoch++;this.pending.clear();this.dashboard?.destroy();this.feedback?.destroy();this.dashboard=null;this.feedback=null;this.last=null;this.receivedAt=0;this.phase='未连接';}
  async connect(config){
-  this.close();this.config=validateMG400(config);this.error='';const epoch=this.epoch;
+  this.close();if(!net.isIP(config.host)||![config.dashboardPort,config.feedbackPort,config.motionPort].every(port=>Number.isInteger(port)&&port>=1&&port<=65535))throw Error('机械臂通讯尚未配置，请现场填写 IP 和 Dashboard、反馈、运动端口后再连接');this.config=validateMG400(config);this.error='';const epoch=this.epoch;
   const open=port=>new Promise((resolve,reject)=>{const s=net.createConnection({host:this.config.host,port});const timer=setTimeout(()=>s.destroy(Error('连接超时')),communication.connectTimeoutMs);s.once('error',reject);s.once('connect',()=>{clearTimeout(timer);if(epoch!==this.epoch){s.destroy();reject(Error('连接已取消'));}else resolve(s);});s.once('close',()=>clearTimeout(timer));});
   try{this.dashboard=await open(this.config.dashboardPort);this.dashboard.on('error',e=>{this.error=e.message;});this.feedback=await open(this.config.feedbackPort);
    let buffer=Buffer.alloc(0);this.feedback.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);while(buffer.length>=frameBytes){if(buffer.readUInt16LE(lengthOffset)!==frameBytes||buffer.readBigUInt64LE(magicOffset)!==BigInt(magic)){buffer=buffer.subarray(1);continue;}const frame=buffer.subarray(0,frameBytes);buffer=buffer.subarray(frameBytes);try{this.accept(parseMG400(frame));}catch(e){this.error=e.message;}}});

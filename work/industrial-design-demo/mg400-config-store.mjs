@@ -4,11 +4,23 @@ import net from 'node:net';
 import {validateMotionConfig} from './handoff-examples/mg400-motion-config.mjs';
 
 export const mg400Files={communication:'mg400-communication.json',protocol:'mg400-protocol.json',acquisition:'mg400-acquisition.json',trajectories:'mg400-trajectories.json',motion:'mg400-motion.json'};
+export function mg400CommunicationConfigured(communication){
+ return net.isIP(communication?.host)===4&&['dashboardPort','feedbackPort','motionPort'].every(key=>Number.isInteger(communication[key])&&communication[key]>=1&&communication[key]<=65535);
+}
+export function trajectoryReplacementBlock(status,pendingCount=0){
+ if(pendingCount>0)return '有待确认的机械臂指令，请先处理后再替换轨迹配置。';
+ if(!status?.connected)return '请先连接控制器并读取机械臂状态；无有效反馈时不允许替换。';
+ if(!status.online||!status.feedback)return '机械臂反馈不可用，暂不能确认停机状态。';
+ if(Number(status.feedback.enable_status)!==1||Number(status.feedback.robot_mode)!==5)return '请先停止工程并确认机械臂处于已上使能、空闲状态；保持上电和通信连接，无需断电。';
+ const state=status.execution?.state;
+ if(state&&!['已停止（反馈空闲）','运行结束（未核验取放结果）','报警中断'].includes(state))return '控制器仍有未结束的工程状态，请确认工程已停止、机械臂已上使能且空闲后再替换。';
+ return '';
+}
 export function validateMG400Files(c){
  const a=c.communication,p=c.protocol,r=c.acquisition,t=c.trajectories,m=c.motion;
  if(a?.transport!=='tcp'||a.protocol!=='dobot-mg400-4axis-20240419'||p?.id!==a.protocol)throw Error('仅支持 MG400 四轴 TCP 协议');
- if(!net.isIP(a.host))throw Error('机械臂 IP 无效');
- for(const key of ['dashboardPort','feedbackPort','motionPort'])if(!Number.isInteger(a[key])||a[key]<1||a[key]>65535)throw Error(`端口无效：${key}`);
+ const endpointKeys=['dashboardPort','feedbackPort','motionPort'],unsetEndpoint=!a.host&&endpointKeys.every(key=>a[key]===null||a[key]==='');
+ if(!unsetEndpoint&&!mg400CommunicationConfigured(a))throw Error('通讯配置须全部留空，或填写有效的机械臂 IPv4 地址和三个端口');
  for(const v of [a.connectTimeoutMs,a.commandTimeoutMs,r?.feedbackStaleAfterMs])if(!Number.isInteger(v)||v<100||v>60000)throw Error('超时须为 100–60000 ms');
  if(r.mode!=='push')throw Error('仅支持主动推送反馈');
  const f=p.feedback;

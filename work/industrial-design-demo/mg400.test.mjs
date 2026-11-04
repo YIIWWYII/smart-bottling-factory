@@ -27,13 +27,13 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 test('feedback decodes LE doubles, retains 64-bit IO without precision loss, rejects invalid frames',()=>{
  const b=frame();b.writeBigUInt64LE(0xffffffffffffffffn,8);const data=parseMG400(b);assert.equal(data.q_actual[0],12.5);assert.equal(data.tool_vector_actual[0],250);assert.equal(data.digital_inputs,'18446744073709551615');assert.throws(()=>parseMG400(b.subarray(0,1439)));b[48]=0;assert.throws(()=>parseMG400(b));
 });
-test('configuration rejects protocol injection and invalid speed',()=>{assert.throws(()=>validateMG400({host:'127.0.0.1',project:'x);EnableRobot()'}));assert.throws(()=>validateMG400({host:'127.0.0.1',speed:101}));assert.equal(validateMG400({host:'127.0.0.1',project:'blockly_test01'}).dashboardPort,29999);});
+test('configuration rejects protocol injection and invalid speed',()=>{const endpoints={host:'127.0.0.1',dashboardPort:29999,feedbackPort:30004,motionPort:30003};assert.throws(()=>validateMG400({...endpoints,project:'x);EnableRobot()'}));assert.throws(()=>validateMG400({...endpoints,speed:101}));assert.equal(validateMG400({project:'blockly_test01'}).dashboardPort,null);});
 test('local TCP controller: split/coalesced frames, confirmations, unquoted RunScript, execution feedback, errors and stale data',async()=>{
  const sockets=new Set(),commands=[];let feed;
  const dashboard=net.createServer(socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));socket.on('data',chunk=>{const command=chunk.toString();commands.push(command);const response=(command==='ClearError()'?'-1':'0')+',{},'+command+';';socket.write(response.slice(0,4));setTimeout(()=>socket.write(response.slice(4)),5);});});
  const feedback=net.createServer(socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));feed=socket;const b=frame();socket.write(Buffer.concat([Buffer.from([3,5,7]),b.subarray(0,31)]));setTimeout(()=>socket.write(Buffer.concat([b.subarray(31),b])),5);});
  const listen=s=>new Promise(r=>s.listen(0,'127.0.0.1',r));await listen(dashboard);await listen(feedback);const robot=new MG400();
- try{await robot.connect({host:'127.0.0.1',dashboardPort:dashboard.address().port,feedbackPort:feedback.address().port,project:'blockly_test01',speed:20});await wait(50);assert.equal(robot.status().feedback.q_actual[0],12.5);assert.equal(commands.length,0);
+ try{await robot.connect({host:'127.0.0.1',dashboardPort:dashboard.address().port,feedbackPort:feedback.address().port,motionPort:dashboard.address().port,project:'blockly_test01',speed:20});await wait(50);assert.equal(robot.status().feedback.q_actual[0],12.5);assert.equal(commands.length,0);
   await assert.rejects(robot.command('Sync()',{timeoutMs:60001}),/超时/);assert.equal(commands.length,0);
   const wrong=robot.prepare('run',null,'admin');await assert.rejects(robot.execute(wrong.token,'other'));assert.equal(commands.length,0);
   const expired=robot.prepare('run',null,'admin');robot.pending.get(expired.token).expires=0;await assert.rejects(robot.execute(expired.token,'admin'));

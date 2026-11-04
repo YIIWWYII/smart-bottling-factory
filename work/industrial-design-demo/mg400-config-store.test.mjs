@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {createMG400ConfigStore,mg400Files,validateMG400Files} from './mg400-config-store.mjs';
+import {createMG400ConfigStore,mg400Files,validateMG400Files,trajectoryReplacementBlock} from './mg400-config-store.mjs';
 import {applyMG400Files,MG400,defaultMG400} from './mg400.mjs';
 test('file saves, external edits and stale drafts use a single source',t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mg400-config-'));
  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  for(const name of Object.values(mg400Files))fs.copyFileSync(new URL('./config/'+name,import.meta.url),path.join(dir,name));
  const store=createMG400ConfigStore(pathToFileURL(dir+path.sep)),initial=store.read();
- const updated=store.save('communication',{...initial.values.communication,host:'127.0.0.2'},initial.raw.communication);
+ const updated=store.save('communication',{...initial.values.communication,host:'127.0.0.2',dashboardPort:29999,feedbackPort:30004,motionPort:30003},initial.raw.communication);
  assert.equal(store.read().values.communication.host,'127.0.0.2');
  assert.throws(()=>store.save('communication',initial.values.communication,initial.raw.communication),/已被修改/);
  assert.throws(()=>store.save('../outside',{},''));
@@ -29,6 +29,24 @@ test('core protocol and unsupported suction pressure cannot bypass validation',(
 });
 test('apply file settings updates driver defaults without connecting',()=>{
  const original=createMG400ConfigStore().read().values,c=structuredClone(original);
- c.communication.host='127.0.0.3';c.trajectories.controller.defaultProject='example';c.motion.platform.defaultSpeedPercent=7;
+ c.communication={...c.communication,host:'127.0.0.3',dashboardPort:29999,feedbackPort:30004,motionPort:30003};c.trajectories.controller.defaultProject='example';c.motion.platform.defaultSpeedPercent=7;
  try{const config=applyMG400Files(c),robot=new MG400();assert.equal(config.host,'127.0.0.3');assert.equal(defaultMG400.project,'example');assert.equal(robot.config.speed,7);assert.equal(robot.status().connected,false);}finally{applyMG400Files(original);}
+});
+test('blank field-site address and ports allow platform startup but cannot connect',async()=>{
+ const files=structuredClone(createMG400ConfigStore().read().values);
+ files.communication.host='';for(const key of ['dashboardPort','feedbackPort','motionPort'])files.communication[key]=null;
+ assert.doesNotThrow(()=>validateMG400Files(files));
+ const partial=structuredClone(files);partial.communication.dashboardPort=29999;
+ assert.throws(()=>validateMG400Files(partial),/全部留空/);
+ const robot=new MG400();await assert.rejects(robot.connect(applyMG400Files(files)),/尚未配置/);
+});
+
+test('trajectory config can be replaced while powered on and enabled only with fresh idle feedback',()=>{
+ const safe={connected:true,online:true,feedback:{enable_status:1,robot_mode:5},execution:{state:'已停止（反馈空闲）'}};
+ assert.equal(trajectoryReplacementBlock(safe), '');
+ assert.match(trajectoryReplacementBlock({...safe,feedback:{enable_status:0,robot_mode:4}}),/已上使能/);
+ assert.match(trajectoryReplacementBlock({...safe,feedback:{enable_status:1,robot_mode:7}}),/已上使能/);
+ assert.match(trajectoryReplacementBlock({...safe,online:false}),/反馈不可用/);
+ assert.match(trajectoryReplacementBlock(safe,1),/待确认/);
+ assert.match(trajectoryReplacementBlock({connected:false}),/先连接控制器/);
 });

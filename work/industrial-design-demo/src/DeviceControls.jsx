@@ -1,4 +1,5 @@
 import {deviceName} from './controlCapabilities';
+import {alarmRules,classifyAlarm} from './alarmRules.js';
 import { useEffect,useState } from 'react';
 import { useTwin } from './TwinState';
 import { stages } from './data';
@@ -35,9 +36,11 @@ export default function DeviceControls({stageIndex}){
  useEffect(()=>{if(stageIndex!==undefined)setIndex(stageIndex);setDraft({});setDeviceChoice(null);setPreviewDevice(null);},[stageIndex]);
  if(!ops)return <p>正在读取设备能力…</p>;
  const allowed=c=>['admin','engineer','operator'].includes(ops.user.role)&&(ops.user.role==='admin'||ops.user.stages.includes(c.stageIndex))&&(c.role!=='ENGINEER'||['admin','engineer'].includes(ops.user.role));
- const submit=async()=>{setBusy(true);try{await mutate('/api/ops/control',{id:pending.id,value:pending.value,confirmed:true,reason});setMessage(`${pending.label}：虚拟设备已确认。自动调参已关闭，由人工接管。`);setDraft(d=>{const next={...d};delete next[pending.id];return next;});setPending(null);}catch(e){setMessage(e.message);}finally{setBusy(false);}};
+ const submit=async()=>{setBusy(true);try{await mutate('/api/ops/control',{id:pending.id,value:pending.value,confirmed:true,reason});setMessage(`${pending.label}：虚拟设备已确认。自动调参已关闭，由人工接管。${pendingAlarmStatus?`已记录${pendingAlarmStatus.level==='critical'?'严重':'预警'}事件，工位已标红。`:''}`);setDraft(d=>{const next={...d};delete next[pending.id];return next;});setPending(null);}catch(e){setMessage(e.message);}finally{setBusy(false);}};
  const caps=ops.capabilities.filter(c=>c.stageIndex===index),devices=[...new Set(caps.map(c=>c.device))];
  const changed=c=>draft[c.id]!==undefined&&draft[c.id]!==ops.controls[c.id];
+ const pendingAlarmRule=pending&&alarmRules.find(rule=>rule.id===pending.id&&rule.source==='setting');
+ const pendingAlarmStatus=pendingAlarmRule?classifyAlarm(pendingAlarmRule,Number(pending.value)):null;
  const device=devices.includes(deviceChoice)?deviceChoice:null,deviceCaps=device?caps.filter(c=>c.device===device):caps,profile=consoleProfiles[index];
  const focusedDevice=device;
  const focusedCaps=device?caps.filter(c=>c.device===device):caps;
@@ -52,5 +55,5 @@ export default function DeviceControls({stageIndex}){
  {ops.interlock&&<p className="hub-warning">联锁锁定：仅允许暂停；排查后需工程师或管理员解除。</p>}
  <MachineConsole aiActivity={<ActivityFeed key={index} stageIndex={index} aiOnly/>} key={profile.id} profile={profile} device={device?deviceName(device):stages[index].name} screen={screen} controls={controls} settings={settings} navigation={navigation} pendingCount={caps.filter(changed).length}/>
 
-  <p role="status">{message}</p>{pending&&<Modal title={pending.type==='ACTION'?'确认人工控制':'保存设备参数'} onClose={()=>!busy&&setPending(null)} eyebrow={pending.device}><p>{stages[pending.stageIndex].name} / {pending.label}</p><div className="hub-command-preview"><span>{String(ops.controls[pending.id])}</span><b>→</b><strong>{String(pending.value)} {pending.unit}</strong></div><label>操作原因{pending.reason?'（必填）':'（选填）'}<input value={reason} onChange={e=>setReason(e.target.value)} placeholder="例如：换批次前人工校准"/></label><p>本次只操作虚拟设备，同时关闭自动调参，保留操作记录。</p><p role="alert">{message}</p><div className="modal-actions"><button className="secondary" disabled={busy} onClick={()=>setPending(null)}>取消</button><button className="primary" disabled={busy||(pending.reason&&reason.trim().length<2)} onClick={submit}>{pending.type==='ACTION'?'确认执行（演示）':'确认保存（演示）'}</button></div></Modal>}</section>;
+  <p role="status">{message}</p>{pending&&<Modal title={pending.type==='ACTION'?'确认人工控制':'保存设备参数'} onClose={()=>!busy&&setPending(null)} eyebrow={pending.device}><p>{stages[pending.stageIndex].name} / {pending.label}</p><div className="hub-command-preview"><span>{String(ops.controls[pending.id])}</span><b>→</b><strong>{String(pending.value)} {pending.unit}</strong></div>{pendingAlarmStatus&&<p className="hub-warning" role="alert">该设定值超出{pendingAlarmStatus.level==='critical'?'严重告警':'预警'}阈值（{pendingAlarmStatus.direction==='low'?'≤':'≥'} {pendingAlarmStatus.threshold} {pending.unit}），但仍在设备允许范围 {pending.min}–{pending.max} {pending.unit} 内。确认后将保存并生成告警事件，工位状态会标红。</p>}<label>操作原因{pending.reason?'（必填）':'（选填）'}<input value={reason} onChange={e=>setReason(e.target.value)} placeholder="例如：换批次前人工校准"/></label><p>本次只操作虚拟设备，同时关闭自动调参，保留操作记录。</p><p role="alert">{message}</p><div className="modal-actions"><button className="secondary" disabled={busy} onClick={()=>setPending(null)}>取消</button><button className="primary" disabled={busy||(pending.reason&&reason.trim().length<2)} onClick={submit}>{pending.type==='ACTION'?'确认执行（演示）':'确认保存（演示）'}</button></div></Modal>}</section>;
 }

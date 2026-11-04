@@ -1,1 +1,1 @@
-{ "src": ["pages/Index", "pages/Workstation", "pages/StageDetail"] }
+{ "src": ["pages/Index", "pages/Platform", "pages/Workstation", "pages/StageDetail"] }
