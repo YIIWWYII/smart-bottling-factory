@@ -59,8 +59,24 @@ export function validateInspection(input,result){
  return {...result,missing};
 }
 
+export function createInferenceQueue(){
+ let tail=Promise.resolve(),running=false,waiting=0;
+ return {status:()=>({running,waiting}),run(fn){waiting++;const job=tail.then(async()=>{waiting--;running=true;try{return await fn();}finally{running=false;}});tail=job.catch(()=>{});return job;}};
+}
+export function isBatchAlarmQuestion(question){return /(?:批量|汇总|复盘|统计|多条|一批).*(?:告警|报警)|(?:告警|报警).*(?:批量|汇总|复盘|统计)/.test(question)&&!/清除|解除|删除|复位|是什么|什么意思|介绍|功能|如何|怎么/.test(question);}
+export async function runAlarmWorkflow(config,alarms,fetcher=fetch){
+ if(!config.enabled||!config.alarmWorkflowId)fail('请在平台 AI 配置中填写已发布的批量告警工作流 ID。',409);
+ const r=await requestService(config.baseUrl,'/v1/workflow/run',config.token,{workflow_id:config.alarmWorkflowId,parameters:{alarms_json:JSON.stringify(alarms)},is_async:false},fetcher);
+ let data=r.data;try{if(typeof data==='string')data=JSON.parse(data);}catch{}
+ if(r.code!==0||typeof data?.report!=='string'||!data.report.trim())fail('批量告警工作流没有返回完整报告，请检查运行记录。',502);
+ const report=data.report.replace(/所有(?:告警|问题)均已(?:闭环处理|处理完毕)[。！]?/g,'所统计的告警事件均已结束。');
+ return {answer:report,goalStatus:'completed',workflowRunId:r.execute_id||null,model:'Coze · 批量告警复盘',trace:[{tool:'batch_alarm_workflow',status:'success',at:new Date().toISOString(),result:{count:alarms.length,workflowId:config.alarmWorkflowId}}]};
+}
+
 // Stored alongside the existing AI configuration in MySQL; uploaded files are private.
 export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handoffs'),fetcher=fetch}={}){
+ const inference=createInferenceQueue();
+ let alarmSource=()=>[];
  let monitorPending=null,monitorAt=0,monitorError='';
  async function monitor(){
   if(!monitorPending&&Date.now()-monitorAt>2000){
@@ -111,9 +127,50 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
   await exclusive(async()=>{const {state}=await read();state.commands=[cmd,...state.commands||[]].slice(0,200);await save(state);});
   await ops.log(ops.actor(req),'AI 提出参数调整',`${cmd.device} / ${cmd.title} → ${cmd.value}，等待人工确认`,'待确认',{category:'ai',requestId:cmd.id});return cmd;
  }
+ async function batchAlarmReport(req,question=''){
+  const {state}=await read();
+  const context=await ops.route({headers:req.headers,url:'/api/ops/context',method:'GET'},{},{});
+  let alarms=alarmSource(context.dataMode).map(row=>({...row.alarm,resolvedAt:row.resolvedAt,done:!!row.resolvedAt}));
+  const day=at=>new Date(at+8*3600000).toISOString().slice(0,10),dates=question.match(/\d{4}-\d{2}-\d{2}/g)||[];
+  if(!dates.length&&/今天|昨日|昨天/.test(question))dates.push(day(Date.now()-(/昨天|昨日/.test(question)?86400000:0)));
+  if(dates.some(d=>!Number.isFinite(Date.parse(d))||new Date(d).toISOString().slice(0,10)!==d)||dates.length>2||dates.length===2&&dates[0]>dates[1])fail('请输入有效的告警起止日期。');
+  if(!dates.length&&/本周|上周|本月|上月|最近.*(?:天|周|月)/.test(question))fail('请用 YYYY-MM-DD 写出需要复盘的起止日期。');
+  if(dates.length)alarms=alarms.filter(a=>{const at=Date.parse(a.time);return Number.isFinite(at)&&day(at)>=dates[0]&&day(at)<=(dates[1]||dates[0]);});
+  const activeOnly=/当前|未恢复|待处理/.test(question);if(activeOnly)alarms=alarms.filter(a=>!a.done);
+  const coverage=(dates.length?dates.join(' 至 '):'最近100条已记录事件')+(activeOnly?' · 未恢复告警':'');
+  if(!alarms.length)return {answer:'统计范围：'+coverage+'。当前数据模式没有符合条件的告警记录。',goalStatus:'completed',trace:[],count:0};
+  const result=await inference.run(()=>runAlarmWorkflow(state.coze,alarms,fetcher));
+  const report={id:randomUUID(),mode:context.dataMode,createdAt:new Date().toISOString(),count:alarms.length,coverage,...result,answer:'统计范围：'+coverage+'。\n\n'+result.answer};
+  await exclusive(async()=>{const {state:latest}=await read();latest.alarmReports=[report,...latest.alarmReports||[]].slice(0,20);await save(latest);});
+  await ops.log(ops.actor(req),'生成批量告警复盘',String(alarms.length)+' 条','成功',{category:'ai'});return report;
+ }
  async function chat(req,question,ctx,history=[]){
   const {state,root}=await read();if(!state.coze.enabled)return null;
-  if(state.coze.botId)return runNativeAgent({...state.coze,skills:readSkillConfig(root.skills)},req,question,ctx,history,fetcher);
+  if(isBatchAlarmQuestion(question)&&!ctx.automaticAlarm)return batchAlarmReport(req,question);
+  if(state.coze.botId)return inference.run(async()=>{
+   const prepared=[];
+   const readingSelected=ctx.selectionLocked&&!/调整|改为|设为|修改|设置为|设置到|写入|启动|暂停|停止|切换/.test(question.replace(/(?:不|不要|无需|禁止|不能)(?:修改|调整|设置|写入|启动|暂停|停止|切换)/g,''));
+   if(ctx.automaticAlarm||readingSelected){
+    const context=await ops.route({headers:req.headers,url:'/api/ops/context',method:'GET'},{},{});
+    const tools=createAgentTools(ops,req,{commands:async()=>[],proposal:()=>{throw Error('预查询不允许生成提案');}});
+    const capture=async(tool,args)=>{try{const result=await tools(tool,args);prepared.push({tool,arguments:args,status:'success',at:new Date().toISOString(),source:'platform',result});}catch(error){prepared.push({tool,arguments:args,status:'error',at:new Date().toISOString(),result:{error:error.message}});}};
+    const target=String(ctx.automaticAlarm?ctx.alarm?.title||'':ctx.target||ctx.selectionObject?.text||'');
+    const parameter=context.capabilities?.find(c=>target.includes(c.id)||target.includes(c.label));
+    const asset=context.assets?.find(a=>target.includes(a.code)||target.includes(a.name));
+    const device=parameter?.device||asset?.code;
+    if(ctx.automaticAlarm)await capture('query_logs',{});
+    if(device||parameter)await capture('query_devices',{query:parameter?.id||device});
+    else if(ctx.automaticAlarm)await capture('query_devices',{query:(ctx.alarm?.title||'').split('异常')[0]});
+    await capture('search_knowledge',{query:(ctx.automaticAlarm?ctx.alarm?.title:ctx.selectionObject?.name||target).slice(0,200),...(device?{device_model:device}:{})});
+   }
+   if(ctx.automaticAlarm&&state.coze.alarmWorkflowId){
+    const event={...ctx.alarm,done:!!ctx.eventResolvedAt,resolvedAt:ctx.eventResolvedAt};
+    const result=await runAlarmWorkflow(state.coze,[event],fetcher);
+    const evidence=prepared.filter(t=>t.status==='success').map(t=>t.tool==='query_devices'?'设备设定参数：'+(t.result.setpoints||[]).map(p=>(p.deviceName||p.device)+' / '+p.name+' '+p.value+' '+p.unit+'（允许 '+p.min+'～'+p.max+' '+p.unit+'）').join('；')+'。当前读数：'+((t.result.readings||[]).map(r=>r.station+' '+r.metric+' '+(r.value??'未提供')+' '+r.unit+'，来源 '+r.source).join('；')||'本次未返回对应实测读数'):t.tool==='query_logs'?'当前未恢复告警：'+t.result.activeCount+' 条':t.tool==='search_knowledge'?'参考资料：'+(t.result.documents||[]).map(d=>(d.title||d.id)+' '+(d.version||'')).join('、'):'').filter(Boolean).join('\n');
+    return {...result,model:'Coze · 告警分析报告',answer:'事件：'+event.title+'\n事件时间：'+(Number.isFinite(Date.parse(event.time))?new Date(event.time).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未提供')+'\n'+(ctx.eventResolvedAt?'此事件已结束，以下为历史事件复盘。':'此事件尚未标记恢复。')+'\n事件记录：'+(event.detail||'')+'\n\n'+result.answer+'\n\n核对依据（查询时刻）：\n'+evidence,trace:[...prepared,...result.trace],snapshotAt:ctx.updated};
+   }
+   return runNativeAgent({...state.coze,skills:readSkillConfig(root.skills)},req,question,ctx,history,fetcher,prepared);
+  });
   if(parseSkillCommand(question,ctx,readSkillConfig(root.skills)))throw Error('技能需要配置已发布的原生智能体 ID。');
   const result=await runAgent({question,context:ctx,history,
    decide:(agentContext,h)=>runCoze(state.coze,{question,context:JSON.stringify(agentContext),history:JSON.stringify(h)},fetcher),
@@ -121,6 +178,7 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
   await ops.log(ops.actor(req),'智能体工具查询',JSON.stringify(result.trace.map(t=>({tool:t.tool,status:t.status,at:t.at}))),result.goalStatus,{category:'ai'});
   return {...result,snapshotAt:ctx.updated};
  }
+
  async function route(req,body){
   const p=req.url.split('?')[0],write=req.method==='POST',user=ops.actor(req);
   if(!p.startsWith('/api/ai/integrations'))return undefined;
@@ -184,8 +242,9 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    if(body.kind==='vision'&&state.visionJob&&!['stopped','completed','failed'].includes(state.visionJob.status)&&(baseUrl!==old.baseUrl||!body.enabled))fail('请先停止当前视觉任务，再停用或更换服务地址。',409);
    if(typeof body.enabled!=='boolean'||typeof body.workflowId!=='string'||body.workflowId.length>150)fail('配置格式错误。');
    if(body.botId!==undefined&&(typeof body.botId!=='string'||!/^\d{1,30}$|^$/.test(body.botId)))fail('智能体ID格式无效。');
+   if(body.alarmWorkflowId!==undefined&&(typeof body.alarmWorkflowId!=='string'||!/^\d{1,30}$|^$/.test(body.alarmWorkflowId)))fail('批量告警工作流ID格式无效。');
    if(body.kind==='coze'&&body.enabled&&!body.workflowId.trim()&&!body.botId)fail('填写已发布智能体ID。');
-   state[body.kind]={agentName:String(body.agentName||old.agentName||'').slice(0,100),...(body.kind==='vision'?{assets:old.assets||{},mode:body.mode==='whole-bottle'?'whole-bottle':'legacy',cameraMode:body.cameraMode==='individual'?'individual':'shared',cameras:body.cameras?normalizeVisionCameras(body.cameras,baseUrl,serviceUrl):old.cameras}:{}),botId:body.kind==='coze'?(body.botId??old.botId??''):'',baseUrl,enabled:body.enabled,workflowId:body.workflowId.trim(),version:String(body.version||'').slice(0,100),token:body.token|| (baseUrl===old.baseUrl?old.token:'')};
+   state[body.kind]={...(body.kind==='coze'?{alarmWorkflowId:body.alarmWorkflowId??old.alarmWorkflowId??''}:{}),agentName:String(body.agentName||old.agentName||'').slice(0,100),...(body.kind==='vision'?{assets:old.assets||{},mode:body.mode==='whole-bottle'?'whole-bottle':'legacy',cameraMode:body.cameraMode==='individual'?'individual':'shared',cameras:body.cameras?normalizeVisionCameras(body.cameras,baseUrl,serviceUrl):old.cameras}:{}),botId:body.kind==='coze'?(body.botId??old.botId??''):'',baseUrl,enabled:body.enabled,workflowId:body.workflowId.trim(),version:String(body.version||'').slice(0,100),token:body.token|| (baseUrl===old.baseUrl?old.token:'')};
    await save(state);await ops.log(user,'保存'+body.kind+'服务配置','连接尚需测试');return publicState(state);
   });
   if(p.endsWith('/test')&&write){
@@ -290,7 +349,7 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
   fail('接入接口不存在。',404);
  }
  const agentTool=(req,name,args)=>createAgentTools(ops,req,{commands:async()=>{const {state}=await read();return state.commands.filter(c=>c.actor===ops.actor(req).id).slice(0,20);},proposal:o=>proposal(req,{operation:o})})(name,args);
- return {route,chat,read,agentTool};
+ return {route,chat,read,agentTool,batchAlarmReport,runtime:inference.status,setAlarmSource:fn=>{alarmSource=fn;}};
 }
 
 // Keep assistant confirmations in the same station audit stream as automatic decisions.

@@ -62,8 +62,8 @@ export function createAgentTools(ops,req,{proposal,commands}){
     if(args.query!==undefined&&typeof args.query!=='string')throw Error('关键词必须为字符串');
     const c=await get('/api/ops/context'),s=ops.snapshot(),normalize=v=>String(v).replace(/\s/g,'').toLowerCase(),q=normalize(args.query||'');
     const matches=(x,label)=>normalize(JSON.stringify(x)).includes(q)||q.includes(normalize(label));
-    const setpoints=c.capabilities.filter(x=>x.type==='NUMBER').map(x=>({id:x.id,name:x.label,device:x.device,value:c.controls[x.id],unit:x.unit,min:x.min,max:x.max})).filter(x=>matches(x,x.name));
-    return {at:s.updated,dataMode:s.dataMode,readings:s.states.map((x,i)=>({station:stages[i].name,metric:stages[i].metric,unit:stages[i].unit,value:x.value,source:x.source,quality:x.quality,mode:x.mode})).filter(x=>matches(x,x.metric)),setpoints:setpoints.slice(0,25),matched:setpoints.length,note:'最多返回25个参数，需要其他参数请提供更具体关键词。只返回当前来源，不能通过关键词把模拟值变成真实值。'};
+    const setpoints=c.capabilities.filter(x=>x.type==='NUMBER').map(x=>({id:x.id,name:x.label,device:x.device,deviceName:c.assets?.find(a=>a.code===x.device)?.name||'',station:stages[x.stageIndex]?.name,value:c.controls[x.id],unit:x.unit,min:x.min,max:x.max})).filter(x=>matches(x,x.name));
+    return {at:s.updated,dataMode:s.dataMode,readings:s.states.map((x,i)=>({station:stages[i].name,devices:(c.assets||[]).filter(a=>a.stageIndex===i).map(a=>({name:a.name,code:a.code})),metric:stages[i].metric,unit:stages[i].unit,value:x.value,source:x.source,quality:x.quality,mode:x.mode})).filter(x=>matches(x,x.metric)),setpoints:setpoints.slice(0,25),matched:setpoints.length,note:'最多返回25个参数，需要其他参数请提供更具体关键词。只返回当前来源，不能通过关键词把模拟值变成真实值。'};
    }
    case 'query_production':{
     const valid=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;

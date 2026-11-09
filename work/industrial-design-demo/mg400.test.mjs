@@ -42,3 +42,29 @@ test('local TCP controller: split/coalesced frames, confirmations, unquoted RunS
   await assert.rejects(robot.execute(ready.token,'admin'));await assert.rejects(robot.command('ClearError()'),/拒绝/);robot.receivedAt=Date.now()-2000;assert.equal(robot.status().feedback,null);assert.throws(()=>robot.prepare('run',null,'admin'),/反馈/);
  }finally{robot.close();for(const s of sockets)s.destroy();await Promise.all([new Promise(r=>dashboard.close(r)),new Promise(r=>feedback.close(r))]);}
 });
+
+test('invalid state rejects preparation before queuing any controller command',()=>{
+ const robot=new MG400();robot.status=()=>({online:true});
+ robot.last={robot_mode:5};
+ assert.throws(()=>robot.prepare('enable',null,'admin'),/仅未使能/);
+ assert.throws(()=>robot.prepare('pause',null,'admin'),/当前未运行/);
+ assert.throws(()=>robot.prepare('resume',null,'admin'),/当前未暂停/);
+ assert.equal(robot.pending.size,0);
+ robot.last={robot_mode:7};
+ assert.throws(()=>robot.prepare('run',null,'admin'),/启动前须已使能且空闲/);
+ assert.equal(robot.pending.size,0);
+});
+
+test('low speed does not reset on run; controller rejection replaces an earlier successful result',async()=>{
+ const robot=new MG400();robot.status=()=>({online:true});robot.last={robot_mode:5};robot.config.project='low_speed_project';
+ const commands=[];robot.command=async text=>{commands.push(text);return {accepted:true,raw:'0,{},'+text+';'};};
+ let confirm=robot.prepare('speed',10,'admin');await robot.execute(confirm.token,'admin');
+ confirm=robot.prepare('run',null,'admin');await robot.execute(confirm.token,'admin');assert.deepEqual(commands,['SpeedFactor(10)','RunScript(low_speed_project)']);
+ assert.equal(robot.execution.state,'已受理 · 等待运行反馈');assert.throws(()=>robot.prepare('run',null,'admin'),/等待运行反馈/);
+ robot.accept({...robot.last,robot_mode:7});robot.accept({...robot.last,robot_mode:5});assert.match(robot.execution.state,/运行结束/);
+ robot.command=async()=>{throw Error('控制器拒绝指令：-1,{},RunScript(low_speed_project);');};
+ confirm=robot.prepare('run',null,'admin');await assert.rejects(robot.execute(confirm.token,'admin'),/工程已导入控制器/);
+ assert.equal(robot.execution.state,'启动被拒绝');assert.equal(robot.lastAction.state,'控制器拒绝');
+ robot.command=async()=>{throw Error('响应超时，结果未知');};confirm=robot.prepare('run',null,'admin');await assert.rejects(robot.execute(confirm.token,'admin'),/结果未知/);
+ assert.equal(robot.execution.state,'启动结果未知');assert.throws(()=>robot.prepare('run',null,'admin'),/不可重复启动/);
+});

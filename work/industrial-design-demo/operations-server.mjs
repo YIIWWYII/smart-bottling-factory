@@ -2,7 +2,7 @@ import {createManualControl} from './mg400-manual.mjs';
 import {createMG400Simulation} from './mg400-simulation.mjs';
 import {readTestFeedback,stopTest,requestTestSpeed} from './mg400-test-feedback.mjs';
 import {MG400,defaultMG400,validateMG400,applyMG400Files} from './mg400.mjs';
-import {createMG400ConfigStore,mg400Files,mg400CommunicationConfigured,trajectoryReplacementBlock} from './mg400-config-store.mjs';
+import {createMG400ConfigStore,mg400Files,mg400CommunicationConfigured,trajectoryReplacementBlock,selectTrajectoryPreset} from './mg400-config-store.mjs';
 import {loadingRobotPlacement} from './src/builtinPlacements.js';
 import {spawn} from 'node:child_process';
 import {secondaryMetrics,validateStationFeedback} from './src/stationTelemetry.js';
@@ -185,7 +185,7 @@ const defaults=[
    if(p==='/api/ops/mg400/open-folder'&&write){
     requireRole(user,['admin','engineer']);
     if(process.platform!=='win32'||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))fail('请在运行平台服务的 Windows 电脑上打开配置目录');
-    const target=path.dirname(mg400Store.path(body.key));
+    const target=body.projectName?mg400Store.projectFolder(body.projectName):path.dirname(mg400Store.path(body.key));
     await new Promise((resolve,reject)=>{const child=spawn('powershell.exe',['-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop'; $info=New-Object System.Diagnostics.ProcessStartInfo; $info.FileName=Join-Path $env:WINDIR 'explorer.exe'; $info.Arguments='/n,'+[char]34+$env:MG400_CONFIG_TARGET+[char]34; $info.UseShellExecute=$true; $info.WindowStyle=[System.Diagnostics.ProcessWindowStyle]::Normal; [System.Diagnostics.Process]::Start($info) | Out-Null"],{stdio:'ignore',windowsHide:true,env:{...process.env,MG400_CONFIG_TARGET:target}});child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Error('无法打开配置文件夹')));});
     return {message:'已打开配置文件所在文件夹'};
    }
@@ -200,20 +200,35 @@ const defaults=[
     log(user,'保存 MG400 配置',mg400Files[body.key],'成功',{stageIndex:0});
     return {...mg400FileView(),message:'配置已保存；未向机械臂下发运动指令'};
    }
+   if(p==='/api/ops/mg400/projects'&&write){
+    requireRole(user,['admin','engineer']);
+    if(readTestFeedback()||manualMG400.active)fail('请先停止机械臂测试或手动动作',409);
+    if(mg400.status().connected||mg400.pending.size){const block=trajectoryReplacementBlock(mg400.status(),mg400.pending.size);if(block)fail(block,409);}
+    try{mg400Store.importProject(body);}catch(error){fail(error.message,400);}
+    log(user,'导入 MG400 轨迹工程',body.projectName,'成功',{stageIndex:0});
+    return {...mg400FileView(),message:'已保存工程文件并加入预设。请在 DobotStudio 中将同名工程导入控制器，再选择运行。'};
+   }
    if(p==='/api/ops/mg400/trajectory'&&write){
     requireRole(user,['admin','engineer']);
-    const block=trajectoryReplacementBlock(mg400.status(),mg400.pending.size);if(block)fail(block,409);
-    if(typeof body.content!=='string'||body.content.length>100000)fail('轨迹配置无效或超过 100 KB');
-    const saved=mg400Store.save('trajectories',JSON.parse(body.content),body.expected);
+    if(readTestFeedback()||manualMG400.active)fail('请先停止当前机械臂测试或手动动作，再切换轨迹工程',409);
+    let trajectories;
+    if(body.projectName!==undefined){
+     try{trajectories=selectTrajectoryPreset(mg400Store.read().values.trajectories,body.projectName,mg400.status(),mg400.pending.size);}catch(error){fail(error.message,409);}
+    }else{
+     const block=trajectoryReplacementBlock(mg400.status(),mg400.pending.size);if(block)fail(block,409);
+     if(typeof body.content!=='string'||body.content.length>100000)fail('轨迹配置无效或超过 100 KB');
+     trajectories=JSON.parse(body.content);
+    }
+    const saved=mg400Store.save('trajectories',trajectories,body.expected);
     if(mg400.status().connected)mg400.config.project=saved.values.trajectories.controller.defaultProject;
     else mg400.config=applyMG400Files(saved.values);
     log(user,'替换 MG400 轨迹配置',mg400Files.trajectories,'成功',{stageIndex:0,after:{project:mg400.config.project,connected:mg400.status().connected,enabled:mg400.status().feedback?.enable_status}});
-    return {...mg400FileView(),message:'平台轨迹配置已替换。机械臂保持上电与通信；请使用控制器内已导入的工程名称。更改轨迹点后，仍需将生成的 Lua 工程导入控制器。'};
+    return {...mg400FileView(),message:body.projectName!==undefined?'已保存后续运行工程；运行前请确认工程已导入控制器。':'平台轨迹配置已替换。更改轨迹点后，仍需将对应 Lua 工程导入控制器。'};
    }
    if(p==='/api/ops/mg400/config'&&write)fail('MG400 已改为文件配置，请在配置文件页面保存');
    if(p==='/api/ops/mg400/connect'&&write){requireRole(user,['admin','engineer']);if(mg400.status().connected)fail('请先断开现有连接',409);const files=mg400Store.read().values;if(!mg400CommunicationConfigured(files.communication))fail('机械臂通讯尚未配置，请现场填写 IP 和 Dashboard、反馈、运动端口后再连接',409);const config=applyMG400Files(files);return await mg400.connect(config);}
    if(p==='/api/ops/mg400/disconnect'&&write){requireRole(user,['admin','engineer']);mg400.close();log(user,'断开 MG400','仅断开通信，不停止或断电机械臂','成功',{stageIndex:0});return mg400.status();}
-   if(p==='/api/ops/mg400/prepare'&&write){if(db.dataMode==='simulation')fail('请切换真实或混合数据模式后控制实机',409);if(db.interlock&&!['stop','pause','disable'].includes(body.action))fail('平台联锁尚未解除',409);return mg400.prepare(body.action,body.value,user.id);}
+   if(p==='/api/ops/mg400/prepare'&&write){if(db.dataMode==='simulation')fail('请切换真实或混合数据模式后控制实机',409);if(db.interlock&&!['stop','pause','disable'].includes(body.action))fail('平台联锁尚未解除',409);try{return mg400.prepare(body.action,body.value,user.id);}catch(error){fail(error.message,409);}}
    if(p==='/api/ops/mg400/execute'&&write){if(db.dataMode==='simulation'||(db.interlock&&!['stop','pause','disable'].includes(mg400.pending.get(body.token)?.action)))fail('当前模式或联锁不允许下发',409);if(body.confirmed!==true)fail('请人工确认');try{const pending=mg400.pending.get(body.token);const result=await mg400.execute(body.token,user.id);if(pending?.action==='speed')saveMG400Speed(pending.value);log(user,'人工 MG400 控制',result.raw,'已受理',{category:'control',stageIndex:0,device:'MG400-TEACH-01',after:result});return result;}catch(e){log(user,'人工 MG400 控制',e.message,'失败或结果未知',{category:'control',stageIndex:0,device:'MG400-TEACH-01'});return {error:e.message,ok:false};}}
    fail('未知机械臂接口',404);
   }

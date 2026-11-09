@@ -12,3 +12,8 @@ export function productionReports(trace=[]){
   return [{from:d.from,to:d.to,mode:d.dataMode,at:t.at,days,total:known.length?known.reduce((n,d)=>n+d.produced,0):null,recorded:known.length,note:d.note}];
  });
 }
+
+export function unseenAlarm(rows,seen){
+ if(seen===null)return null;
+ return rows.find(row=>!seen.has(row.id)&&!row.resolvedAt)||null;
+}

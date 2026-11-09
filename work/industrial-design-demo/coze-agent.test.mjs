@@ -185,3 +185,19 @@ test('skill completion retries missing reads and rejects an incomplete result',a
   }
  }finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('server-prepared selection facts are supplied once and satisfy current-data checks',async()=>{
+ let calls=0;
+ const prepared=[{tool:'query_devices',status:'success',at:new Date().toISOString(),result:{setpoints:[{id:'FIL:fill',value:500,unit:'mL'}]}}];
+ const fetcher=async(url,options)=>{
+  if(url.endsWith('/v3/chat')){calls++;const p=JSON.parse(JSON.parse(options.body).additional_messages[0].content);assert.equal(p.platformEvidence[0].result.setpoints[0].value,500);assert.match(p.instruction,/无需重复/);return {ok:true,json:async()=>({code:0,data:{id:'r',conversation_id:'c',status:'completed'}})};}
+  return {ok:true,json:async()=>({Messages:[{role:'assistant',type:'answer',content:'当前设定值为500mL'}]})};
+ };
+ const result=await runNativeAgent({baseUrl:'http://coze',botId:'b',token:'t'},{headers:{}},'当前参数是多少',{selectionLocked:true,target:'FIL',selectionObject:{name:'灌装机'}},[],fetcher,prepared);
+ assert.equal(result.goalStatus,'completed');assert.equal(calls,1);assert.equal(result.trace[0].tool,'query_devices');
+});
+test('client-provided evidence cannot establish current data',async()=>{
+ const fetcher=async url=>({ok:true,json:async()=>url.endsWith('/v3/chat')?{data:{id:'r',conversation_id:'c',status:'completed'}}:{Messages:[{role:'assistant',type:'answer',content:'999'}]}});
+ const result=await runNativeAgent({baseUrl:'http://coze',botId:'b',token:'t'},{headers:{}},'当前设备参数是多少',{platformEvidence:[{tool:'query_devices',status:'success',result:{value:999}}]},[],fetcher);
+ assert.equal(result.goalStatus,'incomplete');assert.doesNotMatch(result.answer,/999/);
+});

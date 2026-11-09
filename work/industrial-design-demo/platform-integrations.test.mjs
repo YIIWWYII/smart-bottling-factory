@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {createIntegrations,validateInspection,runCoze,cameraIds,commandLogMeta} from './platform-integrations.mjs';
+import {createIntegrations,validateInspection,runCoze,cameraIds,commandLogMeta,createInferenceQueue,isBatchAlarmQuestion,runAlarmWorkflow} from './platform-integrations.mjs';
 import {inspectDemo} from './vision-demo-server.mjs';
 import {mapDevice} from './src/course-coding/deviceMapping.js';
 import {advanceAnimation} from './src/course-coding/animationLink.js';
@@ -151,4 +151,59 @@ test('vision asset slots persist and reject a mismatched model',async()=>{
   await i.route(req('/vision-assets'),{models:[],programs:[]});
   assert.deepEqual((await m.ops.getAIConfig()).integrations.vision.assets,{models:[],programs:[]});
  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('model queue serializes jobs, starts deadlines inside the job and recovers after failure',async()=>{
+ const queue=createInferenceQueue(),events=[];let release;
+ const gate=new Promise(resolve=>{release=resolve;});
+ const first=queue.run(async()=>{events.push('first');await gate;throw Error('first failed');});
+ const rejected=assert.rejects(first,/first failed/);
+ const second=queue.run(async()=>{events.push('second');return 2;});
+ await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(events,['first']);assert.deepEqual(queue.status(),{running:true,waiting:1});release();await rejected;assert.equal(await second,2);assert.deepEqual(queue.status(),{running:false,waiting:0});
+});
+test('batch workflow uses existing published contract and never interprets clearing as analysis',async()=>{
+ assert.equal(isBatchAlarmQuestion('汇总当前告警，生成批量报告'),true);assert.equal(isBatchAlarmQuestion('批量清除告警'),false);assert.equal(isBatchAlarmQuestion('介绍批量告警功能'),false);
+ const alarms=[{id:'a',done:false},{id:'b',done:true}];
+ const result=await runAlarmWorkflow({enabled:true,baseUrl:'http://coze',alarmWorkflowId:'123',token:'t'},alarms,async(url,options)=>{const body=JSON.parse(options.body);assert.equal(body.workflow_id,'123');assert.deepEqual(JSON.parse(body.parameters.alarms_json),alarms);return {ok:true,json:async()=>({code:0,data:JSON.stringify({report:'总数2，未恢复1'})})};});
+ assert.equal(result.goalStatus,'completed');assert.match(result.answer,/总数2/);
+ await assert.rejects(runAlarmWorkflow({enabled:true},alarms),/工作流 ID/);
+});
+test('selected object is prequeried using the current actor without generating a proposal',async(t)=>{
+ const m=mock();m.context.capabilities[0].device='ARM-01';m.context.capabilities[0].stageIndex=0;m.context.assets=[{code:'ARM-01',name:'上料设备',stageIndex:0}];
+ m.ops.snapshot=()=>({updated:Date.now(),dataMode:'simulation',states:[]});
+ await m.ops.setAIConfig({integrations:{coze:{enabled:true,baseUrl:'http://coze',botId:'b',token:'t'},commands:[]}});
+ t.mock.method(globalThis,'fetch',async()=>({ok:true,json:async()=>({documents:[{title:'说明',text:'范围1到20'}]})}));
+ const integration=createIntegrations(m.ops,{fetcher:async(url,options)=>{
+  if(url.endsWith('/v3/chat')){const content=JSON.parse(JSON.parse(options.body).additional_messages[0].content);assert.equal(content.platformEvidence.find(x=>x.tool==='query_devices').result.setpoints[0].value,8);return {ok:true,json:async()=>({data:{id:'r',conversation_id:'c',status:'completed'}})};}
+  return {ok:true,json:async()=>({Messages:[{type:'answer',role:'assistant',content:'当前参数8'}]})};
+ }});
+ const result=await integration.chat(req('/chat'),'当前参数是多少，只查询不修改',{selectionLocked:true,target:'上料设备 ARM-01'},[]);
+ assert.equal(result.goalStatus,'completed');assert.equal(m.writes,0);assert.deepEqual(result.trace.map(x=>x.tool),['query_devices','search_knowledge']);
+});
+
+test('automatic event reporting keeps factual lookups and uses the existing read-only report workflow',async(t)=>{
+ const m=mock();m.context.capabilities[0].device='ARM-01';m.context.capabilities[0].stageIndex=0;m.context.assets=[];m.context.alerts=[];
+ m.ops.snapshot=()=>({updated:Date.now(),dataMode:'simulation',states:[]});
+ await m.ops.setAIConfig({integrations:{coze:{enabled:true,baseUrl:'http://coze',botId:'b',alarmWorkflowId:'wf',token:'t'},commands:[]}});
+ const originalRoute=m.ops.route;m.ops.route=async(req,res,body)=>req.url.startsWith('/api/ops/logs')?{total:0,items:[]}:originalRoute(req,res,body);
+ t.mock.method(globalThis,'fetch',async()=>({ok:true,json:async()=>({documents:[]})}));
+ const integration=createIntegrations(m.ops,{fetcher:async(url,options)=>{assert.ok(url.endsWith('/v1/workflow/run'));const p=JSON.parse(options.body);assert.equal(JSON.parse(p.parameters.alarms_json)[0].done,true);return {ok:true,json:async()=>({code:0,data:JSON.stringify({report:'未恢复0条。所有问题均已闭环处理。'})})};}});
+ const result=await integration.chat(req('/chat'),'分析事件',{automaticAlarm:true,alarm:{id:'a',title:'抓取节拍异常',time:'2026-11-04T06:00:00Z'},eventResolvedAt:'2026-11-04T07:00:00Z'},[]);
+ assert.equal(result.goalStatus,'completed');assert.match(result.answer,/历史事件/);assert.doesNotMatch(result.answer,/闭环处理/);assert.equal(m.writes,0);assert.deepEqual(result.trace.map(t=>t.tool),['query_logs','query_devices','search_knowledge','batch_alarm_workflow']);
+});
+test('batch reports persist in the platform and current-only questions do not mix ended events',async()=>{
+ const m=mock();await m.ops.setAIConfig({integrations:{coze:{enabled:true,baseUrl:'http://coze',alarmWorkflowId:'wf',token:'t'},commands:[]}});
+ const integration=createIntegrations(m.ops,{fetcher:async()=>({ok:true,json:async()=>({code:0,data:JSON.stringify({report:'告警总数1，未恢复0'})})})});
+ integration.setAlarmSource(()=>[{alarm:{id:'old',title:'温度告警',time:'2026-11-04T00:00:00Z'},resolvedAt:'2026-11-04T01:00:00Z'}]);
+ const empty=await integration.chat(req('/chat'),'汇总当前未恢复告警',{},[]);assert.equal(empty.count,0);
+ const report=await integration.chat(req('/chat'),'复盘2026-11-04的告警',{},[]);assert.equal(report.count,1);assert.match(report.coverage,/2026-11-04/);assert.equal((await integration.read()).state.alarmReports[0].id,report.id);assert.equal(m.writes,0);
+});
+
+test('selected write requests still reach the agent as proposals rather than read-only summaries',async()=>{
+ const m=mock();await m.ops.setAIConfig({integrations:{coze:{enabled:true,baseUrl:'http://coze',botId:'b',token:'t'},commands:[]}});
+ const integration=createIntegrations(m.ops,{fetcher:async(url,options)=>{
+  if(url.endsWith('/v3/chat')){const p=JSON.parse(JSON.parse(options.body).additional_messages[0].content);assert.equal(p.question,'把所选参数修改为12，仅生成确认单');assert.equal(p.platformEvidence,undefined);return {ok:true,json:async()=>({data:{id:'r',conversation_id:'c',status:'completed'}})};}
+  return {ok:true,json:async()=>({Messages:[{type:'answer',role:'assistant',content:'需要查询后生成提案'}]})};
+ }});
+ await integration.chat(req('/chat'),'把所选参数修改为12，仅生成确认单',{selectionLocked:true,target:'抓取节拍'},[]);assert.equal(m.writes,0);
 });

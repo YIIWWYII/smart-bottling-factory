@@ -11,7 +11,7 @@ export function createModelProxy({upstream='http://127.0.0.1:8003',fetcher=fetch
    if(!['/health','/v1/models','/v1/chat/completions'].includes(req.url)){res.writeHead(404);res.end();return;}
    let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>20000000)throw Error('Request too large');}
    const body=raw?JSON.parse(raw):null,stream=body?.stream===true;
-   const response=await fetcher(upstream+req.url,{method:req.method,headers:{'Content-Type':'application/json',...(req.headers.authorization?{Authorization:req.headers.authorization}:{})},...(body?{body:JSON.stringify({...body,stream:false})}:{}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(180000)])});
+   const response=await fetcher(upstream+req.url,{method:req.method,headers:{'Content-Type':'application/json',...(req.headers.authorization?{Authorization:req.headers.authorization}:{})},...(body?{body:JSON.stringify({...body,chat_template_kwargs:{enable_thinking:false,...body.chat_template_kwargs},stream:false})}:{}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(180000)])});
    const result=await response.json();
    if(!response.ok||!stream){res.writeHead(response.status,{'Content-Type':'application/json'});res.end(JSON.stringify(normalizeToolReply(result)));return;}
    const reply=normalizeToolReply(result);

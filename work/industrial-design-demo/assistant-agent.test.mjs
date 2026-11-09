@@ -35,3 +35,13 @@ test('production hours carry explicit Beijing labels and preserve recorded zero'
  assert.deepEqual(r.rows[0].hourlyRecords,[{time:'09:00',produced:0},{time:'17:00',produced:72}]);
  assert.equal(r.rows[0].hourly[10],null);
 });
+
+test('device queries resolve the displayed asset name and device code to its current parameters',async()=>{
+ const context={assets:[{name:'多头灌装机',code:'FIL-HEAD-01',stageIndex:4}],capabilities:[{id:'FIL-HEAD-01:fillVolume',label:'单瓶灌装量',device:'FIL-HEAD-01',stageIndex:4,type:'NUMBER',unit:'mL',min:100,max:1000},{id:'AGV-01:speedLimit',label:'速度',device:'AGV-01',stageIndex:7,type:'NUMBER',unit:'m/s'}],controls:{'FIL-HEAD-01:fillVolume':500,'AGV-01:speedLimit':1}};
+ const run=createAgentTools({route:async()=>context,snapshot:()=>({updated:1,dataMode:'mixed',states:Array.from({length:9},()=>({value:500,source:'simulation',quality:'simulated',mode:'running'}))})},{headers:{}},{});
+ for(const query of ['多头灌装机','FIL-HEAD-01','单瓶灌装量']){
+  const result=await run('query_devices',{query});assert.equal(result.matched,1);assert.equal(result.setpoints[0].value,500);assert.equal(result.setpoints[0].deviceName,'多头灌装机');
+ }
+ const byName=await run('query_devices',{query:'多头灌装机'});assert.equal(byName.readings.length,1);assert.equal(byName.readings[0].station,'精密灌装');assert.equal(byName.readings[0].source,'simulation');
+ assert.equal((await run('query_devices',{query:'不存在的设备'})).matched,0);
+});

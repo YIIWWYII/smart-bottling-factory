@@ -115,7 +115,19 @@
     }
   },
   "controller": {
-    "defaultProject": ""
+    "defaultProject": "",
+    "presets": [
+      {
+        "name": "blockly_2026yibao",
+        "projectName": "blockly_2026yibao",
+        "packagePath": "mg400-projects/blockly_2026yibao"
+      },
+      {
+        "name": "blockly_kkkl",
+        "projectName": "blockly_kkkl",
+        "packagePath": "mg400-projects/blockly_kkkl"
+      }
+    ]
   },
   "taughtProducts": {
     "cola-330ml": {

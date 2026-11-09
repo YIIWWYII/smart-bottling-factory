@@ -48,14 +48,15 @@ export class MG400 {
  constructor(){this.config={...defaultMG400};this.events=[];this.pending=new Map();this.queue=Promise.resolve();this.epoch=0;this.last=null;this.receivedAt=0;this.phase='未连接';}
  event(detail,result='成功'){this.events.push({detail,result});this.events=this.events.slice(-100);}
  drain(){return this.events.splice(0);}
- status(){const online=!!this.dashboard&&!this.dashboard.destroyed&&!!this.feedback&&!this.feedback.destroyed&&Date.now()-this.receivedAt<acquisition.feedbackStaleAfterMs;return {config:this.config,connected:!!this.dashboard&&!this.dashboard.destroyed,online,receivedAt:this.receivedAt||null,phase:online?this.phase:'未连接 / 反馈过期',feedback:online?this.last:null,error:this.error||'',alarmCodes:online&&this.last?.robot_mode===9?this.alarmCodes||'读取中':null,execution:this.execution||null};}
+ status(){const online=!!this.dashboard&&!this.dashboard.destroyed&&!!this.feedback&&!this.feedback.destroyed&&Date.now()-this.receivedAt<acquisition.feedbackStaleAfterMs;return {config:this.config,connected:!!this.dashboard&&!this.dashboard.destroyed,online,receivedAt:this.receivedAt||null,phase:online?this.phase:'未连接 / 反馈过期',feedback:online?this.last:null,error:this.error||'',lastAction:this.lastAction||null,alarmCodes:online&&this.last?.robot_mode===9?this.alarmCodes||'读取中':null,execution:this.execution||null};}
  close(){this.epoch++;this.pending.clear();this.dashboard?.destroy();this.feedback?.destroy();this.dashboard=null;this.feedback=null;this.last=null;this.receivedAt=0;this.phase='未连接';}
  async connect(config){
   this.close();if(!net.isIP(config.host)||![config.dashboardPort,config.feedbackPort,config.motionPort].every(port=>Number.isInteger(port)&&port>=1&&port<=65535))throw Error('机械臂通讯尚未配置，请现场填写 IP 和 Dashboard、反馈、运动端口后再连接');this.config=validateMG400(config);this.error='';const epoch=this.epoch;
   const open=port=>new Promise((resolve,reject)=>{const s=net.createConnection({host:this.config.host,port});const timer=setTimeout(()=>s.destroy(Error('连接超时')),communication.connectTimeoutMs);s.once('error',reject);s.once('connect',()=>{clearTimeout(timer);if(epoch!==this.epoch){s.destroy();reject(Error('连接已取消'));}else resolve(s);});s.once('close',()=>clearTimeout(timer));});
   try{this.dashboard=await open(this.config.dashboardPort);this.dashboard.on('error',e=>{this.error=e.message;});this.feedback=await open(this.config.feedbackPort);
    let buffer=Buffer.alloc(0);this.feedback.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);while(buffer.length>=frameBytes){if(buffer.readUInt16LE(lengthOffset)!==frameBytes||buffer.readBigUInt64LE(magicOffset)!==BigInt(magic)){buffer=buffer.subarray(1);continue;}const frame=buffer.subarray(0,frameBytes);buffer=buffer.subarray(frameBytes);try{this.accept(parseMG400(frame));}catch(e){this.error=e.message;}}});
-   this.feedback.on('error',e=>{this.error=e.message;});this.feedback.on('close',()=>{if(epoch===this.epoch){this.event('机械臂反馈连接断开','失败');this.receivedAt=0;this.pending.clear();}});this.event('已建立 MG400 TCP 连接，等待有效反馈');
+   this.dashboard.on('close',()=>{if(epoch===this.epoch){this.error='控制通道已断开，请检查网络并重新连接';this.pending.clear();}});
+   this.feedback.on('error',e=>{this.error=e.message;});this.feedback.on('close',()=>{if(epoch===this.epoch){this.event('机械臂反馈连接断开','失败');this.error='反馈通道已断开，请检查网络并重新连接';this.receivedAt=0;this.pending.clear();}});this.event('已建立 MG400 TCP 连接，等待有效反馈');
   }catch(e){this.close();this.error=e.message;throw e;}return this.status();
  }
  accept(data){
@@ -73,7 +74,7 @@ export class MG400 {
  prepare(action,value,actor){
   if(!this.status().online)throw Error('有效反馈不可用，禁止下发');const mode=this.last.robot_mode;
 
-  let text;if(action==='run'){if(this.execution?.state==='已受理 · 等待运行反馈')throw Error('上一工程仍等待运行反馈，请核对实机，不可重复启动');if(mode!==5)throw Error('启动前须已使能且空闲；不会自动清错或停止其他工程');if(!this.config.project)throw Error('请填写控制器内工程名称');text=formatMG400Command(action,{project:this.config.project});}
+  let text;if(action==='run'){if(['正在下发运行工程','已受理 · 等待运行反馈','启动结果未知'].includes(this.execution?.state))throw Error('上一工程仍等待运行反馈，请核对实机，不可重复启动');if(mode!==5)throw Error('启动前须已使能且空闲；不会自动清错或停止其他工程');if(!this.config.project)throw Error('请填写控制器内工程名称');text=formatMG400Command(action,{project:this.config.project});}
   if(action==='speed'){if(!Number.isInteger(value)||value<1||value>100)throw Error('速度比例须为 1–100%');text=formatMG400Command(action,{value});}
   if(!text)text=formatMG400Command(action);if(action==='power'&&mode!==3)throw Error('仅未上电状态可上电');if(action==='enable'&&mode!==4)throw Error('仅未使能状态可使能');if(action==='resume'&&mode!==10)throw Error('当前未暂停');if(action==='pause'&&mode!==7)throw Error('当前未运行');
   if(action==='pause'&&this.execution&&Date.now()-this.execution.at<1000)throw Error('启动后至少等待 1 秒再暂停');
@@ -81,7 +82,22 @@ export class MG400 {
  }
  async execute(token,actor){const p=this.pending.get(token);this.pending.delete(token);if(!p||p.actor!==actor||p.epoch!==this.epoch||p.expires<Date.now())throw Error('确认已过期，请重新发起');
   const check=this.prepare(p.action,p.value,actor);this.pending.delete(check.token);
-  const result=await this.command(p.text);if(p.action==='run')this.execution={at:Date.now(),project:this.config.project,state:'已受理 · 等待运行反馈',started:false};if(p.action==='stop'&&this.execution)this.execution.state='停止已受理 · 等待反馈';
-  this.event(p.text+'：已受理，实际状态以反馈为准');return {...result,message:'控制器已受理；不代表物理动作完成'};
+  const at=Date.now();
+  this.lastAction={action:p.action,command:p.text,state:'正在下发',at};
+  if(p.action==='run')this.execution={at,project:this.config.project,state:'正在下发运行工程',started:false};
+  try{
+   const result=await this.command(p.text);
+   if(p.action==='run'&&this.execution?.state==='正在下发运行工程')this.execution.state='已受理 · 等待运行反馈';
+   if(p.action==='stop'&&this.execution)this.execution.state='停止已受理 · 等待反馈';
+   this.lastAction={action:p.action,command:p.text,state:'控制器已受理',at,accepted:true};
+   this.event(p.text+'：已受理，实际状态以反馈为准');
+   return {...result,message:p.action==='speed'?'速度指令已受理，请核对实时速度比例。':p.action==='run'?'运行指令已受理，正在等待运行反馈；低速或程序等待阶段可能暂时不动。':'控制器已受理；不代表物理动作完成'};
+  }catch(error){
+   const rejected=error.message.startsWith('控制器拒绝指令');
+   const detail=error.message+(p.action==='run'&&rejected?' 请核对工程已导入控制器且名称一致、二次开发模式、使能及报警状态；不能仅据此认定是速度过低。':'');
+   this.lastAction={action:p.action,command:p.text,state:rejected?'控制器拒绝':'结果未知',at,error:detail};
+   if(p.action==='run')this.execution={at,project:this.config.project,state:rejected?'启动被拒绝':'启动结果未知',started:false,error:detail};
+   this.event(detail,'失败');throw Error(detail);
+  }
  }
 }

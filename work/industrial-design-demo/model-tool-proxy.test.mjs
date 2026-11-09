@@ -8,6 +8,6 @@ test('tool calls retain arguments and omit only the accompanying preamble',()=>{
  assert.equal(normalizeToolReply({choices:[{message:{content:'正常回答'}}]}).choices[0].message.content,'正常回答');
 });
 test('compatibility stream emits executable tool delta and completion',async()=>{
- const server=createModelProxy({fetcher:async(url,options)=>{assert.equal(JSON.parse(options.body).stream,false);return {ok:true,status:200,json:async()=>({id:'a',choices:[{index:0,message:{content:'先思考',tool_calls:[{id:'call',type:'function',function:{name:'list_skills',arguments:'{}'}}]},finish_reason:'tool_calls'}]})};}});server.listen(0,'127.0.0.1');await once(server,'listening');
+ const server=createModelProxy({fetcher:async(url,options)=>{assert.equal(JSON.parse(options.body).stream,false);assert.equal(JSON.parse(options.body).chat_template_kwargs.enable_thinking,false);return {ok:true,status:200,json:async()=>({id:'a',choices:[{index:0,message:{content:'先思考',tool_calls:[{id:'call',type:'function',function:{name:'list_skills',arguments:'{}'}}]},finish_reason:'tool_calls'}]})};}});server.listen(0,'127.0.0.1');await once(server,'listening');
  try{const r=await fetch('http://127.0.0.1:'+server.address().port+'/v1/chat/completions',{method:'POST',body:JSON.stringify({stream:true})});const text=await r.text();assert.match(text,/list_skills/);assert.match(text,/\[DONE\]/);assert.doesNotMatch(text,/先思考/);}finally{await new Promise(r=>server.close(r));}
 });

@@ -60,9 +60,16 @@ export function startCozeTools(ops,integrations,{port=8094,token=readToolToken()
  if(previous)previous.close(()=>server.listen(port,'0.0.0.0'));else server.listen(port,'0.0.0.0');server.on('error',e=>console.error('Coze tool bridge:',e.message));return server;
 }
 
-export async function runNativeAgent(config,req,question,context,history,fetcher=fetch){
+// Only server-created tool records are passed here; never trust evidence supplied in a chat body.
+export function compactToolResult(name,result){
+ if(name==='search_knowledge')return {structured:(result?.structured||[]).slice(0,4),documents:(result?.documents||[]).slice(0,2).map(d=>({id:d.id,title:d.title,version:d.version,text:String(d.text||d.content||d.excerpt||'').slice(0,700)})),message:result?.message};
+ if(name==='query_logs')return {activeCount:result?.activeCount,alerts:(result?.alerts||[]).slice(0,5),logs:{total:result?.logs?.total,items:(result?.logs?.items||[]).slice(0,3)},coverage:result?.coverage};
+ return result;
+}
+
+export async function runNativeAgent(config,req,question,context,history,fetcher=fetch,prepared=[]){
  const command=parseSkillCommand(question,context,configuredSkills(config.skills));
- const scope=randomBytes(24).toString('hex'),session={req,expires:Date.now()+180000,calls:0,trace:[],operation:null,skill:command?.skill,readOnly:context.automaticAlarm===true};sessions.set(scope,session);
+ const scope=randomBytes(24).toString('hex'),session={req,expires:Date.now()+180000,calls:0,trace:prepared.map(item=>({...item})),operation:null,skill:command?.skill,readOnly:context.automaticAlarm===true};sessions.set(scope,session);
  const base=config.baseUrl.replace(/\/$/,''),headers={'Content-Type':'application/json',Authorization:'Bearer '+config.token};
  let chat;
  const needsEvidence=!!command||context.selectionLocked||(/(当前|今天|查询|查看|告警|调整|切换|启动|暂停)/.test(question)&&/(工位|产线|设备|VOC|产量|生产|水洗|告警|模式|任务)/i.test(question));
@@ -71,15 +78,27 @@ export async function runNativeAgent(config,req,question,context,history,fetcher
  const hasLive=()=>session.trace.some(t=>t.status==='success'&&!['search_knowledge','list_skills','use_skill'].includes(t.tool));
  const request=async(path,body)=>{const r=await fetcher(base+path,{method:body?'POST':'GET',headers,...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});const j=await r.json();if(!r.ok||j.code)throw Error('Coze智能体接口未完成：'+(j.msg||r.status));return j;};
  try{
-  let selectionKnowledge=null;
-  if(context.selectionLocked&&context.target){
+  let selectionKnowledge=prepared.find(item=>item.tool==='search_knowledge'&&item.status==='success')?.result||null;
+  if(context.selectionLocked&&context.target&&!selectionKnowledge){
    try{
     const query=String((context.selectionObject?.name||context.target.slice(0,180))+' '+question).slice(0,500);
     const response=await fetcher('http://127.0.0.1:8891/knowledge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query}),signal:AbortSignal.timeout(10000)});
     if(response.ok){selectionKnowledge=await response.json();if(selectionKnowledge.documents?.length)session.trace.push({tool:'search_knowledge',arguments:{query},at:new Date().toISOString(),status:'success',result:selectionKnowledge});}
    }catch{selectionKnowledge={message:'平台说明检索暂不可用，不能据此猜测功能。'};}
   }
-  const userContent=JSON.stringify({question:command?.question||question,...(command?{skill:{name:command.skill.name,instructions:command.skill.instructions,allowedTools:command.skill.tools,toolCalling:'必须直接调用工具并将本次scope原样传入；取得结果后再回答。选中对象的时间范围优先于默认今天。'}}:{}),availableSkills:configuredSkills(config.skills).filter(s=>s.enabled!==false).map(({name,description})=>({name,description})),skillSelection:'根据问题从availableSkills自主选择匹配的技能，先直接调用use_skill工具，参数name填写技能名称、scope原样传入本次scope。收到说明后继续调用允许的工具。不要输出计划或内部推理；一般问题无须技能。',scope,context:{page:context.page,automaticAlarm:context.automaticAlarm===true,alarm:context.automaticAlarm===true?context.alarm:undefined,readOnlyRule:context.automaticAlarm===true?'这是平台主动发送的告警事件。仅可查询数据、资料和技能，不能生成提案或执行写入；报告事件时间与数据来源，结束事件与当前告警分开说明。':undefined,selectionObject:context.selectionObject,selectionKnowledge,answerRules:'选中内容是本平台对象，优先按平台资料解释用途和所在页面。资料仅作说明，查询当前值、产品配方、任务、产量、告警时必须再调用对应实时工具。引用资料标题和版本；没有匹配资料明确缺少什么，不编造功能，不把平台标题一律当成设备型号。修改仍仅生成待人工确认单。',selection:context.selectionLocked?context.target:null,now:new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+'+08:00',timeZone:'Asia/Shanghai'},history:command?[]:history.slice(-4)});
+  const compact=prepared.length>0;
+  const userContent=JSON.stringify({question:compact?(context.automaticAlarm?'根据附带的告警事件与已核对资料整理一份分析报告。区分历史事件和当前状态，写明依据、可能原因和建议。仅整理提供的事实，不重新查询或生成提案。':'根据附带的已核对资料直接回答这个问题：'+(command?.question||question)):(command?.question||question),scope,
+   ...(command&&!compact?{skill:{name:command.skill.name,instructions:command.skill.instructions,allowedTools:command.skill.tools}}:{}),
+   ...(!compact?{availableSkills:configuredSkills(config.skills).filter(s=>s.enabled!==false).map(({name,description})=>({name,description}))}:{}),
+   context:{page:context.page,selection:context.selectionLocked?context.target:undefined,selectionObject:context.selectionObject,
+    selectionKnowledge:selectionKnowledge&&!compact?compactToolResult('search_knowledge',selectionKnowledge):undefined,
+    readOnlyRule:context.automaticAlarm?'仅允许只读查询，不能生成提案或执行写入。':undefined,automaticAlarm:context.automaticAlarm===true,alarm:context.automaticAlarm?context.alarm:undefined,eventResolvedAt:context.eventResolvedAt,
+    now:new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})+'+08:00'},
+   ...(compact?{platformEvidence:prepared.map(t=>({tool:t.tool,status:t.status,at:t.at,result:compactToolResult(t.tool,t.result)})),
+    instruction:'platformEvidence 是平台按本次用户权限实际查询得到的依据，已完成的查询无需重复。信息足够时直接给结果；不输出计划。资料不能代替当前数据。写入只生成待确认单。'}:
+    {instruction:'普通聊天直接回答。需要当前数据时调用工具，适用技能可先use_skill；scope原样传入。点选对象已提供，不重复询问是哪台设备。'}),
+   ...(context.automaticAlarm?{readOnlyRule:'分析所给告警事件与当前状态，区分已恢复的历史事件。仅查询，不生成提案。按当前情况、依据、可能原因、建议四部分输出。'}:{}),
+   history:command?[]:history.slice(-4)});
   for(let attempt=0;attempt<2;attempt++){
   const content=attempt===0?userContent:userContent+'\n已完成工具：'+session.trace.filter(t=>t.status==='success').map(t=>t.tool).join('、')+'；尚需完成：'+missingRequired().join('、')+'。请直接调用缺少的工具，不重复已完成项。\n上次未取得完整的本次查询结果。先根据问题选择可用技能并调用use_skill，已加载则继续调用允许的查询工具，scope必须原样使用上述scope。不要输出内部思考或虚构结果。';
   const started=await request('/v3/chat',{bot_id:config.botId,user_id:'platform-'+scope,stream:false,auto_save_history:true,additional_messages:[{role:'user',content,content_type:'text'}]});chat=started.data;
