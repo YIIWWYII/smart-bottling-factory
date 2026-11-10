@@ -1,444 +1,236 @@
-# 智慧装瓶工厂项目交接与部署说明
+# 项目交接与部署说明
 
-本文面向第一次拿到项目的老师或同学，说明当前仓库能做什么、哪些已经验证、如何在另一台 Windows 电脑上配置和运行。
+本说明用于在另一台 Windows 电脑运行当前网页平台，并用 DevEco Studio 构建鸿蒙应用。鸿蒙应用通过 ArkWeb 加载电脑上的网页平台，打开应用后直接进入工位终端。
 
-仓库地址：<https://github.com/YIIWWYII/smart-bottling-factory>
+所有文件路径均以当前步骤说明的目录为起点。命令中的 http://... 是网络地址，不是文件路径。
 
-## 1. 先看结论
+## 1. 准备软件和项目
 
-当前 GitHub 默认分支 `main` 已包含以下部分：
+需要 Git for Windows、Node.js 24、MySQL 8 或 9、DevEco Studio，以及与工程匹配的 HarmonyOS SDK 6.1.1(24)。SDK、模拟器和项目建议放在非系统盘。当前网页入口不需要 Java、Maven 或旧 Spring Boot 后端。只运行网页时不需要 DevEco。
 
-| 部分 | 当前状态 | 说明 |
-| --- | --- | --- |
-| 数字展板 | 已完成构建 | 鸿蒙 ArkTS；总览、工序详情、独立 2D/3D Three.js 场景、设备/物料选择 |
-| 工位终端 | 已完成构建 | 鸿蒙 ArkTS；当前工位、实时数据、设备能力、参数控制和命令回执 |
-| 后台管理 | 已完成构建 | 鸿蒙 ArkTS；登录、RBAC、运营、设备、物料、物流仓储、AI、知识和审计页面 |
-| Spring Boot 后端 | 单元测试通过 | 生产业务中枢、MySQL 持久化、WebSocket、模拟数据、设备和 AI 接口 |
-| AI 中枢 | 本地演示闭环通过 | Python 服务、助手会话、流式事件、停止/重试、知识治理接口和本地演示 RAG |
-| 共享助手 HAR | 已完成构建 | `@bottling/harmony-assistant`，三端共同依赖，当前版本 `1.0.5` |
-
-### 1.1 已验证的证据
-
-在项目组验证环境执行过：
-
-- 后端 `mvn test`：`Tests run: 37, Failures: 0, Errors: 0`。
-- 后端 `factory-demo-smoke.ps1`：HTTP、WebSocket、MySQL 登录、模拟传感器和模拟命令 ACK 全部通过。
-- AI 中枢 `scripts/smoke_test.py`：`SMOKE TEST PASSED`。
-- 三个 App 的 `tools/validate-project.ps1`：均通过。
-- 共享 HAR 和三个 HAP：均出现 `BUILD SUCCESSFUL`。
-
-当前构建产物是调试、未签名产物：
-
-| 产物 | 路径 | SHA-256 |
-| --- | --- | --- |
-| 共享 HAR 1.0.5 | `packages/harmony-assistant/harmonyassistant/build/default/outputs/default/harmonyassistant.har` | `7172AF4E8298CA6DE56D23B0982D58C9C073B25A4A93CD1CB56FFF676631EEF7` |
-| 数字展板 HAP | `apps/digital-display/BottlingFactoryDisplay/entry/build/default/outputs/default/entry-default-unsigned.hap` | `940A1B67E35A77E1469F6DC20F8F83FD79430240F76453E3AD4B386834CE63EC` |
-| 工位终端 HAP | `apps/workstation-terminal/BottlingFactoryTerminal/entry/build/default/outputs/default/entry-default-unsigned.hap` | `71F47870E29574E79BD9344AD86DBBBB14056CB658DBDEC51AECBD920A4B6B3D` |
-| 后台管理 HAP | `apps/admin-console/BottlingFactoryAdmin/entry/build/default/outputs/default/entry-default-unsigned.hap` | `6CB4530E7FE0123D866D4FB6C7C670871AE91E38326FA1EE9FCFC67C5964654A` |
-
-### 1.2 目前还不能说“全流程真实打通”的部分
-
-以下内容不能当作已经完成的生产能力：
-
-1. 本轮已在 `MatePad Pro 13 / 127.0.0.1:5555` 鸿蒙模拟器安装并启动后台 HAP，验证登录、现场设备页面滚动、PLC/灯位状态展示和离线状态展示；数字展板与工位端已完成构建，但本轮没有宣称它们完成新的安装点击验收。
-2. 后端默认配置使用 MySQL `127.0.0.1:3307`。如果本机 MySQL 是 `3306`，必须按本文修改配置或启动参数。
-3. 后端登录、MySQL 持久化和 WebSocket 已在项目组环境完成联调；换电脑后仍必须按本文重新执行 smoke，不能只看单元测试。
-4. AI 默认是 `LOCAL_DEMO`。真实大模型需要在后台 AI 配置中填写兼容接口、模型和 API Key；本地 RAG 当前是演示型内存检索，不是生产向量数据库。
-5. 企业 PLC Topic 和 DOBOT TCP 已有兼容适配入口，但真实设备、真实视觉模型、MCP 工具链和“视觉识别后自动生成命令意图”的生产闭环仍需现场配置和验收。
-
-因此，当前版本适合：代码评审、界面演示、模拟数据联调和后续硬件接入；不应直接作为真实产线控制软件使用。
-
-## 2. 推荐目录和磁盘要求
-
-不要把项目、SDK、模拟器、Maven 仓库或 Python 虚拟环境放在 C 盘。推荐使用 ASCII 路径，避免 DevEco/Hvigor 因中文路径构建失败：
-
-```text
-D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory
-D:\HarmonyOS-Dev\DevEco-Studio
-D:\HarmonyOS-Dev\HarmonyOS-SDK
-D:\HarmonyOS-Dev\Maven\repository
-D:\HarmonyOS-Dev\Data\ai-center
-```
-
-如果老师电脑没有 D 盘，可以把仓库放到其他盘的 ASCII 路径，例如 `E:\HarmonyOS-Dev\Workspaces\smart-bottling-factory`；关键是不要使用中文目录和 C 盘默认缓存。
-
-## 3. 需要安装的软件
-
-### 3.1 必需软件
-
-1. Git for Windows。
-2. JDK 8。后端 `pom.xml` 的 Java 目标版本是 8。
-3. Maven 3.9 或项目组提供的 Maven。建议 Maven 本地仓库放在 `D:\HarmonyOS-Dev\Maven\repository`。
-4. MySQL 8.x，并创建数据库 `hdc`。
-5. Python 3.10 或更高版本。AI 中枢的当前代码已在 Python 3.13.5 环境通过 smoke test。
-6. DevEco Studio，以及与工程匹配的 HarmonyOS SDK `6.1.1(24)`。
-7. 鸿蒙模拟器或开启开发者模式的 HarmonyOS 真机。
-
-### 3.2 可选软件
-
-- Redis：用于后续实时缓存和分布式协调；当前本地演示启动不以 Redis 为前置条件。
-- MQTT Broker：只有接入真实传感器或 MQTT 演示时才需要；默认 `factory-demo` 使用模拟数据。
-- Node.js：只用于可选的 Three.js rawfile 浏览器语法检查，不是鸿蒙构建前置条件。
-
-### 3.3 DevEco 路径检查
-
-在 PowerShell 中执行：
+在准备保存项目的父文件夹中，右键选择“在终端中打开”。项目及其所有上级目录请使用英文、数字和短横线，避免中文和空格导致构建路径问题。
 
 ```powershell
-$cli = 'D:\HarmonyOS-Dev\npm-global\devecocli.cmd'
-& $cli --version
-& $cli device list
-& $cli emulator list
+# 检查 Git 是否安装并加入 PATH；识别不了时重新打开终端，或修复 Git 安装的 PATH 选项。
+git --version
+
+# 检查 Node.js，版本应为 v24.x。
+node --version
+
+# 下载主分支的整个仓库，不使用只下载网页目录的稀疏检出。
+git clone --branch main https://github.com/YIIWWYII/smart-bottling-factory.git smart-bottling-factory
+
+# 进入仓库根目录。
+Set-Location .\smart-bottling-factory
 ```
 
-应能看到 `devecocli 1.2.0-stable` 或兼容版本。模拟器必须先在 DevEco Studio 中启动，`device list` 才会显示在线设备。
+应看到 work、apps、packages 等目录。网页工程在 work/industrial-design-demo/；鸿蒙工程在 apps/workstation-terminal/BottlingFactoryTerminal/；鸿蒙共享模块在 packages/harmony-assistant/harmonyassistant/。不要拆开移动这些目录。
 
-## 4. 获取仓库
+## 2. 创建数据库
 
-```powershell
-New-Item -ItemType Directory -Force 'D:\HarmonyOS-Dev\Workspaces' | Out-Null
-Set-Location 'D:\HarmonyOS-Dev\Workspaces'
-git clone https://github.com/YIIWWYII/smart-bottling-factory.git smart-bottling-factory
-Set-Location '.\smart-bottling-factory'
-git fetch origin --prune
-git checkout main
-git pull --ff-only origin main
-git status --short --branch
-```
+MySQL 用于保存任务、设备资产、业务数据和服务配置。先在 Windows“服务”中确认 MySQL 服务已启动。使用 MySQL 自带命令行或图形管理工具，以安装时设置的管理员账号登录。
 
-陌生使用者直接使用默认分支 `main` 即可，不要自行把多个开发分支混合复制到一个工程中。拉取后可用 `git rev-parse HEAD` 查看当前版本。
-
-## 5. 初始化 MySQL
-
-先确认 MySQL 正在运行，并记住 root 密码。项目不会替老师猜测或修改数据库密码。
-
-使用 MySQL 客户端执行：
+在 SQL 编辑区依次执行以下语句。把 ReplaceWithYourPassword 换成自己设置的数据库密码，后续在 .env 中使用同一密码。账号仅允许本机 TCP 连接。
 
 ```sql
-CREATE DATABASE IF NOT EXISTS hdc
-  DEFAULT CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
+-- 创建当前网页平台使用的空数据库。
+CREATE DATABASE IF NOT EXISTS bottleworks CHARACTER SET utf8mb4;
+
+-- 创建平台连接数据库时使用的本机账号。
+CREATE USER IF NOT EXISTS 'bottleworks'@'127.0.0.1' IDENTIFIED BY 'ReplaceWithYourPassword';
+
+-- 授予该账号读写及创建本库业务表的权限。
+GRANT ALL PRIVILEGES ON bottleworks.* TO 'bottleworks'@'127.0.0.1';
 ```
 
-项目启动时会按配置执行 `src/main/resources/sql/mysql.sql` 和 `src/main/resources/sql/factory.sql`。如果数据库用户没有建表权限，请由管理员先执行这两个 SQL 文件，或给项目数据库用户授权。
+如果账号已经存在，CREATE USER IF NOT EXISTS 不会更新密码；使用现有密码，或由管理员为该账号重新设置密码。不要导入旧 Spring Boot 工程的 hdc.sql，它不是当前网页平台的数据库结构。
 
-当前后端的演示配置默认值是：
+## 3. 配置网页平台
 
-```text
-数据库：hdc
-地址：127.0.0.1
-端口：3307
-用户：root
-密码：123456
-
-本项目组验证机的 MySQL 程序和数据目录都在 D 盘。若使用同样的便携式 MySQL，可用下面的方式启动；`--lower_case_table_names=2` 必须保留：
+以下命令从仓库根目录开始。
 
 ```powershell
-$mysql = 'D:\HarmonyOS-Dev\Tools\mysql-8.0.46-winx64\bin\mysqld.exe'
-$data = 'D:\HarmonyOS-Dev\Runtime\mysql\hdc'
-& $mysql --defaults-file='D:\HarmonyOS-Dev\Runtime\mysql\my.ini' --datadir=$data --port=3307 --lower_case_table_names=2 --console
+# 进入网页工程；后续 npm 和平台脚本都在此目录执行。
+Set-Location .\work\industrial-design-demo
+
+# 建立只属于本机的数据库配置文件；已有 .env 时先检查内容，不覆盖。
+if (-not (Test-Path -LiteralPath .\.env)) { Copy-Item -LiteralPath .\.env.example -Destination .\.env }
+
+# 用记事本打开本机配置。
+notepad .\.env
 ```
 
-如果已有 Windows 服务管理 MySQL，只需确认它实际监听的端口与 Spring Boot 配置一致；不要同时启动两个 MySQL 实例使用同一个数据目录。
+按实际安装填写：
+
+```dotenv
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_DATABASE=bottleworks
+MYSQL_USER=bottleworks
+MYSQL_PASSWORD=ReplaceWithYourPassword
+TELEMETRY_TOKEN=ReplaceWithYourOwnRandomToken
 ```
 
-如果本机是常见的 `3306` 或密码不同，不要直接改 GitHub 中的默认配置，可以在启动时覆盖：
+MySQL 常用默认端口为 3306，原演示电脑使用 3307。以自己的 MySQL 配置为准；.env.example 中的 3307 需要相应修改。TELEMETRY_TOKEN 是外部程序提交设备数据时使用的令牌，请设置自己的随机值，不上传 .env。
 
 ```powershell
-$env:MAVEN_OPTS = '-Dmaven.repo.local=D:\HarmonyOS-Dev\Maven\repository'
-mvn spring-boot:run `
-  "-Dspring-boot.run.profiles=factory-demo" `
-  "-Dspring-boot.run.arguments=--spring.datasource.url=jdbc:mysql://127.0.0.1:3306/hdc?characterEncoding=UTF-8&serverTimezone=Asia/Shanghai --spring.datasource.username=root --spring.datasource.password=你的数据库密码"
+# 根据仓库的锁定版本安装网页和 Node.js 接口依赖。
+npm ci
+
+# 启动网页及业务接口；监听局域网以便鸿蒙设备访问。
+npm run dev -- --host 0.0.0.0 --port 5174 --strictPort
 ```
 
-也可以在 DevEco/IDEA 的运行配置中设置同样的 Spring 参数。不要把真实数据库密码提交到 GitHub。
+保持此终端运行。在电脑浏览器打开 http://127.0.0.1:5174/，应能进入平台。服务首次启动会创建业务表并生成初始演示数据。页面未打开时，先检查终端报错；不要跳过数据库错误继续构建鸿蒙应用。
 
-## 6. 启动 Spring Boot 后端
+此命令同时承载网页、业务、AI 接入和设备接口。npm run build 仅生成前端资源，双击 HTML 或运行 vite preview 不会启动这些业务接口。
 
-打开第一个 PowerShell：
+## 4. 导入鸿蒙工程并直接打开平台
+
+1. 打开 DevEco Studio，在欢迎页点击 **Open（打开）**；已进入其他工程时，选择 **File → Open（文件 → 打开）**。
+2. 从仓库根目录依次进入 apps、workstation-terminal，选择 BottlingFactoryTerminal 文件夹，点击打开。不是选择整个仓库，也不是只选择 entry。
+3. 等待工程同步。共享模块从仓库的 packages/harmony-assistant/harmonyassistant/ 引用，保持原目录关系即可。
+4. 工程要求 SDK 6.1.1(24)。如果提示 SDK 缺失，在 DevEco 的 SDK 管理器中安装匹配版本；不要仅为绕过提示随意改版本号。
+5. 先确认第 3 步的网页服务仍在运行。启动 HarmonyOS 模拟器，在运行目标中选中它。
+6. 按本机 DevEco 的签名提示，在 **File → Project Structure → Signing Configs（文件 → 项目结构 → 签名配置）**中完成调试签名。真机安装使用自己的账号、设备和签名配置，不复制他人的证书路径。
+7. 运行模块选择 entry，点击顶部 **Run（运行）**。等待构建、安装完成。
+8. 应用启动后直接打开网页平台的工位终端，不再要求先填写地址。
+
+默认地址位于 entry/src/main/ets/pages/Platform.ets（相对鸿蒙工程目录）：
+
+```typescript
+@StorageLink('platformUrl') address: string = 'http://10.0.2.2:5174/#station'
+```
+
+10.0.2.2 用于模拟器访问宿主电脑。若所用模拟器网络不支持该地址，改用平台电脑的局域网 IPv4。实体平板也使用电脑的局域网 IPv4，例如 http://192.168.1.20:5174/#station；示例 IP 必须换成实际地址。
 
 ```powershell
-Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\services\backend\hdc_server'
-$env:MAVEN_OPTS = '-Dmaven.repo.local=D:\HarmonyOS-Dev\Maven\repository'
-mvn spring-boot:run "-Dspring-boot.run.profiles=factory-demo"
+# 在运行网页服务的电脑查看网络配置，找到当前以太网或 Wi-Fi 的 IPv4 地址。
+ipconfig
 ```
 
-如果使用了 MySQL 覆盖参数，将参数附加到命令末尾。看到 Spring Boot 启动并监听 `8088` 后，另开 PowerShell 检查：
+电脑和平板应在可互通的同一网络中，Windows 防火墙需允许 Node.js 在当前专用网络接收连接。平板上的 127.0.0.1 指向平板本身，不能用来访问电脑服务。
+
+连接失败时，应用显示地址输入框和“重试”按钮；也可在代码中改好默认地址后重新运行。界面重试修改只在当前进程保存，若希望下次启动仍使用新地址，请修改代码默认值并重新构建。
+
+## 5. 编写状态卡与配置设备的顺序
+
+先在网页工程修改状态卡，在电脑浏览器检查，再构建鸿蒙应用。网页通过网络加载，网页代码更新后通常只需刷新应用页面或重新打开应用；改变 ArkTS 外壳、默认地址、权限或本地资源时，需要重新构建并安装 HAP。
+
+机械臂通信在应用构建后配置。相关文件相对网页工程为：
+
+- config/mg400-communication.json：机械臂 IP、TCP 端口、超时。
+- config/mg400-protocol.json：指令和反馈协议。
+- config/mg400-trajectories.json：轨迹工程预设。
+- config/mg400-projects/：平台保存的轨迹工程副本。
+- public/config/mg400-model-mapping.json：模型节点与关节反馈映射。
+
+通信参数未填时，平台和鸿蒙应用仍可构建、启动，连接实机时才校验通信资料。预设轨迹在平台登记不等于已导入控制器，控制器中的工程需通过对应的 DobotStudio 导入并保持工程名一致。运行真实轨迹前核对设备安装位置、点位和现场条件。
+
+## 6. 可选的 AI、Coze 和视觉服务
+
+网页、初始演示数据和鸿蒙外壳可先独立运行。智能体回答、真实视觉检测和知识检索需要相应服务，不能仅靠网页源码恢复。
+
+### 沿用现有迁移包
+
+将现有 Coze、适配模型、知识库和视觉迁移资料另行交付。按迁移包说明恢复 Docker 镜像、数据卷、模型和知识数据，启动后在平台“工程管理 → AI 配置”填写实际地址、已发布智能体 ID、工作流 ID 和本机令牌。地址和端口以迁移包为准，保留迁移后的 Coze 提示词、工具及模型设置。
+
+GitHub 不包含 Coze 容器数据、完整模型权重、个人访问令牌和签名材料。只安装 Docker Desktop 不会自动生成原来的 Coze 智能体。连接其他电脑上的现成服务时，也需要按网络与访问权限填写该服务地址。
+
+### 仓库附带的辅助启动脚本
+
+以下命令均从网页工程目录执行。已有迁移包启动脚本时，优先沿用迁移包，不同时启动第二套相同端口的服务。
 
 ```powershell
-Invoke-RestMethod 'http://127.0.0.1:8088/hdc/api/factory/health'
-Invoke-RestMethod 'http://127.0.0.1:8088/hdc/api/factory/topology'
+# 仅启动端口 8093 的固定结果视觉示例，用于检查接口；不执行真实识别，也不会启动模型或 Coze。
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start-integration-services.ps1
 ```
 
-健康接口可访问后，运行后端模拟联调脚本：
+如需使用仓库的本地模型辅助脚本，在 .runtime/chat-model/ 下提供 llama.cpp/llama-server.exe、自己的基础 GGUF 和适配器 GGUF。以下文件名为摆放约定，必须与实际文件一致：
 
 ```powershell
-Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\services\backend\hdc_server'
-.\scripts\factory-demo-smoke.ps1 -BaseUrl 'http://127.0.0.1:8088/hdc/api'
+# 启动指定基础模型和适配器；8002 为兼容接口，转发到本机 8003 模型进程。
+# 此脚本不自动修改 Coze；迁移包已经占用相同端口时不要运行。
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start-chat-model.ps1 -ModelRoot .\.runtime\chat-model -ModelFile base-model.gguf -AdapterFile adapter.gguf
 ```
 
-该脚本会检查 HTTP 快照、WebSocket、模拟传感器、登录、模拟设备命令 ACK、九工序拓扑、设备能力和 StageSnapshot。
+模型服务还需要与文件兼容的 llama.cpp 运行文件。可通过 -ProjectorFile 指定多模态投影文件，通过 -CredentialsFile 指定包含 model_api_key 的本机 JSON；不传凭据文件时沿用进程环境的 LLAMA_API_KEY。模型与适配器路径相对 ModelRoot 计算，不含电脑盘符。脚本使用 CPU，显式传入 -GpuLayers 才启用对应 GPU 层数。
 
-### 6.1 全模拟与真实/模拟混合模式
-
-三个鸿蒙应用始终只连接 Spring Boot，不直接连接 PLC、MQTT Broker 或机械臂。是否使用真实设备由后端按设备运行态决定：
-
-```text
-设备有新鲜 MQTT 遥测 -> 真实设备模式
-设备没有遥测或超过 30 秒 -> 只对该设备使用模拟数据
-模拟设备命令 -> 模拟适配器立即 ACKNOWLEDGED
-真实 MQTT 设备命令 -> SENT，等待 command-ack
-真实设备通道不可用 -> FAILED，不显示假成功
-```
-
-没有现场硬件时继续使用 `factory-demo`。当前现场 Broker 为 `192.168.1.200:1883`，已写入 `factory-mqtt-demo`；电脑需连接现场网络并处于 `192.168.1.0/24` 网段。启动前先验证 TCP 和 MQTT：
+知识服务需要单独安装 Python 依赖 fastapi、uvicorn、numpy、fastembed，并提供 platform-knowledge.json 与 BAAI/bge-small-zh-v1.5 的已有模型缓存。
 
 ```powershell
-Test-NetConnection 192.168.1.200 -Port 1883
+# 安装知识服务需要的 Python 依赖；若使用迁移包的虚拟环境，应在该环境中执行。
+python -m pip install fastapi uvicorn numpy fastembed
+
+# 使用指定知识数据和已有向量模型缓存启动知识检索，以及固定结果视觉示例。
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start-integration-services.ps1 -KnowledgeRoot .\.runtime\knowledge -EmbeddingCache .\.runtime\embedding-cache
+
+# Docker 引擎及迁移数据已恢复后，启动指定 Compose 中现有镜像；不会下载替代镜像。
+# 此例假设已把迁移部署放在 .runtime/coze/，以实际恢复目录为准。
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start-integration-services.ps1 -CozeComposeFile .\.runtime\coze\docker-compose.yml
 ```
 
-看到 `TcpTestSucceeded : True` 后启动真实/模拟混合模式：
+启动日志位于网页工程 .runtime/logs/。脚本输出“已请求启动”不代表模型完成加载；还需检查对应服务健康接口和平台连接测试。固定结果视觉示例不能作为 YOLO、PatchCore 的真实检测结果。
+
+## 7. 是否需要转移原电脑的数据
+
+如果对方只需运行初始演示，使用空库即可。如果需要你当前配置好的设备、任务和模型位置，还需迁移业务数据与上传文件：
+
+1. 在平台停止操作并停止网页服务后，使用 MySQL 工具导出原电脑的 bottleworks 数据库。该库可能包含 AI 连接令牌，只交给获授权的接收者，不上传 GitHub。
+2. 复制网页工程 public/uploads/ 下实际使用的上传文件，以及 .runtime/ 下需要保留的上传资源；不要把本机依赖、日志或临时文件混入资料包。
+3. 在对方电脑启动平台之前恢复到目标数据库，按相同相对目录放回上传文件。已有数据时先备份，不直接覆盖。
+4. 按对方现场重新核对机械臂 IP、设备地址和服务连接。需要恢复工具桥令牌时，单独处理本机 config/platform-agent.json，不要提交到 GitHub。
+
+运行中的数据库与上传文件需保持一致。仓库中已有的默认模型资源会随克隆下载，但本机后来上传的模型及资产登记不会仅凭 Git 克隆自动恢复。
+
+## 8. 更新代码
+
+以下命令从仓库根目录执行。更新前保存本机修改，停止网页服务；保留 .env、数据库和迁移服务数据。
 
 ```powershell
-mvn spring-boot:run `
-  "-Dspring-boot.run.profiles=factory-mqtt-demo"
+# 查看有没有本机代码修改；有修改先处理，避免覆盖学生正在编辑的内容。
+git status
+
+# 只允许快进更新，不自动产生合并提交；有分叉时先处理本机提交。
+git pull --ff-only origin main
+
+# 进入网页工程，安装与新锁文件一致的依赖。
+Set-Location .\work\industrial-design-demo
+npm ci
+
+# 重新启动更新后的网页与业务接口。
+npm run dev -- --host 0.0.0.0 --port 5174 --strictPort
 ```
 
-若现场 Broker 地址变化，不要改 Java 代码，使用启动参数覆盖：
+鸿蒙外壳代码有更新时，在 DevEco 中重新同步并运行 entry。仅更新网页时，保持外壳地址指向同一服务，刷新或重新打开应用即可查看。
 
-```powershell
-mvn spring-boot:run `
-  "-Dspring-boot.run.profiles=factory-mqtt-demo" `
-  "-Dspring-boot.run.arguments=--mqtt.url=tcp://新地址 --mqtt.port=1883"
-```
+## 9. 常见问题
 
-企业 PLC 兼容 Topic：
-
-```text
-后端请求全量同步：order/adapter/sync
-PLC 全量状态：     order/service/sync
-PLC 单路状态：     order/service/switch
-PLC 指示灯状态：   order/service/lamps
-```
-
-PLC 上线状态与网络信息：
-
-```text
-PLC 网络/心跳上报：device/network/online
-后端请求适配器灯位：order/adapter/lamps
-```
-
-四路 PLC 输入在后台“现场设备”页只读展示，当前企业软件明确提供的可控能力是四路指示灯；没有验收过的传送带调速、机械臂动作、AGV 调度按钮不会在界面中伪造。传送带现场仍由电源和旋钮调速，机械臂 TCP 默认关闭。灯位命令发送后，页面以 PLC 回报的最终状态为准。
-
-`device` 数组或 `index` 默认按以下顺序映射，可用 `factory.enterprise.plc.switch-devices` 覆盖：
-
-```text
-0 机械臂 -> PK-ARM-01
-1 机床   -> FIL-HEAD-01
-2 输送线 -> PT-CV-01
-3 巡检车 -> AGV-01
-```
-
-标准设备 Topic 为：
-
-```text
-上报：factory/{lineId}/{stageCode}/{deviceCode}/telemetry
-上报：factory/{lineId}/{stageCode}/{deviceCode}/sensor
-上报：factory/{lineId}/{stageCode}/{deviceCode}/event
-上报：factory/{lineId}/{stageCode}/{deviceCode}/command-ack
-下发：factory/{lineId}/{stageCode}/{deviceCode}/command
-```
-
-DOBOT 当前只接管 `PK-ARM-01 + START_PACKING_PLAN`。确认机械臂已切到 TCP/IP 二次开发模式、点位和物理安全已验收后，才能启用：
-
-```powershell
-mvn spring-boot:run `
-  "-Dspring-boot.run.profiles=factory-mqtt-demo" `
-  "-Dspring-boot.run.arguments=--factory.enterprise.dobot.enabled=true --factory.enterprise.dobot.host=192.168.1.6 --factory.enterprise.dobot.port=29999 --factory.enterprise.dobot.packing-script=blockly_hdc2024"
-```
-
-企业资料中的 `hdc2024` 是 DobotStudio Pro 中的工程名称；企业可运行 ArkTS 源码实际发送的是 `runscript(blockly_hdc2024)`。如果现场控制器中的脚本名不同，只覆盖 `factory.enterprise.dobot.packing-script`，不要修改 Java 代码。
-
-## 7. 启动 AI 中枢
-
-AI 中枢与 Spring Boot 是两个进程。打开第二个 PowerShell：
-
-```powershell
-Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\services\ai-center'
-if (-not (Test-Path '.venv')) { python -m venv .venv }
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item '.env.example' '.env' -ErrorAction SilentlyContinue
-.\.venv\Scripts\python.exe -m ai_center --host 0.0.0.0 --port 8091
-```
-
-第三个 PowerShell 运行 AI smoke test：
-
-```powershell
-Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\services\ai-center'
-.\.venv\Scripts\python.exe .\scripts\smoke_test.py
-```
-
-看到 `SMOKE TEST PASSED` 才表示 AI 中枢的本地演示接口可用。
-
-### 7.1 配置真实大模型
-
-默认配置是安全的 `LOCAL_DEMO`，不会调用外部模型。要使用兼容 OpenAI API 的平台，可先在 AI 中枢环境变量中配置：
-
-```powershell
-$env:AI_PROVIDER = 'OPENAI_COMPATIBLE'
-$env:AI_MODEL_NAME = '平台当前可用模型名'
-$env:AI_BASE_URL = 'https://平台接口地址/v1'
-$env:AI_API_KEY = '只在本机环境变量中设置，不要提交'
-$env:AI_REQUEST_TIMEOUT_SECONDS = '20'
-```
-
-也可以登录后台管理端，在 AI 配置页面填写。API Key 由 AI 中枢服务端保存并脱敏返回；不要写入 ArkTS 源码、Git、聊天记录或截图。
-
-真实模型连接应先使用后台的“连接测试”和“测试提问”，确认模型、权限、网络、超时和 RAG 状态，再用于演示。
-
-## 8. 配置三个鸿蒙应用
-
-三个 App 当前默认访问 `192.168.1.104`，这是本次现场联调电脑的局域网地址，不是自动发现地址。如果后端和 AI 中枢运行在另一台电脑，或电脑重新连接网络后局域网 IPv4 发生变化，必须在构建 HAP 前将以下配置中的主机地址改为运行服务电脑当前的局域网 IPv4：
-
-```text
-apps/digital-display/BottlingFactoryDisplay/entry/src/main/ets/service/ApiConfig.ets
-apps/workstation-terminal/BottlingFactoryTerminal/entry/src/main/ets/service/ApiConfig.ets
-apps/admin-console/BottlingFactoryAdmin/entry/src/main/ets/service/ApiConfig.ets
-apps/admin-console/BottlingFactoryAdmin/entry/src/main/ets/service/AiCenterConfig.ets
-```
-
-地址关系：
-
-```text
-Spring Boot HTTP： http://电脑IP:8088/hdc/api
-Spring Boot WS：   ws://电脑IP:8088/hdc/api/dataScreen/1
-AI HTTP：          http://电脑IP:8091/api
-AI WS：            ws://电脑IP:8091/api/assistant/events
-```
-
-模拟器或真机不能使用 `localhost`，因为那代表设备自身。Windows 防火墙要允许 TCP `8088` 和 `8091` 入站；如果只在同一台电脑的模拟器运行，也要确认模拟器能访问宿主机地址。
-
-不要修改本地 Three.js 为 CDN。Three.js 已放在各 App 的 `rawfile/factory3d/vendor/three.min.js`，2D 页面在 `rawfile/factory2d`，3D 页面在 `rawfile/factory3d`。
-
-## 9. 构建、安装和运行三个 App
-
-建议先构建共享 HAR，再构建三个 HAP：
-
-```powershell
-$cli = 'D:\HarmonyOS-Dev\npm-global\devecocli.cmd'
-
-Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\packages\harmony-assistant'
-& $cli build --modules harmonyassistant --build-mode debug
-
-Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\apps\digital-display\BottlingFactoryDisplay'
-& $cli build --modules entry --build-mode debug
-
-Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\apps\workstation-terminal\BottlingFactoryTerminal'
-& $cli build --modules entry --build-mode debug
-
-Set-Location 'D:\HarmonyOS-Dev\Workspaces\smart-bottling-factory\apps\admin-console\BottlingFactoryAdmin'
-& $cli build --modules entry --build-mode debug
-```
-
-每次必须看到 `BUILD SUCCESSFUL`，并检查 `entry/build/default/outputs/default/*.hap` 是否生成。当前工程没有提交签名配置，生成的是 `*-unsigned.hap`；在 DevEco Studio 中配置本机调试签名后再 Run，或者使用该电脑已有的调试签名完成安装。不要把个人签名文件提交到 GitHub。
-
-也可以直接在 DevEco Studio 中分别打开三个工程目录，等待 Sync 完成后选择模拟器运行。三个工程不是一个入口选择器，应该分别运行：
-
-1. `BottlingFactoryDisplay`：启动后直接进入数字展板总览。
-2. `BottlingFactoryTerminal`：启动后进入工位选择或绑定的当前工位。
-3. `BottlingFactoryAdmin`：启动后进入登录页。
-
-## 10. 演示账号
-
-### 后台管理员
-
-```text
-用户名：admin
-密码：admin123
-```
-
-### 工位账号
-
-所有工位演示账号的密码都是 `station123`：
-
-| 用户名 | 工位 |
+| 现象 | 检查位置与处理 |
 | --- | --- |
-| `station_pretreatment` | 预处理 |
-| `station_gas` | 气体检测 |
-| `station_appearance` | 外观检测 |
-| `station_beverage` | 饮料准备 |
-| `station_filling` | 灌装 |
-| `station_secondary` | 二次检测 |
-| `station_packing` | 机械臂装箱 |
-| `station_agv` | AGV 运输 |
-| `station_warehouse` | 仓储入库 |
+| Git 或 npm 无法识别 | 确认软件已安装并加入 PATH；安装后重开终端和 DevEco |
+| MySQL 连接被拒绝 | 检查 MySQL 服务、实际端口，以及 .env 是否保存 |
+| 数据库或账号不存在 | 完成第 2 步；网页只自动创建业务表，不自动创建数据库或 MySQL 用户 |
+| 页面能看，操作接口失败 | 查看启动终端的数据库错误；不要用静态 HTML 或 preview 替代业务服务 |
+| 平板连不上，电脑能打开 | 检查平板使用的 IP、局域网、服务 --host 和 Windows 防火墙 |
+| 应用先进入旧原生工位 | 确认已拉取本次更新并重新构建安装；当前 EntryAbility 应加载 pages/Platform |
+| 鸿蒙构建提示共享模块缺失 | 检查 packages/harmony-assistant/harmonyassistant/，完整克隆并保留目录关系 |
+| 找不到 SDK 或签名文件 | 安装工程指定 SDK，并在本机配置调试签名；不使用其他电脑的证书路径 |
+| AI 或视觉没有结果 | 先启动迁移包中相应服务，再配置和测试连接；网页启动不会自动启动这些外部服务 |
+| 更新后上传模型消失 | 检查模型文件与数据库中的模型路径是否一同迁移 |
 
-数字展板默认只读，不需要登录。后端数据库初始化失败时，这些演示账号不会凭空生效，应先检查 Spring Boot 日志中的 MySQL 连接和表初始化错误。
+## 10. 验证与其他工程
 
-## 11. 最小验收顺序
-
-按下面顺序验收，任何一步失败先处理当前一步：
-
-1. `mvn test`：确认后端代码测试通过。
-2. 启动 MySQL，确认数据库 `hdc` 可连接。
-3. 启动 Spring Boot，检查 `factory/health` 和 `factory/topology`。
-4. 运行 `factory-demo-smoke.ps1`，确认 HTTP、WebSocket、模拟传感器、登录和模拟命令 ACK。
-5. 启动 AI 中枢，运行 `smoke_test.py`。
-6. 启动模拟器，安装并运行数字展板：确认总览、九工序、2D、3D、滚动、暂停/恢复和对象选择。
-7. 运行工位端：使用对应工位账号，确认本站数据、设备能力、只读/可控边界和命令回执。
-8. 运行后台：使用 `admin/admin123`，确认登录、导航、AI 配置、知识审核和审计页面。
-9. 关闭后端或 AI 中枢，确认前端显示离线/LOCAL DEMO，不显示假成功；关闭现场 Broker 时，后台“现场设备”应显示 `MQTT OFFLINE`，不能保留假在线。
-10. 重新启动服务，确认快照、WebSocket 重连和数据版本恢复。
-
-## 12. 常见问题
-
-### 登录失败
-
-先确认：
+网页工程目录执行以下检查，不会启动真实机械臂：
 
 ```powershell
-Invoke-RestMethod 'http://127.0.0.1:8088/hdc/api/factory/health'
+# 执行 Node.js 自动测试。
+node --test *.test.mjs
+
+# 构建前端，检查界面代码与资源引用。
+npm run build
 ```
 
-如果接口都打不开，是后端未启动或端口/IP错误；如果接口能打开但登录失败，查看 Spring Boot 控制台是否有 MySQL 表初始化错误，再确认账号密码是否输入正确。
+鸿蒙静态检查脚本位于 apps/workstation-terminal/BottlingFactoryTerminal/tools/validate-project.ps1。静态检查不能替代 DevEco 的 HAP 构建和设备运行；完整验收应确认网页可操作、鸿蒙构建成功并在目标设备显示平台。
 
-### 页面显示 LOCAL DEMO
-
-这表示前端没有拿到可用后端快照，或服务不可达。它是明确的演示降级，不代表真实传感器在线。检查后端地址、Windows 防火墙、端口 `8088` 和手机/模拟器与电脑是否在可通信网络。
-
-### AI 提问超时
-
-先在后台 AI 配置中使用“连接测试”和“测试提问”。检查 `AI_BASE_URL`、模型名、API Key、服务端网络和 `AI_REQUEST_TIMEOUT_SECONDS`。本地演示应使用 `LOCAL_DEMO`，不依赖外部大模型。
-
-### HAP 无法安装
-
-当前构建产物是 unsigned debug HAP。打开 DevEco Studio 配置调试签名后重新构建；同时确认模拟器系统版本与工程 `6.1.1(24)` 匹配。
-
-### 2D/3D 空白
-
-先确认 HAP 内含 `rawfile/factory2d`、`rawfile/factory3d` 和本地 `three.min.js`，再检查模拟器/真机 ArkWeb WebGL 支持。3D 不可用时可以关闭 3D，只保留 2D 和实时数据；不要把 2D 改成 3D 俯视角。
-
-### Maven 下载很慢或占用 C 盘
-
-确认 `MAVEN_OPTS` 使用：
-
-```powershell
-$env:MAVEN_OPTS = '-Dmaven.repo.local=D:\HarmonyOS-Dev\Maven\repository'
-```
-
-DevEco SDK、OHPM 缓存、模拟器和构建目录也应在 D 盘配置。
-
-## 13. 项目边界
-
-- 数字展板只读，不直接控制设备。
-- 工位端是现场监视和受控调参入口，命令必须经过后端权限、范围、联锁、人工锁和 ACK。
-- 后台负责账号、设备档案、异常、物流仓储、AI 配置、知识审核和审计，不复制现场控制页面。
-- Spring Boot 是生产事实和命令安全闸口，不实现模型、RAG、MCP 或提示词。
-- AI 中枢负责视觉、问答、RAG、决策建议和知识治理；普通助手问答不能创建设备命令。
-- 模拟数据必须标注 `SIMULATION` 或 `LOCAL DEMO`，不能当作真实硬件数据。
-
-详细接口与设计说明请先阅读：
-
-- `contracts/README.md`
-- `docs/design/INDUSTRIAL-HMI-UI-SYSTEM.md`
-- `SOFTWARE-HARDWARE-INTEGRATION-REQUIREMENTS.md`（企业软硬件对接、设备点位、协议和验收）
+仓库还保留原生数字展板、原生后台、Spring Boot 和 Python AI 中枢。只有使用这些独立工程时才按各自目录的 README 安装和启动，不把旧服务的 hdc 数据库、ApiConfig.ets 或端口配置套用到当前网页平台。

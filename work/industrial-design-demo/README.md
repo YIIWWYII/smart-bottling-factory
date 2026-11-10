@@ -11,7 +11,7 @@ npm ci
 npm run dev -- --port 5174
 ```
 
-浏览器打开 `http://127.0.0.1:5174/`。首次部署需在平台配置模型、Coze Studio、视觉服务及真实设备；仓库不包含本机数据库、登录密钥、模型权重或已经部署的 Coze 容器。`start-integration-services.ps1` 和 `start-chat-model.ps1` 沿用演示电脑的 F 盘路径，其他电脑使用前应调整路径。
+浏览器打开 `http://127.0.0.1:5174/`。首次部署需在平台配置模型、Coze Studio、视觉服务及真实设备；仓库不包含本机数据库、登录密钥、模型权重或已经部署的 Coze 容器。`start-integration-services.ps1` 和 `start-chat-model.ps1` 使用脚本目录下的相对路径，也可显式传入迁移资源路径。默认集成脚本只启动固定结果视觉示例；模型、知识库和 Coze 须按部署说明单独提供并显式启动。
 
 `npm run build` 检查并生成前端资源；仅用静态托管或 `vite preview` 不能替代 Node.js 业务服务。
 
@@ -35,6 +35,6 @@ node --test *.test.mjs
 npm run build
 ```
 
-2026-10-20：123 项 Node 测试通过，前端构建通过；构建仍提示部分资源包超过 500 kB。此轮发布未重新进行真机运动测试。
+最近一次平台发布检查：166 项 Node 测试通过，前端构建通过；构建仍提示部分资源包超过 500 kB。自动测试不代表真实机械臂运动已验收。
 
 模型及图片位于 `public/`，Blender 源文件位于 `blender-integration/`，交接样例位于 `handoff-examples/`，平台技能位于 `skills/`。运行数据库、环境密钥、依赖、构建产物和过程截图不提交。

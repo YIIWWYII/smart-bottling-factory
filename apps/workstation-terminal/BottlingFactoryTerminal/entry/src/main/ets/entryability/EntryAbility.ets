@@ -9,7 +9,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    windowStage.loadContent('pages/Workstation', (error) => {
+    windowStage.loadContent('pages/Platform', (error) => {
       if (error.code) {
         console.error(`[BottlingFactory] load page failed: ${JSON.stringify(error)}`)
       }

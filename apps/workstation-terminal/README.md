@@ -1,11 +1,11 @@
-# 鸿蒙小屏工位终端
+# 鸿蒙工位终端
 
-工程入口：`BottlingFactoryTerminal`，bundleName：`com.factory.bottling.terminal`。
+DevEco 工程入口为 `BottlingFactoryTerminal/`，应用标识为 `com.factory.bottling.terminal`。
 
-工位终端面向生产现场，展示当前工位和所属环节的实时状态、设备运行信息、正在处理的产品，以及经过权限和联锁校验的参数调整与控制操作。`Index -> Workstation -> StageDetail` 是主要使用路径；工位画面与数字展板使用同一份生产快照。
+当前应用启动后直接打开网页平台的工位终端。网页平台运行在电脑上，鸿蒙应用通过 ArkWeb 显示页面；网页的设备、任务和连接配置由平台服务保存。
 
-终端使用 ArkUI 承载交互，通过 ArkWeb 加载本地 Three.js 资源，提供与大屏一致数据驱动的独立 2D 平面动画和 3D 场景动画。写操作必须通过生产后端完成身份、权限、参数范围、联锁、幂等和边缘回执校验，HTTP 返回成功不代表设备已经执行成功。
+请完整下载仓库。工程引用 `packages/harmony-assistant/harmonyassistant/`，只复制此目录会丢失共享模块。
 
-本应用不负责全局大屏、后台报表、知识审核或直接连接 MQTT/硬件。共享助手通过 `@bottling/harmony-assistant` 接入，助手本身不能修改设备参数。跨应用字段和命令状态见根目录 `contracts/`。
+导入、SDK、签名、服务地址和运行步骤见 [项目交接与部署说明](../../ONBOARDING-DEPLOYMENT.md)。工程内部的页面和启动入口见 [工程说明](BottlingFactoryTerminal/README.md)。
 
-构建、配置、模拟数据和联调步骤见根目录 [ONBOARDING-DEPLOYMENT.md](../../ONBOARDING-DEPLOYMENT.md)。
+应用中的“原生工位”保留旧原生界面，其后端配置与当前网页入口分开。使用网页入口不需要启动旧 Spring Boot 后端。
