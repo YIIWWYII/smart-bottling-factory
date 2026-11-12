@@ -44,3 +44,29 @@ test('uploaded practice skeleton follows simulated J1 without moving its base',a
  assert.ok(Math.abs(j1.rotation.y-20*Math.PI/180)<1e-12);
  assert.ok(base.matrixWorld.equals(before));
 });
+
+test('rigid Empty joints may omit or change Blender numeric suffixes; ambiguous names are rejected',async()=>{
+ const root=new Group();for(const item of config.practiceBindings){const node=new Group();node.name=item.target.replace(/\.\d+$/,'');root.add(node);}
+ const apply=await bindBlenderMG400(root,{config});assert.equal(apply({online:true,receivedAt:Date.now(),feedback:{q_actual:[25,5,10,0]}}),true);assert.ok(Math.abs(root.getObjectByName('P_j1').rotation.y-25*Math.PI/180)<1e-10);
+ for(const node of root.children)node.name+='002';await bindBlenderMG400(root,{config});
+ const duplicate=new Group();duplicate.name='P_j1.003';root.add(duplicate);await assert.rejects(bindBlenderMG400(root,{config}),/尚未匹配模型关节/);
+});
+
+import {validateAssetMG400Mapping} from './src/mg400Mapping.js';
+import {Quaternion,Vector3} from 'three';
+test('per-asset mapping drives arbitrary Empty hierarchy relative to exported rest pose; stale input freezes',async()=>{
+ const root=new Group(),base=new Group(),turn=new Group(),arm=new Group(),tip=new Group();
+ base.name='FixedBase';turn.name='Turntable';arm.name='MainArm';tip.name='Tool';root.add(base);base.add(turn);turn.add(arm);arm.add(tip);
+ turn.rotation.set(.25,0,.1);arm.rotation.x=.5;tip.position.set(1,0,0);
+ const rest=turn.quaternion.clone(),baseBefore=base.quaternion.clone();
+ const mapping={version:1,feedbackField:'q_actual',staleAfterMs:1500,relativeToRest:true,bindings:[{target:'Turntable',axis:'y',weights:[1,0,0,0],offsetDeg:0},{target:'MainArm',axis:'x',weights:[0,1,0,0],offsetDeg:0}]};
+ const apply=await bindBlenderMG400(root,{mapping});assert.equal(apply(status([0,0,0,0]),1100),true);assert.ok(turn.quaternion.angleTo(rest)<1e-7);
+ assert.equal(apply(status([30,15,0,0]),1100),true);const expected=rest.clone().multiply(new Quaternion().setFromAxisAngle(new Vector3(0,1,0),Math.PI/6));assert.ok(turn.quaternion.angleTo(expected)<1e-7);assert.ok(base.quaternion.equals(baseBefore));
+ const current=turn.quaternion.clone();assert.equal(apply(status([80,0,0,0]),3000),false);assert.ok(turn.quaternion.equals(current));assert.equal(apply.mapping.bindings[0].target,'Turntable');
+});
+test('custom mapping rejects duplicate nodes, unrecognised targets, malformed coefficients and unsafe types',async()=>{
+ const mapping={version:1,feedbackField:'q_actual',staleAfterMs:1500,relativeToRest:true,bindings:[{target:'Turntable',axis:'y',weights:[1,0,0,0],offsetDeg:0}]};
+ assert.deepEqual(validateAssetMG400Mapping(mapping),mapping);assert.equal(validateAssetMG400Mapping(null),null);
+ for(const mutate of [m=>m.bindings.push({...m.bindings[0]}),m=>m.relativeToRest='true',m=>m.bindings[0].weights=[1],m=>m.bindings[0].weights[0]=Infinity,m=>m.bindings[0].target='',m=>m.feedbackField='arbitrary',m=>m.bindings[0].axis='w']){const m=structuredClone(mapping);mutate(m);assert.throws(()=>validateAssetMG400Mapping(m));}
+ await assert.rejects(bindBlenderMG400(new Group(),{mapping}),/尚未匹配模型关节/);
+});

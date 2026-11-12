@@ -1,3 +1,4 @@
+import {validateAssetMG400Mapping} from './src/mg400Mapping.js';
 import {createManualControl} from './mg400-manual.mjs';
 import {createMG400Simulation} from './mg400-simulation.mjs';
 import {readTestFeedback,stopTest,requestTestSpeed} from './mg400-test-feedback.mjs';
@@ -14,7 +15,7 @@ import {evaluateAlarms,alarmChanges,alarmDocument} from './src/alarmRules.js';
 import {managementRoute} from './management-domain.mjs';
 import {workflow} from './knowledge-workflow.mjs';
 import {standardTools} from './standard-mcp.mjs';
-import {productDefaults} from './src/product-resources.js';
+import {productDefaults,prepareProductCatalog} from './src/product-resources.js';
 import {dailyRecord,recordProduction} from './daily-metrics.mjs';
 import {initialLogistics,reserveProductionSlot,storeProductionCarton,planJob,advanceLogistics,blocked,obstacleBlocked,avoidanceStrategies,rankQueue,comparePlans,planPicking,inventoryAnalysis} from './src/logistics.js';
 import fs from 'node:fs';
@@ -37,7 +38,7 @@ export async function createOperations(env=process.env){
  const storage=await openDatabase(env),requestContext=new AsyncLocalStorage();
  const existing=storage.read();let db=existing||(fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'')):initial());
  db.tasks=existing?storage.tasks():initialTasks.map(t=>({...t,line:'当前产线',version:1,createdAt:now(),updatedAt:now(),deletedAt:null,archivedAt:null}));db.tasks.forEach(t=>{t.archivedAt??=null;t.deletedAt??=null;t.dataMode??='simulation';});db.employees.forEach(e=>{e.roles=Array.isArray(e.roles)&&e.roles.length?e.roles:[e.role];e.role=e.roles[0];});db.roleSettings={...defaultRoleSettings,...(db.roleSettings||{})};db.alerts??=initialAlerts;db.preferences??={dense:false,notifications:true};
- db.products??=structuredClone(productDefaults);db.materials??=[];db.assets??=equipmentAssets.map((a,i)=>({...a,id:'asset-'+i,code:stages[i].code,version:1,enabled:true}));
+ db.products=prepareProductCatalog(db.products??structuredClone(productDefaults),db.documents);db.materials??=[];db.assets??=equipmentAssets.map((a,i)=>({...a,id:'asset-'+i,code:stages[i].code,version:1,enabled:true}));
  db.materialFlow??=null;
  db.logisticsByMode??={};
  const logistics=()=>{const ls=db.logisticsByMode[db.dataMode]??=initialLogistics();ls.obstacles??=[];ls.queue??=[];ls.avoidance??='replan';return ls;};
@@ -428,6 +429,15 @@ const defaults=[
    old.updatedAt=now();old.version++;log(user,({schedule:'进入排程中',confirmSchedule:'确认已排程',release:'转入待生产',start:'开始生产',dispatch:'下发并启动生产',cancel:'取消任务',archive:'归档任务',unarchive:'取消归档',delete:'移入垃圾箱',restore:'恢复任务'})[action],old.id+' / '+old.name+(db.dataMode==='mixed'?'；仅启动模拟工位，真实工位只读遥测':''),'成功',{category:'task',before,after:{...old}});return old;
   }
   if(p==='/api/ops/alerts/resolve'&&write){requireRole(user,['admin','engineer','operator']);const a=db.alerts.find(x=>x.id===body.id);if(!a)fail('异常不存在。',404);if(a.done)fail('异常已处理，请刷新。',409);if(a.ruleId)fail('阈值告警仍在触发；请恢复对应参数或读数，系统自动记录恢复。',409);const i=stages.findIndex(s=>s.name===a.stage);if(hasRole(user,'operator')&&!user.stages.includes(i))fail('无此工位的处理权限。',403);const before={...a};a.done=true;a.resolvedAt=now();a.resolvedBy=user.name;log(user,'处理异常',a.title,'成功',{stageIndex:i>=0?i:null,before,after:{...a}});return a;}
+  if(p==='/api/ops/assets/model-mapping'&&write){
+   requireRole(user,['admin','engineer']);const asset=db.assets.find(a=>a.id===body.id);
+   if(!asset)fail('设备资产不存在。',404);
+   if(body.version!==asset.version||body.modelUrl!==asset.modelUrl)fail('模型或设备已变化，请重新打开模型与关节。',409);
+   if(!asset.modelUrl)fail('请先导入机械臂 GLB 模型。');
+   let mapping;try{mapping=validateAssetMG400Mapping(body.mapping);}catch(e){fail(e.message);}
+   const before=asset.mg400Mapping??null;asset.mg400Mapping=mapping;asset.version++;asset.updatedAt=now();
+   log(user,'保存机械臂模型映射',asset.name,'成功',{stageIndex:asset.stageIndex,before,after:mapping});return asset;
+  }
   if(p==='/api/ops/assets'&&write){
    requireRole(user,['admin','engineer']);const old=db.assets.find(a=>a.id===body.id);
    if(body.id&&!old)fail('设备资产不存在。',404);if(old&&body.version!==old.version)fail('设备已更新，请重新打开。',409);
@@ -443,7 +453,7 @@ const defaults=[
     if(bytes.length<12||bytes.length>20*1024*1024||bytes.toString('ascii',0,4)!=='glTF'||bytes.readUInt32LE(4)!==2||bytes.readUInt32LE(8)!==bytes.length)fail('请上传有效的 GLB 2.0 模型（可包含动画）。');
     const dir=path.resolve('public/uploads/equipment');fs.mkdirSync(dir,{recursive:true});const filename=randomUUID()+'.glb';fs.writeFileSync(path.join(dir,filename),bytes);modelUrl='/uploads/equipment/'+filename;modelName=String(body.modelName||'设备模型.glb').slice(0,150);
    }
-   const imageUrl=body.imageUrl??old?.imageUrl??'';if(typeof imageUrl!=='string'||imageUrl.length>2000000||(imageUrl&&!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$|^\/(?!\/)/.test(imageUrl)))fail('图片请使用 PNG/JPEG/WebP，最大 1.4 MB。');const deviceType=old?.deviceType||(body.deviceType==='mg400'?'mg400':'');const item={deviceType,placement:old?.placement||(deviceType==='mg400'&&body.stageIndex===0?{...loadingRobotPlacement}:undefined),imageUrl,modelUrl,modelName,id:old?.id||randomUUID(),version:(old?.version||0)+1,name:body.name.trim(),code:body.code.trim(),stageIndex:body.stageIndex,enabled:body.enabled!==false,note:String(body.note||'').slice(0,2000),updatedAt:now()};
+   const imageUrl=body.imageUrl??old?.imageUrl??'';if(typeof imageUrl!=='string'||imageUrl.length>2000000||(imageUrl&&!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$|^\/(?!\/)/.test(imageUrl)))fail('图片请使用 PNG/JPEG/WebP，最大 1.4 MB。');const deviceType=old?.deviceType||(body.deviceType==='mg400'?'mg400':'');const item={deviceType,placement:old?.placement||(deviceType==='mg400'&&body.stageIndex===0?{...loadingRobotPlacement}:undefined),imageUrl,modelUrl,modelName,mg400Mapping:body.modelData||body.removeModel?null:old?.mg400Mapping??null,id:old?.id||randomUUID(),version:(old?.version||0)+1,name:body.name.trim(),code:body.code.trim(),stageIndex:body.stageIndex,enabled:body.enabled!==false,note:String(body.note||'').slice(0,2000),updatedAt:now()};
    if(old)db.assets[db.assets.indexOf(old)]=item;else db.assets.push(item);log(user,old?'修改设备资产':'新增设备资产',item.name,'成功',{before:old||null,after:item});return item;
   }
   if(['/api/ops/products','/api/ops/materials'].includes(p)&&write){

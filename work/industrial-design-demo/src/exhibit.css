@@ -304,3 +304,15 @@
 .process-cockpit .cockpit-mission:before{background:linear-gradient(120deg,#47c6df75,#5faedb36),var(--glass-surface);border-color:#54b7d1}.process-cockpit .cockpit-health:before{background:linear-gradient(250deg,#b18bea80,#829ce442),var(--glass-surface);border-color:#ad8bd8}
 .demo-shell[data-color-mode=dark] .process-cockpit .gp-scene{background:linear-gradient(135deg,#203c55ed,#1f2940ed);border-color:#539ab3}.demo-shell[data-color-mode=dark] .process-cockpit .gp-scene .process-scene-heading h2{color:#bcf0ff}.demo-shell[data-color-mode=dark] .process-cockpit .gp-attention{background:linear-gradient(140deg,#314256,#222e43);border-color:#8097af}
 @media(max-width:760px){.process-cockpit .gp-day-totals>div:first-child strong{font-size:65px}}
+
+/* Peach beverage and cola use the same light product-stage layout as the rest of the platform. */
+.beverage-campaign.campaign-yibao .campaign-copy{color:#343d6a;background:linear-gradient(180deg,#fff8f2df,transparent 90%)}
+.campaign-yibao .campaign-eyebrow{color:#805663;letter-spacing:4px}
+.campaign-yibao .campaign-copy h3{font-weight:650;letter-spacing:.02em;text-shadow:0 2px 18px #ffffffc0}
+.campaign-yibao .campaign-copy h3>span:last-child{color:#aa6076}
+.campaign-yibao .campaign-seal{border-color:#e2b7bf;background:#fff7eecc;color:#167247;box-shadow:0 4px 16px #87556c20,inset 0 1px #fff}
+.beverage-campaign.campaign-cola.product-ad-scene .campaign-copy{color:#6b252d;background:linear-gradient(180deg,#fff8eddf,transparent 90%);text-align:left}
+.campaign-cola.product-ad-scene .campaign-eyebrow{color:#88414c}
+.campaign-cola.product-ad-scene .campaign-copy h3{align-items:flex-start;text-shadow:0 2px 18px #fff9}
+.campaign-cola.product-ad-scene .campaign-copy h3>span:last-child{color:#9a3445}
+.campaign-cola.product-ad-scene .campaign-seal{left:auto;right:24px;transform:none;color:#7a2939;border:1px solid #d6b2ac;background:#fff4e6b0}

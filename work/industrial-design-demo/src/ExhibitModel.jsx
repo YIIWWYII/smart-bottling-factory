@@ -16,19 +16,23 @@ export default function ExhibitModel({kind='drink',onSelect,selected,modelUrl,mo
   let dead=false,renderer,root,env,mixer,frame;let running=false;const clock=new THREE.Clock();setClips([]);setPlaying(false);const el=host.current,disposables=[];setStatus('loading');
   try{renderer=createRenderer({antialias:true,alpha:true});}catch{setStatus('error');return;}
   renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.outputColorSpace=THREE.SRGBColorSpace;
+  if(kind!=='process'){renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.95;}
   el.appendChild(renderer.domElement);renderer.domElement.setAttribute('aria-label',kind==='process'?'可旋转的三维工艺产线':kind==='asset'?'可旋转的设备模型':'可旋转的饮料包装样例');
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(38,1,.01,500),controls=new OrbitControls(camera,renderer.domElement);const releaseTouch=enableTouchOrbit(controls,renderer.domElement);
   controls.enableDamping=false;controls.maxPolarAngle=kind==='process'?Math.PI*.48:Math.PI;controls.enablePan=kind==='process';
-  const pmrem=new THREE.PMREMGenerator(renderer),room=new RoomEnvironment();env=pmrem.fromScene(room,.04);scene.environment=env.texture;room.dispose();pmrem.dispose();
-  scene.add(new THREE.HemisphereLight(0xffffff,0x667788,2));
-  const light=new THREE.DirectionalLight(0xffffff,3);light.position.set(6,10,8);scene.add(light);
+  const pmrem=new THREE.PMREMGenerator(renderer),room=new RoomEnvironment();env=pmrem.fromScene(room,.04);scene.environment=env.texture;scene.environmentIntensity=kind==='process'?1:.75;room.dispose();pmrem.dispose();
+  scene.add(new THREE.HemisphereLight(0xffffff,0x667788,kind==='process'?2:.7));
+  const light=new THREE.DirectionalLight(0xffffff,kind==='process'?3:1.6);light.position.set(6,10,8);scene.add(light);
   const render=()=>{if(!dead)renderer.render(scene,camera);};controls.addEventListener('change',render);
   let selectionOutline;
   highlight.current=index=>{if(selectionOutline){scene.remove(selectionOutline);selectionOutline.geometry.dispose();selectionOutline.material.dispose();selectionOutline=null;}if(root&&index!==null&&index!==undefined){const box=new THREE.Box3();root.traverse(o=>{if(o.isMesh&&o.userData.stageIndex===index)box.expandByObject(o);});if(!box.isEmpty()){box.expandByScalar(.07);selectionOutline=new THREE.Box3Helper(box,0xd56815);scene.add(selectionOutline);}}render();};
-  const fit=()=>{if(!root)return;const b=new THREE.Box3().setFromObject(root),center=b.getCenter(new THREE.Vector3()),size=b.getSize(new THREE.Vector3());const halfFov=THREE.MathUtils.degToRad(camera.fov/2);const distance=Math.max(size.y,size.x/camera.aspect,size.z)/2/Math.tan(halfFov)*1.4;controls.target.copy(center);camera.position.copy(center).add(kind==='process'?new THREE.Vector3(distance*.12,distance*.55,distance):new THREE.Vector3(distance*.65,distance*.18,distance));camera.near=.01;camera.far=500;camera.updateProjectionMatrix();controls.update();render();};reset.current=fit;
+  const fit=()=>{if(!root)return;const b=new THREE.Box3().setFromObject(root),center=b.getCenter(new THREE.Vector3()),size=b.getSize(new THREE.Vector3());const halfFov=THREE.MathUtils.degToRad(camera.fov/2);const distance=Math.max(size.y,size.x/camera.aspect,size.z)/2/Math.tan(halfFov)*(kind==='drink'?1.12:1.4);controls.target.copy(center);camera.position.copy(center).add(kind==='process'?new THREE.Vector3(distance*.12,distance*.55,distance):new THREE.Vector3(distance*.65,distance*.18,distance));camera.near=.01;camera.far=500;camera.updateProjectionMatrix();controls.update();render();};reset.current=fit;
   const resize=new ResizeObserver(()=>{const w=el.clientWidth,h=el.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();fit();render();});resize.observe(el);
   new GLTFLoader().load(kind==='process'?'/models/process.glb':(modelUrl||'/models/beverage/water-bottle.glb'),g=>{
    if(dead){g.scene.traverse(o=>{o.geometry?.dispose();});return;}root=g.scene;
+   // CSS campaign artwork is outside the WebGL transmission buffer. Use alpha glass
+   // for this presentation bottle so its clear shell reveals the campaign background.
+   if(kind==='drink'&&modelUrl?.endsWith('/yibao-peach-bottle.glb'))root.traverse(o=>{for(const m of [o.material].flat().filter(Boolean)){if(m.transmission>.5){m.transmission=0;m.transparent=true;m.opacity=.22;m.depthWrite=false;m.color.set(0xf4eee7);m.needsUpdate=true;}}});
    if(kind==='process'){
     root.updateMatrixWorld(true);const groups=new Map();
     root.traverse(o=>{if(!o.isMesh||Array.isArray(o.material))return;let anchor=o;while(anchor.parent&&anchor.userData.stageIndex===undefined)anchor=anchor.parent;const stage=anchor.userData.stageIndex??-1,key=stage+':'+o.material.uuid;const geom=o.geometry.clone();geom.applyMatrix4(o.matrixWorld);for(const attr of Object.keys(geom.attributes))if(!['position','normal','uv'].includes(attr))geom.deleteAttribute(attr);if(!geom.attributes.uv)geom.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(geom.attributes.position.count*2),2));if(!groups.has(key))groups.set(key,{material:o.material,stage,geo:[]});groups.get(key).geo.push(geom);disposables.push(o.geometry);});

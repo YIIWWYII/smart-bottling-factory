@@ -14,7 +14,7 @@ export function createLoadingTable(root){
  return group;
 }
 // Authored MG400 cycle: pick at 2s, release at 6.2s. Coordinates in the wash station frame.
-export function createLoadingZone(wash,gltf){
+export function createLoadingZone(wash,gltf,mapping=null){
  if(!wash||!gltf)return null;
  const zone=new THREE.Group();zone.name='LoadingZone';wash.add(zone);
  const steel=new THREE.MeshStandardMaterial({color:0x8597a7,metalness:.72,roughness:.3});
@@ -47,7 +47,7 @@ export function createLoadingZone(wash,gltf){
  // Keep the editable origin at the robot base; move the whole loading cell together.
  const origin=robot.position.clone();for(const child of zone.children)child.position.sub(origin);zone.position.copy(origin);zone.userData.loadingCell=true;
  wash.updateWorldMatrix(true,true);if(wash.parent)wash.parent.attach(zone);
- let applyActual=null,mappingError='正在加载 Blender 映射',disposed=false,physicalMode=false;bindBlenderMG400(robot,{hidePayload:false}).then(fn=>{if(!disposed){applyActual=fn;mappingError='';}}).catch(e=>{mappingError=e.message;});
+ let applyActual=null,mappingError='正在加载 Blender 映射',disposed=false,physicalMode=false;bindBlenderMG400(robot,{hidePayload:false,mapping}).then(fn=>{if(!disposed){applyActual=fn;mappingError='';}}).catch(e=>{mappingError=e.message;});
  let elapsed=0;
  return {zone,bottleTargets,update(delta,state,paused,enabled=true,material=null,physical=null){
   zone.visible=true;

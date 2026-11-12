@@ -20,3 +20,14 @@ test('configured GLB replaces bottle with normalized base and restores on task r
  binding.update(null);assert.equal(old.visible,true);assert.equal(parent.children.length,1);binding.dispose();
  }finally{GLTFLoader.prototype.load=original;}
 });
+
+import {productDefaults,prepareProductCatalog,productResourceDocuments} from './src/product-resources.js';
+test('product catalog starts with Yibao then cola; upgrades preserve user models, custom products and documents',()=>{
+ assert.deepEqual(productDefaults.slice(0,2).map(p=>p.id),['yibao','cola']);
+ const docs=[{id:'custom-doc',content:'keep'}],original=[{id:'custom',name:'Custom'},{id:'cola',name:'可乐',modelUrl:'/custom.glb',backgroundUrl:'/images/beverages/cola.webp',recipeId:'user-recipe',documentIds:['custom-doc']}];
+ const result=prepareProductCatalog(original,docs);
+ assert.deepEqual(result.slice(0,2).map(p=>p.id),['yibao','cola']);assert.equal(result[1].modelUrl,'/custom.glb');assert.equal(result[1].recipeId,'user-recipe');assert.equal(result[1].backgroundUrl,'/images/beverages/cola-lovart.webp');assert.ok(result[1].documentIds.includes('custom-doc'));assert.equal(result[2].id,'custom');
+ assert.equal(original[1].backgroundUrl,'/images/beverages/cola.webp');assert.equal(docs.length,3);
+ const again=prepareProductCatalog(result,docs);assert.deepEqual(again,result);assert.equal(docs.length,3);
+ for(const d of productResourceDocuments)assert.ok(d.content&&docs.some(x=>x.id===d.id));
+});

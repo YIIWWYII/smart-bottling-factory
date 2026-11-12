@@ -31,3 +31,13 @@ export function bindMG400Mapping(config,targets){
   return true;
  };
 }
+
+// Stored per asset; validates display mapping only, never device commands.
+export function validateAssetMG400Mapping(config){
+ if(config===null)return null;
+ if(!config||config.feedbackField!=='q_actual'||typeof config.relativeToRest!=='boolean'||!Array.isArray(config.bindings)||config.bindings.length>32)throw Error('模型映射格式无效。');
+ if(config.bindings.some(b=>typeof b?.target!=='string'||!b.target.trim()||b.target.length>160))throw Error('请选择有效的模型节点。');
+ const targets=Object.fromEntries(config.bindings.map(b=>[b.target,{rotation:{x:0,y:0,z:0}}]));
+ bindMG400Mapping(config,targets);
+ return {version:1,feedbackField:'q_actual',staleAfterMs:config.staleAfterMs,relativeToRest:config.relativeToRest,bindings:config.bindings.map(({target,axis,weights,offsetDeg})=>({target,axis,weights:[...weights],offsetDeg}))};
+}

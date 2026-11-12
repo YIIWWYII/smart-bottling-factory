@@ -24,7 +24,7 @@ export function createSceneAssets(root,device,codes,scene,camera,renderer,orbit,
    if(selected!==editId){selected=editId;focused=null;transform.detach();}
    if(lastMode!==mode){lastMode=mode;transform.setMode(mode||'translate');}transform.showX=mode!=='rotate';transform.showZ=mode==='translate';transform.showY=mode!=='scale';outline.visible=false;
    if(lastAssets!==assets){lastAssets=assets;active=assets.filter(a=>(isBuiltinAsset(a)||(a.enabled&&a.modelUrl&&a.placement?.enabled))&&(!device||codes[a.stageIndex]===device));
-   for(const [id,e] of entries)if(!active.some(a=>a.id===id&&a.modelUrl===e.url)){if(transform.object===e.model)transform.detach();release(e);entries.delete(id);}
+   for(const [id,e] of entries)if(!active.some(a=>a.id===id&&a.modelUrl===e.url&&(e.builtin||JSON.stringify(a.mg400Mapping||null)===e.mappingKey))){if(transform.object===e.model)transform.detach();release(e);entries.delete(id);}
    }
    for(const a of active){
     let e=entries.get(a.id);
@@ -33,12 +33,12 @@ export function createSceneAssets(root,device,codes,scene,camera,renderer,orbit,
      const original=root.getObjectByName('Asset_'+codes[a.stageIndex]);if(!original)continue;
      const wrapper=new THREE.Group();wrapper.position.copy(original.position);original.parent.add(wrapper);wrapper.add(original);original.position.set(0,0,0);e={builtin:true,model:wrapper,url:a.modelUrl};entries.set(a.id,e);
     }
-    if(!e){e={url:a.modelUrl};entries.set(a.id,e);new GLTFLoader().load(a.modelUrl,g=>{
+    if(!e){e={url:a.modelUrl,mappingKey:JSON.stringify(a.mg400Mapping||null)};entries.set(a.id,e);new GLTFLoader().load(a.modelUrl,g=>{
       e.model=g.scene;
       if(disposed||entries.get(a.id)!==e){release(e);return;}
       e.model.name='PlacedAsset_'+a.id;e.model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.userData.webDevice=codes[a.stageIndex];}});
       root.add(e.model);e.mixer=new THREE.AnimationMixer(e.model);e.clips=g.animations;e.actions=g.animations.map(c=>e.mixer.clipAction(c));
-      if(isTeachingRobotAsset(a)&&a.stageIndex===0)bindBlenderMG400(e.model).then(apply=>{if(!disposed&&entries.get(a.id)===e)e.applyMG400=apply;}).catch(error=>{e.error=error.message;});
+      if(isTeachingRobotAsset(a)&&a.stageIndex===0)bindBlenderMG400(e.model,{mapping:a.mg400Mapping}).then(apply=>{if(!disposed&&entries.get(a.id)===e)e.applyMG400=apply;}).catch(error=>{e.error=error.message;});
      },undefined,err=>{e.error=String(err);console.error('场景资产加载失败',a.name,err);});}
     if(!e.model)continue;
     const p=a.placement||builtinPlacements[a.stageIndex];e.model.visible=a.enabled&&p.enabled;if(!e.model.visible&&transform.object===e.model)transform.detach();if(!transform.dragging){e.model.position.set(p.x,p.y,p.z);e.model.rotation.y=THREE.MathUtils.degToRad(p.rotation);e.model.scale.setScalar(e.loading?p.scale/3:p.scale);}
