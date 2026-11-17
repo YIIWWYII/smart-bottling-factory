@@ -138,3 +138,23 @@ def test_real_barcode_mask_covers_full_bars_and_rotation(tmp_path):
     assert (masked[:20]==255).all()
     rotated=cv2.warpAffine(image,cv2.getRotationMatrix2D((160,160),20,1),(320,320),borderValue=(255,255,255))
     assert locate_barcode(rotated,{'allowMissing':True})['status']=='masked'
+
+def test_white_evidence_keeps_model_preprocessing_unchanged(monkeypatch, tmp_path):
+    import sys
+    from types import SimpleNamespace
+    import pipeline
+    calls=[]
+    weights=tmp_path/'model.pt';weights.write_bytes(b'test')
+    class Model:
+        def __init__(self, path): pass
+        def predict(self, image, **kwargs):
+            calls.append(image.copy())
+            return [SimpleNamespace(boxes=[],names={})]
+    monkeypatch.setitem(sys.modules,'ultralytics',SimpleNamespace(YOLO=Model))
+    image=np.full((80,80,3),240,np.uint8)
+    result=pipeline.Pipeline(tmp_path).inspect(image,{'weights':'model.pt','preprocess':{'size':80,'exclude':[[0,0,.5,.5]],'codeMask':{'required':False,'validated':True}}})
+    assert (calls[0][:40,:40]==127).all()
+    for key in ['imageUrl','preprocessedUrl','overlayUrl']:
+        preview=decode_image(result[key])
+        assert (preview[:40,:40]>250).all()
+        assert (preview[45:,45:]>235).all()

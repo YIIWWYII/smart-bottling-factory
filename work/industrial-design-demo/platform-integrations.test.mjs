@@ -207,3 +207,56 @@ test('selected write requests still reach the agent as proposals rather than rea
  }});
  await integration.chat(req('/chat'),'把所选参数修改为12，仅生成确认单',{selectionLocked:true,target:'抓取节拍'},[]);assert.equal(m.writes,0);
 });
+
+import {rehearsalDefaults} from './vision-rehearsal.mjs';
+test('rehearsal configuration persists independently of real vision settings and rejects stale saves and viewers',async()=>{
+ const m=mock(),i=createIntegrations(m.ops);const before=await i.route(req('', 'GET'),{});
+ let draft=await i.route(req('/vision-rehearsal','GET'),{});assert.equal(draft.cases.length,2);assert.equal(draft.enabled,false);
+ await assert.rejects(i.route(req('/vision-rehearsal','POST','viewer'),draft),/role denied/);
+ const saved=await i.route(req('/vision-rehearsal'),draft);assert.equal(saved.revision,1);assert.deepEqual((await i.route(req('/vision-rehearsal','GET'),{})).cases,saved.cases);
+ await assert.rejects(i.route(req('/vision-rehearsal'),draft),/已变化/);
+ const enabled=await i.route(req('/vision-rehearsal'),{...saved,enabled:true});assert.equal(enabled.enabled,true);
+ const after=await i.route(req('', 'GET'),{});assert.deepEqual(after.vision,before.vision);assert.deepEqual(after.coze,before.coze);
+});
+test('preset monitor keeps stages scoped and does not call a real vision job or replace actual mode results',async()=>{
+ const m=mock();let calls=0;const flow={taskId:'t',running:true,updated:1000,simulatedStages:Array(9).fill(true),stages:Array.from({length:9},()=>[])};flow.stages[2]=[{id:'b1',elapsed:0,duration:8}];
+ m.ops.snapshot=()=>({dataMode:'simulation',materialFlow:flow,states:Array.from({length:9},()=>({source:'simulation'}))});const i=createIntegrations(m.ops,{fetcher:async()=>{calls++;throw Error('unexpected external call');}});
+ await i.route(req('/vision-rehearsal'),{...rehearsalDefaults(),enabled:true});flow.updated=Date.now();await i.route(req('/vision-monitor','GET'),{});flow.stages[2][0].elapsed=7;const monitor=await i.route(req('/vision-monitor','GET'),{});
+ assert.equal(monitor.rehearsal.active,true);assert.equal(monitor.records[0].bottleId,'b1');assert.equal(monitor.records[0].verdict,'pass');assert.equal(calls,0);
+ m.ops.snapshot=()=>({dataMode:'real'});const real=await i.route(req('/vision-monitor','GET'),{});assert.equal(real.rehearsal.active,false);assert.equal(real.records.length,0);
+});
+
+test('persistent sample selection enforces role, mode and station, then locks the next run',async()=>{
+ const m=mock();m.ops.snapshot=()=>({dataMode:'mixed',materialFlow:null,states:Array.from({length:9},()=>({source:'simulation'}))});const i=createIntegrations(m.ops);
+ await assert.rejects(i.route(req('/vision-rehearsal-sample'),{stageIndex:2,caseId:'defect'}),/未启用/);
+ await i.route(req('/vision-rehearsal'),{...rehearsalDefaults(),enabled:true});
+ await assert.rejects(i.route(req('/vision-rehearsal-sample','POST','viewer'),{stageIndex:2,caseId:'defect'}),/role denied/);
+ await assert.rejects(i.route(req('/vision-rehearsal-sample'),{stageIndex:0,caseId:'defect'}),/有效工位/);
+ await i.route(req('/vision-rehearsal-sample'),{stageIndex:2,caseId:'defect'});const result=await i.route(req('/vision-rehearsal-start'),{stageIndex:2});assert.equal(result.rehearsal.manualFlows[2].caseId,'defect');
+ const monitor=await i.route(req('/vision-monitor','GET'),{});assert.equal(monitor.rehearsal.selectedSamples[2],'defect');
+ m.ops.snapshot=()=>({dataMode:'real'});await assert.rejects(i.route(req('/vision-rehearsal-sample'),{stageIndex:2,caseId:'normal'}),/未启用/);
+});
+
+test('single rehearsal start needs no production task and rejects viewers or real-mode stations',async()=>{
+ const m=mock();m.ops.snapshot=()=>({dataMode:'mixed',materialFlow:null,states:Array.from({length:9},()=>({source:'simulation'}))});const i=createIntegrations(m.ops);
+ await i.route(req('/vision-rehearsal'),{...rehearsalDefaults(),enabled:true});
+ await assert.rejects(i.route(req('/vision-rehearsal-start','POST','viewer'),{stageIndex:2}),/role denied/);
+ const r=await i.route(req('/vision-rehearsal-start'),{stageIndex:2});assert.ok(r.bottleId.startsWith('CAP-'));assert.equal(r.records[0].capturedCount,0);assert.ok(r.rehearsal.manualFlows[2]);
+ await assert.rejects(i.route(req('/vision-rehearsal-start'),{stageIndex:2}),/正在检测/);
+ m.ops.snapshot=()=>({dataMode:'real'});await assert.rejects(i.route(req('/vision-rehearsal-start'),{stageIndex:2}),/未启用/);
+});
+test('actual detection keeps exact submitted camera frames even on service failure',async()=>{
+ const m=mock(),i=createIntegrations(m.ops,{fetcher:async()=>{throw Error('service down');}});await i.route(req('/config'),{kind:'vision',baseUrl:'http://127.0.0.1:8093',enabled:true,workflowId:'',version:'test'});
+ const r=await i.route(req('/inspect'),{...input,requestId:'raw-frame-check',stageIndex:5});assert.equal(r.status,'failed');assert.equal(r.stageIndex,5);assert.equal(r.source,'camera-capture');
+ for(const camera of r.cameras){assert.equal(camera.originalUrl,input.images.find(frame=>frame.cameraId===camera.cameraId).data);assert.equal(camera.status,'error');}
+});
+
+test('camera captures are bound to the active bottle and preserve supplied image data',async()=>{
+ const m=mock();m.ops.snapshot=()=>({dataMode:'simulation',materialFlow:null});const i=createIntegrations(m.ops);await i.route(req('/vision-rehearsal'),{...rehearsalDefaults(),enabled:true});
+ const start=await i.route(req('/vision-rehearsal-start'),{stageIndex:2,source:'camera'});const body={stageIndex:2,bottleId:start.bottleId,cameraId:'top',data:'data:image/png;base64,AAAA'};
+ await assert.rejects(i.route(req('/vision-rehearsal-capture','POST','viewer'),body),/role denied/);
+ await assert.rejects(i.route(req('/vision-rehearsal-capture'),{...body,cameraId:'wrong'}),/无效/);
+ await assert.rejects(i.route(req('/vision-rehearsal-capture'),{...body,bottleId:'wrong'}),/结束/);
+ await i.route(req('/vision-rehearsal-capture'),body);const r=await i.route(req('/vision-monitor','GET'),{});assert.equal(r.records[0].cameras[0].originalUrl,body.data);assert.equal(r.records[0].cameras[1].originalUrl,null);
+ await i.route(req('/vision-rehearsal-stop'),{stageIndex:2});assert.equal((await i.route(req('/vision-monitor','GET'),{})).records[0].verdict,'review');
+});

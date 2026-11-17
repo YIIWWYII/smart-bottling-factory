@@ -70,3 +70,6 @@ export function materialTravel(flow,token,now=Date.now()){
  // Arrive, hold at the processing point, then leave after processing finishes.
  return time<2?time/4:time>token.duration-2?.5+(time-(token.duration-2))/4:.5;
 }
+
+// Cameras surround one inspection point; captures occur during the bottle hold.
+export const inspectionCaptureTime=(duration,index)=>2+index*Math.max(0,(duration-4)/5);

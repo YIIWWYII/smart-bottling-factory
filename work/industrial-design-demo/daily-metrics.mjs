@@ -5,6 +5,6 @@ export function dailyRecord(db,at=Date.now()){
  return db.dailyMetrics[key]??=( {day,mode:db.dataMode,startedAt:new Date(at).toISOString(),produced:0,hourly:Array(24).fill(null),completedTasks:[]} );
 }
 export function recordProduction(db,count,at=Date.now()){
- const d=dailyRecord(db,at);if(db.dataMode!=='simulation')return d;
+ const d=dailyRecord(db,at);if(!['simulation','mixed'].includes(db.dataMode))return d;
  const hour=new Date(at+8*3600000).getUTCHours();d.hourly[hour]=(d.hourly[hour]??0)+count;d.produced+=count;return d;
 }

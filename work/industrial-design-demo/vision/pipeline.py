@@ -162,10 +162,12 @@ class Pipeline:
     def inspect(self, image, cfg):
         from ultralytics import YOLO
         aligned, masked, mask, code_mask = preprocess(image, cfg.get('preprocess', {}), self.root, with_metadata=True)
+        preview = masked.copy()
+        preview[mask == 0] = 255
         if code_mask['status'] not in ('masked', 'not-required', 'no-code'):
             return {'status':'review','reason':code_mask['reason'],'codeMask':code_mask,
                     'inferenceSkipped':True,'detections':[],'anomalyScore':None,
-                    'preprocessedUrl':image_url(masked),'alignedUrl':image_url(aligned)}
+                    'preprocessedUrl':image_url(preview),'alignedUrl':image_url(aligned)}
 
         weights = self.root / cfg.get('weights', 'models/yolo12n.pt')
         if not weights.is_file():
@@ -177,7 +179,7 @@ class Pipeline:
         result = self.yolo[key].predict(masked, device='cpu', imgsz=320,
                                       conf=cfg.get('confidence', .35), verbose=False)[0]
         defects, detections = [], []
-        overlay = masked.copy()
+        overlay = preview.copy()
         for box in result.boxes:
             x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
             x1, x2 = max(0, x1), min(mask.shape[1], x2)
@@ -194,7 +196,7 @@ class Pipeline:
             color = (50, 50, 220) if is_defect else (220, 160, 30)
             cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 2)
             cv2.putText(overlay, name, (x1, max(14, y1-4)), cv2.FONT_HERSHEY_SIMPLEX, .45, color, 1)
-        overlay[mask == 0] = 127
+        overlay[mask == 0] = 255
         score, heatmap, patch_ready, patch_error = None, None, False, None
         bank_path = self.root / cfg.get('patchcore', 'models/not-trained.pt')
         try:
@@ -216,7 +218,7 @@ class Pipeline:
                 scale = float(cfg.get('anomalyThreshold') or max(score, .01))
                 heat = cv2.applyColorMap(np.uint8(np.clip(anomaly / scale, 0, 1)*255), cv2.COLORMAP_JET)
                 heatmap = cv2.addWeighted(aligned, .55, heat, .45, 0)
-                heatmap[mask == 0] = 127
+                heatmap[mask == 0] = 255
                 patch_ready = cfg.get('anomalyThreshold') is not None
             else:
                 patch_error = '此机位缺少 PatchCore 正常特征库'
@@ -240,6 +242,6 @@ class Pipeline:
                 'anomalyScore': score, 'anomalyThreshold': cfg.get('anomalyThreshold'),
                 'yoloStatus': 'reject' if defects else 'clear',
                 'patchcoreStatus': ('anomaly' if score >= cfg['anomalyThreshold'] else 'clear') if patch_ready else 'unavailable',
-                'experimental': cfg.get('experimental',False), 'alignedUrl': image_url(aligned), 'codeMask': code_mask, 'patchcoreError': patch_error, 'imageUrl': image_url(masked),
-                'overlayUrl': image_url(overlay), 'preprocessedUrl': image_url(masked),
+                'experimental': cfg.get('experimental',False), 'alignedUrl': image_url(aligned), 'codeMask': code_mask, 'patchcoreError': patch_error, 'imageUrl': image_url(preview),
+                'overlayUrl': image_url(overlay), 'preprocessedUrl': image_url(preview),
                 **({'heatmapUrl': image_url(heatmap)} if heatmap is not None else {})}
