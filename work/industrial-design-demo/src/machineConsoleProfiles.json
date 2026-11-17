@@ -4,9 +4,9 @@
     "title": "清洗输送操作台",
     "kind": "desk",
     "color": [
-      0.3,
-      0.47,
-      0.51
+      0.64,
+      0.66,
+      0.68
     ],
     "screen": [
       1.7,
@@ -27,9 +27,9 @@
     "title": "气体分析控制柜",
     "kind": "cabinet",
     "color": [
-      0.32,
-      0.42,
-      0.52
+      0.64,
+      0.66,
+      0.68
     ],
     "screen": [
       1.2,
@@ -43,16 +43,16 @@
       7.1,
       2.7
     ],
-    "material": "powder-ivory"
+    "material": "brushed-steel"
   },
   {
     "id": "vision",
     "title": "视觉检测监视台",
     "kind": "vision",
     "color": [
-      0.1,
-      0.17,
-      0.24
+      0.64,
+      0.66,
+      0.68
     ],
     "screen": [
       1.7,
@@ -66,16 +66,16 @@
       9.0,
       2.7
     ],
-    "material": "anodized-blue"
+    "material": "brushed-steel"
   },
   {
     "id": "mix",
     "title": "配液温控柜",
     "kind": "cabinet",
     "color": [
-      0.2,
-      0.38,
-      0.33
+      0.64,
+      0.66,
+      0.68
     ],
     "screen": [
       1.2,
@@ -89,16 +89,16 @@
       7.1,
       2.7
     ],
-    "material": "satin-steel"
+    "material": "brushed-steel"
   },
   {
     "id": "fill",
     "title": "灌装计量操作台",
     "kind": "desk",
     "color": [
-      0.57,
-      0.63,
-      0.65
+      0.64,
+      0.66,
+      0.68
     ],
     "screen": [
       1.7,
@@ -112,16 +112,16 @@
       8.8,
       2.7
     ],
-    "material": "polished-steel"
+    "material": "brushed-steel"
   },
   {
     "id": "quality",
     "title": "成品检测监视台",
     "kind": "vision",
     "color": [
-      0.25,
-      0.31,
-      0.39
+      0.64,
+      0.66,
+      0.68
     ],
     "screen": [
       1.7,
@@ -135,16 +135,16 @@
       9.0,
       2.7
     ],
-    "material": "graphite"
+    "material": "brushed-steel"
   },
   {
     "id": "pack",
     "title": "装箱机手持操作器",
     "kind": "pendant",
     "color": [
-      0.86,
-      0.57,
-      0.11
+      0.64,
+      0.66,
+      0.68
     ],
     "screen": [
       1.2,
@@ -158,16 +158,16 @@
       7.1,
       2.65
     ],
-    "material": "polymer"
+    "material": "brushed-steel"
   },
   {
     "id": "agv",
     "title": "AGV 车载终端",
     "kind": "tablet",
     "color": [
-      0.76,
-      0.3,
-      0.08
+      0.64,
+      0.66,
+      0.68
     ],
     "screen": [
       1.2,
@@ -181,16 +181,16 @@
       7.8,
       2.55
     ],
-    "material": "coated-steel"
+    "material": "brushed-steel"
   },
   {
     "id": "warehouse",
     "title": "仓储调度工作台",
     "kind": "warehouse",
     "color": [
-      0.21,
-      0.34,
-      0.48
+      0.64,
+      0.66,
+      0.68
     ],
     "screen": [
       1.7,
@@ -204,6 +204,6 @@
       9.0,
       2.6
     ],
-    "material": "enamel"
+    "material": "brushed-steel"
   }
 ]

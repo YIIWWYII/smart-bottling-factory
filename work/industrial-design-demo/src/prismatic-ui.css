@@ -104,8 +104,8 @@
 .demo-shell[data-color-mode] .station-app .instrument-readouts>div{border-top:3px solid var(--station-tint);background:linear-gradient(135deg,rgba(var(--station-rgb),.17),transparent);padding:14px}
 .demo-shell .console-middle-toolbar{background:linear-gradient(100deg,rgba(var(--station-rgb),.28),transparent);border-bottom:3px solid var(--station-tint)}
 .demo-shell .console-zone-label{border-left:4px solid #56b9c7;padding-left:12px}.demo-shell .console-settings .console-zone-label{border-left-color:#e9b660}
-.demo-shell .console-ai-zone .deck-rail>span{color:#675093;background:linear-gradient(#e3d7f7,#c5b0e4);padding:6px 13px;border-radius:5px;box-shadow:inset 0 2px #fff8,0 2px 0 #78638e55}
-.demo-shell .console-manual-zone .deck-rail>span{color:#624415;background:linear-gradient(#ffe7aa,#ddba74);padding:6px 13px;border-radius:5px;box-shadow:inset 0 2px #fff8,0 2px 0 #95723f55}
+.demo-shell .console-ai-zone .deck-rail>span{color:#353d45;background:linear-gradient(#f5f6f7,#c1c6cb);padding:6px 13px;border-radius:5px;box-shadow:inset 0 2px #fff8,0 2px 0 #737b8455}
+.demo-shell .console-manual-zone .deck-rail>span{color:#353d45;background:linear-gradient(#f5f6f7,#c1c6cb);padding:6px 13px;border-radius:5px;box-shadow:inset 0 2px #fff8,0 2px 0 #737b8455}
 .demo-shell .station-operation-history{border-left:4px solid #8c76bb;border-radius:18px;background:linear-gradient(120deg,#9e7cc323,transparent),var(--glass-surface)}
 /* Shared workspaces and dialogs retain readable neutral content surfaces. */
 .demo-shell :is(.logistics-summary,.logistics-map-card){border-top:4px solid #389caa;border-radius:18px;box-shadow:inset 0 2px var(--ui-edge),var(--ui-shadow)}
@@ -516,33 +516,22 @@
 .demo-shell[data-color-mode] .station-app.station-console-page .instrument-readouts{flex:0 0 auto}
 @media(max-width:850px){.demo-shell[data-color-mode] .station-app.station-console-page .station-integrated-console .instrument-shell{grid-template-columns:1fr!important}.demo-shell[data-color-mode] .station-app.station-console-page .station-art{height:360px!important;flex:0 0 360px!important;min-height:0!important}}
 
-/* Material finishes follow each station's equipment housing, independent of status colors. */
+/* All station simulation housings share the same silver finish. */
 .demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material]{
- --finish-top:#e0e5e7;--finish-mid:#b1bec4;--finish-bottom:#d4dce0;--finish-edge:#697c87;--finish-ink:#19303c;--finish-muted:#405968;
- --finish-grain:repeating-linear-gradient(0deg,#ffffff24 0px,#ffffff24 .6px,#30485514 .8px,transparent 1.6px,transparent 3px);
- --finish-reflection:linear-gradient(108deg,transparent 5%,#ffffff12 20%,#ffffff70 28%,transparent 41%,#1836481c 61%,#ffffff48 82%,transparent 96%);
+ --finish-top:#eff0f1;--finish-mid:#bfc3c7;--finish-bottom:#dfe1e3;--finish-edge:#777e85;--finish-ink:#252b31;--finish-muted:#535c65;
+ --finish-grain:repeating-linear-gradient(0deg,#ffffff24 0px,#ffffff24 .6px,#33383d14 .8px,transparent 1.6px,transparent 3px);
+ --finish-reflection:linear-gradient(108deg,transparent 5%,#ffffff12 20%,#ffffff70 28%,transparent 41%,#34383c1c 61%,#ffffff48 82%,transparent 96%);
  --upright-surface:var(--finish-grain),var(--finish-reflection),linear-gradient(145deg,var(--finish-top),var(--finish-mid) 57%,var(--finish-bottom));
 }
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material=powder-ivory]{--finish-top:#e6e3d8;--finish-mid:#c6c5bc;--finish-bottom:#d9d8ce;--finish-edge:#777b78;--finish-grain:radial-gradient(#4f575912 .5px,transparent .9px);--finish-reflection:linear-gradient(120deg,#ffffff26,transparent 65%)}
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material=anodized-blue]{--finish-top:#354c60;--finish-mid:#1c303f;--finish-bottom:#314654;--finish-edge:#0c1b25;--finish-ink:#edf6fc;--finish-muted:#c0d0db;--finish-grain:repeating-linear-gradient(90deg,#d3e5f106 0 1px,transparent 1px 3px);--finish-reflection:linear-gradient(115deg,transparent,#a1bfd525 30%,transparent 55%)}
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material=satin-steel]{--finish-top:#d6dcd9;--finish-mid:#9daea9;--finish-bottom:#ccd5d1;--finish-edge:#647a73;--finish-grain:repeating-linear-gradient(90deg,#ffffff1c 0 1px,#2b4a3e10 1px 2px,transparent 2px 4px);--finish-reflection:linear-gradient(110deg,#ffffff12,#ffffff40 40%,transparent 65%)}
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material=polished-steel]{--finish-top:#f0f3f4;--finish-mid:#b6c2ca;--finish-bottom:#e0e7ea;--finish-reflection:linear-gradient(105deg,#253e4e15,transparent 16%,#ffffff9c 22%,transparent 29%,#ffffff50 53%,#253e4e22 69%,#ffffff88 89%)}
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material=graphite]{--finish-top:#4c555e;--finish-mid:#2b333d;--finish-bottom:#424c55;--finish-edge:#121d27;--finish-ink:#f0f5fa;--finish-muted:#c4d0da;--finish-grain:radial-gradient(#d5e2ec18 .65px,transparent .9px);--finish-reflection:linear-gradient(120deg,#ffffff12,transparent 60%)}
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material=polymer]{--finish-top:#e5bb80;--finish-mid:#c99553;--finish-bottom:#dbac6e;--finish-edge:#705136;--finish-ink:#342b22;--finish-muted:#55412e;--finish-grain:radial-gradient(#58351812 .5px,transparent 1px);--finish-reflection:linear-gradient(120deg,#fff7dc38,transparent 70%)}
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material=coated-steel]{--finish-top:#dbbd71;--finish-mid:#b89a50;--finish-bottom:#cfb271;--finish-edge:#635737;--finish-ink:#2e2b1f;--finish-muted:#4c452c;--finish-grain:radial-gradient(#5c4d2412 .5px,transparent .9px);--finish-reflection:linear-gradient(120deg,#fff4c43b,transparent 65%)}
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material=enamel]{--finish-top:#d1dcd9;--finish-mid:#97ada7;--finish-bottom:#c1ceca;--finish-edge:#526b66;--finish-reflection:linear-gradient(110deg,transparent 5%,#ffffff80 12%,transparent 20%,transparent 75%,#ffffff55 90%);--finish-grain:linear-gradient(transparent,transparent)}
-.demo-shell[data-color-mode=dark] .station-console-page .station-integrated-console[data-material]{--finish-top:color-mix(in srgb,var(--finish-bottom) 63%,#0a1925);--finish-mid:color-mix(in srgb,var(--finish-bottom) 43%,#0a1925);--finish-ink:#f1f6fa;--finish-muted:#d2dce3}
+.demo-shell[data-color-mode=dark] .station-console-page .station-integrated-console[data-material]{--finish-top:#83888e;--finish-mid:#50565d;--finish-bottom:#747b83;--finish-edge:#363c42;--finish-ink:#f2f3f4;--finish-muted:#d3d6d9}
 .demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material] :is(.instrument-shell,.console-middle-toolbar,.console-upright){background:var(--upright-surface)!important;background-size:auto,auto,auto!important;border-color:var(--finish-edge)!important;color:var(--finish-ink);box-shadow:inset 0 2px 1px #ffffff88,inset 2px 0 2px #ffffff32,inset -2px 0 3px #1025343b!important}
 .demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material] .machine-live-deck:before{background:var(--upright-surface);background-size:auto,auto,auto;box-shadow:inset 0 3px #ffffffa8,inset 0 -3px var(--finish-edge)}
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material] .machine-live-deck:after{background:linear-gradient(var(--finish-edge),#1d303d);box-shadow:inset 0 2px #ffffff4d,0 8px 12px #10263355}
+.demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material] .machine-live-deck:after{background:linear-gradient(var(--finish-edge),#34393e);box-shadow:inset 0 2px #ffffff4d,0 8px 12px #10263355}
 .demo-shell[data-color-mode] .station-console-page .station-integrated-console[data-material] .machine-live-deck{color:var(--finish-ink);--console-ink:var(--finish-ink);--console-muted:var(--finish-muted)}
 .station-integrated-console[data-material] :is(.console-zone-label,.console-settings>header,.device-settings-group legend,.console-middle-toolbar>div:first-child,.console-middle-toolbar>span,.control-engraving strong){color:var(--finish-ink)}
 .station-integrated-console[data-material] :is(.machine-operation-note,.control-engraving small,.console-zone-label small,.console-settings>header>span,.console-middle-toolbar>div:first-child>span){color:var(--finish-muted)}
 .station-integrated-console[data-material] .console-settings-fields{background:#7e96a51a!important;box-shadow:inset 0 2px 4px #18324233,0 1px #ffffff66!important;border-color:#e3eef044!important}
 .station-integrated-console[data-material] .machine-live-screen{border-top-color:var(--finish-edge);border-left-color:var(--finish-edge);box-shadow:inset 0 0 0 2px #05141e,0 3px 0 #101c25,0 7px 10px #08192466,0 -1px #ffffff80}
-.demo-shell[data-color-mode] .station-console-page .station-integrated-console:is([data-material=powder-ivory],[data-material=graphite],[data-material=polymer],[data-material=coated-steel]) :is(.instrument-shell,.console-middle-toolbar,.console-upright,.machine-live-deck:before){background-size:3px 3px,auto,auto!important}
-.station-integrated-console[data-material=polymer] .machine-live-screen{border-width:12px;border-radius:24px;border-color:#384048;box-shadow:inset 0 0 0 3px #1d252b,0 5px 0 #222b32,0 9px 12px #1b253655}
-.station-integrated-console[data-material=polymer] .console-manual-zone{border-left-color:#5e493780}
 
 .station-integrated-console[data-material] .console-settings .panel-trim>span{color:var(--finish-muted)}
 .station-integrated-console[data-material] .machine-device-tabs button:not([aria-pressed=true]){color:var(--finish-ink);background:linear-gradient(145deg,#ffffff2e,#91a5b31a);border-color:#b5c6cf88;box-shadow:inset 0 1px #ffffff66,0 2px 3px #142a3933}

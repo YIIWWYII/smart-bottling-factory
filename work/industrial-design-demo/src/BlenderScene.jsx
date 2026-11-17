@@ -65,7 +65,7 @@ export default function BlenderScene({stationFraming=false,device=null,paused=fa
  const host=useRef(),state=useRef({paused,onDeviceSelect}),reset=useRef(()=>{});
  const [status,setStatus]=useState('loading'),[running,setRunning]=useState(true),[retry,setRetry]=useState(0);
  deviceStates=deviceStates||twin?.states||[];
- state.current={logistics:twin?.logistics,materialFlow:twin?.materialFlow,product:productionProduct(twin),onAssetSelect,editAssetId,onPlacementChange,transformMode,assets:sceneAssets||twin?.ops?.assets||[],protocol:twin?.ops?.protocol,safetyCases:twin?.safetyCases||[],controls:twin?.ops?.controls||{},paused:paused||!running,onDeviceSelect,selected,autoFocus,deviceStates,onTwinSelect};
+ state.current={logistics:twin?.logistics,materialFlow:twin?.materialFlow,product:twin?.ops?.products?.find(p=>p.id==='yibao'&&p.enabled)||productionProduct(twin),onAssetSelect,editAssetId,onPlacementChange,transformMode,assets:sceneAssets||twin?.ops?.assets||[],protocol:twin?.ops?.protocol,safetyCases:twin?.safetyCases||[],controls:twin?.ops?.controls||{},paused:paused||!running,onDeviceSelect,selected,autoFocus,deviceStates,onTwinSelect};
  useEffect(()=>{
   const el=host.current;let disposed=false,raf,renderer,controls,environment,root,mixer,resize,visibilityObserver;
   let inViewport=true,mechanics,loadingZone,bottleModels;
@@ -85,7 +85,7 @@ export default function BlenderScene({stationFraming=false,device=null,paused=fa
   // Cover softboxes in Blender Z-up converted to Three.js Y-up; only the key casts shadows.
   if(!device){const fill=new THREE.DirectionalLight(0xf1f6ff,.5);fill.position.set(8,12,0);scene.add(fill);const strip=new THREE.DirectionalLight(0xffffff,.7);strip.position.set(-1,10,-8);scene.add(strip);sun.shadow.radius=3;}
   controls=new OrbitControls(camera,renderer.domElement);const releaseTouch=enableTouchOrbit(controls,renderer.domElement);controls.addEventListener('change',()=>{dirty=true;});controls.enableDamping=true;controls.dampingFactor=.08;controls.maxPolarAngle=Math.PI*.48;controls.minDistance=device?1:3;controls.maxDistance=device?30:95;controls.enablePan=true;controls.minZoom=.55;controls.maxZoom=6;controls.addEventListener("start",()=>{focusGoal=null;userMoved=true;});
-  const size=()=>{const w=el.clientWidth,h=el.clientHeight;if(!w||!h)return;const nextRatio=Math.min(Math.max(window.devicePixelRatio||1,1),Math.min(renderingProfile.dpr,softwareGPU?1:2));if(nextRatio!==pixelRatio){pixelRatio=nextRatio;renderer.setPixelRatio(pixelRatio);el.dataset.pixelRatio=String(pixelRatio);}dirty=true;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();if(stationFraming&&!userMoved)viewportFit?.();};
+  const size=()=>{const w=el.clientWidth,h=el.clientHeight;if(!w||!h)return;const nextRatio=Math.min(Math.max(window.devicePixelRatio||1,1),Math.min(renderingProfile.dpr,softwareGPU?1:2));if(nextRatio!==pixelRatio){pixelRatio=nextRatio;renderer.setPixelRatio(pixelRatio);el.dataset.pixelRatio=String(pixelRatio);}dirty=true;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();if((stationFraming||!device)&&!userMoved)viewportFit?.();};
   resize=new ResizeObserver(size);resize.observe(el);size();
   visibilityObserver=new IntersectionObserver(([entry])=>{inViewport=entry.isIntersecting;});visibilityObserver.observe(el);
   let pointer;
@@ -140,7 +140,14 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
    root.traverse(o=>{if(o.isMesh){geometries.add(o.geometry);o.castShadow=!o.material.transparent;o.receiveShadow=!o.material.transparent;}});
    const bounds=equipmentBounds||new THREE.Box3().setFromObject(root),center=bounds.getCenter(new THREE.Vector3()),extent=bounds.getSize(new THREE.Vector3());
    el.dataset.bounds=JSON.stringify({size:extent.toArray(),center:center.toArray()});
-   coverTarget.set(0,0,1).sub(center);
+   // Frame production equipment rather than the surrounding floor and walls.
+   const overviewBounds=new THREE.Box3();
+   if(!device){
+    for(const code of deviceCodes){const asset=root.getObjectByName('Asset_'+code);if(asset)overviewBounds.expandByObject(asset);}
+    for(const name of ['LoadingZone','LoadingRobotTable']){const asset=root.getObjectByName(name);if(asset)overviewBounds.expandByObject(asset);}
+   }
+   const overviewSize=overviewBounds.isEmpty()?extent:overviewBounds.getSize(new THREE.Vector3());
+   coverTarget.copy(overviewBounds.isEmpty()?center:overviewBounds.getCenter(new THREE.Vector3())).sub(center);
    const wrapper=new THREE.Group();wrapper.add(root);wrapper.position.copy(center).negate();scene.add(wrapper);placedAssets=createSceneAssets(root,device,deviceCodes,scene,camera,renderer,controls,p=>state.current.onPlacementChange?.(p),id=>state.current.onAssetSelect?.(id));
    if(device){const groundGeometry=new THREE.PlaneGeometry(extent.length()*2.2,extent.length()*2.2);const groundMaterial=new THREE.ShadowMaterial({color:0x091426,opacity:.28});const ground=new THREE.Mesh(groundGeometry,groundMaterial);ground.rotation.x=-Math.PI/2;ground.position.y=-extent.y/2-.01;ground.receiveShadow=true;scene.add(ground);geometries.add(groundGeometry);materials.add(groundMaterial);}
 
@@ -154,15 +161,24 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
    root.traverse(o=>{if(!o.isMesh||!o.userData.webDevice||Array.isArray(o.material))return;const old=o.material;const m=old.clone();m.onBeforeCompile=old.onBeforeCompile;m.customProgramCacheKey=old.customProgramCacheKey;materials.add(m);o.material=m;deviceMeshes.push({mesh:o,material:m,base:m.color.clone(),emission:m.emissive.clone(),code:o.userData.webDevice});});
    const selectionBox=new THREE.Box3Helper(new THREE.Box3(),0x6badff);selectionBox.visible=false;scene.add(selectionBox);geometries.add(selectionBox.geometry);materials.add(selectionBox.material);
    root.userData.selectionBox=selectionBox;
-   const fit=()=>{if(!device){camera.zoom=1;const direction=new THREE.Vector3(12,20,29).normalize();camera.position.copy(direction);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);const rotation=camera.quaternion.clone().invert(),tanY=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));let distance=0;for(const x of [-1,1])for(const y of [-1,1])for(const z of [-1,1]){const corner=new THREE.Vector3(x*extent.x/2,y*extent.y/2,z*extent.z/2).applyQuaternion(rotation);distance=Math.max(distance,corner.z+Math.abs(corner.x)/(tanY*camera.aspect*.96),corner.z+Math.abs(corner.y)/(tanY*.96));}camera.position.copy(coverTarget).add(direction.multiplyScalar(distance));controls.target.copy(coverTarget);camera.updateProjectionMatrix();controls.update();return;}if(stationFraming){
-    const direction=new THREE.Vector3(.1,.14,1.8).normalize();
+   const fit=()=>{if(!device){
+    camera.zoom=1;const direction=new THREE.Vector3(7,24,32).normalize();
+    camera.position.copy(direction);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);
+    const rotation=camera.quaternion.clone().invert(),tanY=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));let distance=0;
+    for(const x of [-1,1])for(const y of [-1,1])for(const z of [-1,1]){
+     const corner=new THREE.Vector3(x*overviewSize.x/2,y*overviewSize.y/2,z*overviewSize.z/2).applyQuaternion(rotation);
+     distance=Math.max(distance,corner.z+Math.abs(corner.x)/(tanY*camera.aspect*.88),corner.z+Math.abs(corner.y)/(tanY*.88));
+    }
+    camera.position.copy(coverTarget).add(direction.multiplyScalar(distance));controls.target.copy(coverTarget);camera.updateProjectionMatrix();controls.update();return;
+   }if(stationFraming){
+    const direction=new THREE.Vector3(device==='wash'?.3:.1,device==='wash'?.3:.14,1.8).normalize();
     camera.position.copy(direction);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);
     const framingCenter=equipmentBounds.getCenter(new THREE.Vector3()).sub(center);
     const rotation=camera.quaternion.clone().invert(),tanY=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
     let distance=1;
     for(const x of [-1,1])for(const y of [-1,1])for(const z of [-1,1]){
      const corner=new THREE.Vector3(x*extent.x/2,y*extent.y/2,z*extent.z/2).applyQuaternion(rotation);
-     distance=Math.max(distance,corner.z+Math.abs(corner.x)/(tanY*camera.aspect*.84),corner.z+Math.abs(corner.y)/(tanY*.84));
+     distance=Math.max(distance,corner.z+Math.abs(corner.x)/(tanY*camera.aspect*(device==='wash'?.91:.84)),corner.z+Math.abs(corner.y)/(tanY*(device==='wash'?.91:.84)));
     }
     camera.position.copy(framingCenter).add(direction.multiplyScalar(distance));controls.target.copy(framingCenter);controls.update();return;
    }const radius=extent.length()*.5;const angle=THREE.MathUtils.degToRad(camera.fov/2);const distance=radius/Math.sin(Math.min(angle,Math.atan(Math.tan(angle)*camera.aspect)))*(device ? .83 : camera.aspect<1 ? 1.05 : .9);camera.position.copy(new THREE.Vector3(device?.25:1.15,device?.22:1.05,device?1.8:1.3).normalize().multiplyScalar(distance));controls.target.set(0,0,0);controls.update();};

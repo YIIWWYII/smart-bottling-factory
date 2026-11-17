@@ -23,3 +23,5 @@ __pycache__/
 
 config/platform-agent.json
 public/uploads/equipment/
+
+public/uploads/vision-demo/
