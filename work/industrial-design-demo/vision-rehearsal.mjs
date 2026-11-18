@@ -2,7 +2,7 @@ import {materialProgress,inspectionCaptureTime} from './src/materialFlow.js';
 export const rehearsalCameraIds=['top','side-0','side-120','side-240'];
 const defectNotes={'side-0':['标签上部污渍','标签破口','标签褶皱'],'side-240':['侧后标签污渍']};
 export const rehearsalBranches=['original','opencv','yolo','patchcore'];
-export const rehearsalDefaults=()=>({version:1,revision:0,enabled:true,stageIndices:[2,5],cases:['normal','defect'].map((id,i)=>({id,name:i?'缺陷瓶':'正常瓶',cameras:rehearsalCameraIds.map((cameraId,j)=>({cameraId,status:i&&defectNotes[cameraId]?'reject':'pass',defects:i?(defectNotes[cameraId]||[]):[],images:Object.fromEntries(rehearsalBranches.map(branch=>[branch,'/images/vision-demo/'+id+'-'+branch+'-'+cameraId+'.webp']))}))}))});
+export const rehearsalDefaults=()=>({version:1,revision:0,enabled:false,stageIndices:[2],cases:['normal','defect'].map((id,i)=>({id,name:i?'缺陷瓶':'正常瓶',cameras:rehearsalCameraIds.map((cameraId,j)=>({cameraId,status:i&&defectNotes[cameraId]?'reject':'pass',defects:i?(defectNotes[cameraId]||[]):[],images:Object.fromEntries(rehearsalBranches.map(branch=>[branch,'/images/vision-demo/'+id+'-'+branch+'-'+cameraId+'.webp']))}))}))});
 const imagePath=value=>typeof value==='string'&&/^\/(?:images\/vision-demo|uploads\/vision-demo)\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp)$/.test(value);
 export function validateRehearsal(value){
  if(!value||value.version!==1||typeof value.enabled!=='boolean'||!Array.isArray(value.stageIndices)||!value.stageIndices.length||new Set(value.stageIndices).size!==value.stageIndices.length||value.stageIndices.some(i=>![2,5].includes(i)))throw Error('请选择外观检测或成品二次检测工位。');
@@ -30,9 +30,9 @@ export function createVisionRehearsal(){
  return {reset,selectSample(stageIndex,caseId){selectedSamples.set(stageIndex,caseId);},start(stageIndex,id,now=Date.now(),source='simulation'){
    const previous=manual.get(stageIndex);if(previous&&!previous.stopped&&(previous.source==='camera'?now-previous.startedAt<20000:now-previous.startedAt<8000))throw Error('本轮正在检测，请等待完成。');
    manual.set(stageIndex,{id,source,caseId:selectedSamples.get(stageIndex)||'normal',startedAt:now,frames:{}});
-  },capture(stageIndex,bottleId,cameraId,data,now=Date.now()){
+  },capture(stageIndex,bottleId,cameraId,data,now=Date.now(),service=null){
    const single=manual.get(stageIndex);if(!single||single.id!==bottleId||single.stopped)throw Error('本轮采集已结束。');
-   if(!single.frames[cameraId])single.frames[cameraId]={data,at:new Date(now).toISOString()};
+   if(!single.frames[cameraId])single.frames[cameraId]={data,at:new Date(now).toISOString(),service};
    const run=runs.get(stageIndex+':'+bottleId);if(run)run.frames=single.frames;
   },stop(stageIndex){const single=manual.get(stageIndex);if(single)single.stopped=true;},observe(config,snapshot,now=Date.now()){
   const flow=snapshot?.materialFlow;
@@ -68,7 +68,8 @@ export function createVisionRehearsal(){
     // captures occur during its hold there, tied to material time (including pauses).
     const arrival=inspectionCaptureTime(token.duration,index),frame=sample.cameras.find(c=>c.cameraId===cameraId),captured=single?.source==='camera'?!!single.frames[cameraId]:time>=arrival;
     if(captured&&!run.captured[cameraId])run.captured[cameraId]=run.frames[cameraId]?.at||new Date(now-Math.max(0,time-arrival)*1000).toISOString();
-    return {cameraId,defects:captured?frame.defects:[],status:captured?frame.status:single?.stopped?'missing':'pending',capturedAt:run.captured[cameraId]||null,imageUrl:captured?(run.frames[cameraId]?.data||frame.images.original):null,originalUrl:captured?(run.frames[cameraId]?.data||frame.images.original):null,opencvUrl:captured?frame.images.opencv:null,overlayUrl:captured?frame.images.yolo:null,heatmapUrl:captured?frame.images.patchcore:null,opencvStatus:captured?'pass':'pending',yoloStatus:captured?frame.status:'pending',patchcoreStatus:captured?frame.status:'pending',codeMask:{status:captured?'preset':'pending',reason:captured?'条码区域处理图':'等待瓶子到达本机位'},reason:captured?'离线采集帧与处理结果':'等待瓶子到达本机位',preset:true};
+    const service=run.frames[cameraId]?.service;
+    return {cameraId,defects:captured?(service?.defects||frame.defects):[],status:captured?(service?.status||frame.status):single?.stopped?'missing':'pending',capturedAt:run.captured[cameraId]||null,imageUrl:captured?(run.frames[cameraId]?.data||frame.images.original):null,originalUrl:captured?(run.frames[cameraId]?.data||frame.images.original):null,opencvUrl:captured?(service?.opencvUrl||frame.images.opencv):null,overlayUrl:captured?(service?.overlayUrl||frame.images.yolo):null,heatmapUrl:captured?(service?.heatmapUrl||frame.images.patchcore):null,opencvStatus:captured?'pass':'pending',yoloStatus:captured?(service?.status||frame.status):'pending',patchcoreStatus:captured?(service?.status||frame.status):'pending',codeMask:{status:captured?'preset':'pending',reason:captured?'条码区域处理图':'等待瓶子到达本机位'},reason:captured?'离线采集帧与处理结果':'等待瓶子到达本机位',serviceSource:service?.source||'local-materials',preset:true};
    });
    const completed=cameras.every(c=>c.patchcoreStatus!=='pending'),ended=completed||single?.stopped;
    run.record={requestId:'rehearsal:'+key,bottleId:token.id,batchId:run.batchId,stageIndex,caseId:sample.id,caseName:sample.name,demo:true,demoSource:'preset-upload',engine:'preset-upload',captureSource:single?.source||'simulation',version:'rehearsal-1',status:ended?'completed':'processing',createdAt:new Date(run.startedAt).toISOString(),cameras,verdict:single?.stopped&&!completed?'review':completed?(sample.cameras.some(c=>c.status==='reject')?'reject':'pass'):'pending',reason:single?.stopped&&!completed?'采集未完成，缺少机位：'+cameras.filter(c=>!c.capturedAt).map(c=>c.cameraId).join('、'):completed?(sample.cameras.some(c=>c.status==='reject')?'外观异常，请检查缺陷机位。':'四个机位检查通过。'):'等待各机位采集完成。',capturedCount:cameras.filter(c=>c.capturedAt).length,progress};

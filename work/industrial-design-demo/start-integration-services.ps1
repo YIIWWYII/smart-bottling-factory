@@ -44,7 +44,10 @@ if ($CozeComposeFile) {
 }
 $logRoot=Join-Path $project '.runtime/logs'
 New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
-Write-Output 'Visual demonstration is built into the platform. No camera, OpenCV or separate vision service is required.'
+if (-not (Test-Port 8093)) {
+    Start-Process -FilePath (Get-Command node).Source -ArgumentList 'vision-demo-server.mjs' -WorkingDirectory $project -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logRoot 'vision.out.log') -RedirectStandardError (Join-Path $logRoot 'vision.err.log') | Out-Null
+}
+Write-Output 'Vision demonstration service: port 8093. Fixed examples only; no real visual model inference.'
 if ($StartModel -and -not (Test-Port 8002) -and -not (Test-Port 8003)) {
     $modelScript=Join-Path $project 'start-chat-model.ps1'
     $arguments=@('-NoProfile','-File',('"'+$modelScript+'"'),'-ModelRoot',('"'+$ModelRoot+'"'),'-ModelFile',('"'+$ModelFile+'"'))

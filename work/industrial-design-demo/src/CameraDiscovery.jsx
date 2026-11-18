@@ -1,12 +1,21 @@
-import ConfigurationHelp from './ConfigurationHelp';
-import {useState,useRef,useEffect} from 'react';
-import {api} from './TwinState';
+import {useState} from 'react';
 import {visionCameras} from './visionCameras';
-export default function CameraDiscovery({allowed,save,active=true,sources=[]}){
- const [address,setAddress]=useState('http://127.0.0.1:8097'),[devices,setDevices]=useState([]),[selected,setSelected]=useState({}),[preview,setPreview]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
- const previewRef=useRef();
- useEffect(()=>{const image=previewRef.current;return()=>image?.removeAttribute('src');},[preview,active]);
- const discover=async()=>{setBusy(true);setPreview('');setDevices([]);setSelected({});try{if(new URL(address).origin==='http://127.0.0.1:8097'||new URL(address).origin==='http://localhost:8097')await api('/api/ai/integrations/capture-start',{});const r=await api('/api/ai/integrations/capture-discover',{baseUrl:address});setDevices(r.devices);setSelected(Object.fromEntries(visionCameras.map(c=>[c.id,r.devices.find(d=>d.previewUrl===sources.find(s=>s.id===c.id)?.url)?.id||''])));setMessage(r.devices.length?'找到 '+r.devices.length+' 台设备。先预览，再分配机位。':'未找到摄像头，请检查连接，或关闭占用相机的软件。');}catch(e){setMessage(e.message);}finally{setBusy(false);}};
- const persist=async()=>{setBusy(true);try{const values=Object.values(selected).filter(Boolean);if(!values.length)throw Error('请至少分配一个机位');if(new Set(values).size!==values.length)throw Error('同一摄像头不能分配到多个机位');const items=visionCameras.map(c=>({id:c.id,type:'mjpeg',url:devices.find(d=>String(d.id)===String(selected[c.id]))?.previewUrl||''}));if(items.filter(c=>c.url).length!==values.length)throw Error('所选相机不在当前设备列表，请重新搜索后分配。');const result=await save(items);if(!result?.items||items.some(item=>!result.items.some(row=>row.id===item.id&&row.url===item.url)))throw Error('保存结果与机位分配不一致，请重新保存。');setPreview('');setMessage('已保存 '+values.length+' 个机位：'+items.filter(c=>c.url).map(c=>visionCameras.find(v=>v.id===c.id).label+'＝'+devices.find(d=>d.previewUrl===c.url).name).join('；')+'。外观检测已同步。');}catch(e){setMessage(e.message);}finally{setBusy(false);}};
- return <section className="camera-source-settings"><div className="vision-section-heading"><h3>USB摄像头</h3><ConfigurationHelp title="USB摄像头接入"><p>点击搜索摄像头，本机采集会自动准备；逐台预览并分配机位。保存后外观检测同步画面。</p><p>跨电脑或平板观看需填写采集电脑的局域网地址。拔插后设备编号可能变化，请重新预览核对。未分配的机位保存为空。</p></ConfigurationHelp></div><fieldset disabled={!allowed||busy}><label>采集服务地址<input type="url" value={address} onChange={e=>{setAddress(e.target.value);setDevices([]);setPreview('');setSelected({});}}/><button type="button" onClick={discover}>搜索摄像头</button></label>{devices.length>0&&<><div className="service-actions">{devices.map(d=><button type="button" key={d.id} aria-pressed={preview===d.previewUrl} onClick={()=>setPreview(d.previewUrl)}>预览 {d.name}</button>)}</div>{active&&preview&&<img ref={previewRef} style={{maxWidth:'100%',maxHeight:300,transform:'scaleX(-1)'}} key={preview} src={preview} alt="设备预览"/>}{visionCameras.map(c=><label key={c.id}>{c.label}<select value={selected[c.id]||''} onChange={e=>setSelected(s=>({...s,[c.id]:e.target.value}))}><option value="">未分配</option>{devices.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>)}<button type="button" onClick={persist}>保存机位分配</button></>}</fieldset><p role="status">{busy?'正在连接，请稍候…':message}</p><p>已保存 {visionCameras.filter(c=>sources.some(s=>s.id===c.id&&s.url)).length}/4 个机位。下拉框选择后，请点击“保存机位分配”；下方画面使用已保存的地址。</p></section>;
+function BrowserCameras({allowed,save,sources}){
+ const [devices,setDevices]=useState([]),[selected,setSelected]=useState({}),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
+ const discover=async()=>{setBusy(true);try{
+  if(!navigator.mediaDevices?.getUserMedia)throw Error('请在摄像头所在电脑使用 localhost 打开平台，或使用 HTTPS 地址。');
+  const stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});stream.getTracks().forEach(t=>t.stop());
+  const list=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput'&&d.deviceId);
+  setDevices(list);setSelected(Object.fromEntries(visionCameras.map(c=>[c.id,sources.find(s=>s.id===c.id&&s.type==='usb')?.url||''])));
+  setMessage(list.length?'请选择各机位并保存。':'没有找到摄像头，请检查连接。');
+ }catch(e){setMessage(e.message||'无法访问摄像头，请检查浏览器权限。');}finally{setBusy(false);}};
+ const persist=async()=>{setBusy(true);try{
+  const values=Object.values(selected).filter(Boolean);if(!values.length||new Set(values).size!==values.length)throw Error('请为机位选择不同的摄像头。');
+  if(values.some(id=>!devices.some(d=>d.deviceId===id)))throw Error('摄像头列表已变化，请重新搜索。');
+  await save(visionCameras.map(c=>({id:c.id,type:'usb',url:selected[c.id]||''})));setMessage('机位已保存。请在外观检测的实际画面中查看。');
+ }catch(e){setMessage(e.message);}finally{setBusy(false);}};
+ return <section className="camera-source-settings"><h3>本机 USB 摄像头</h3><p>在连接摄像头的电脑上打开平台，允许浏览器使用摄像头。不同电脑或浏览器需要重新分配。</p><fieldset disabled={!allowed||busy}><button type="button" onClick={discover}>搜索本机摄像头</button>{devices.length>0&&<>{visionCameras.map(c=><label key={c.id}>{c.label}<select value={selected[c.id]||''} onChange={e=>setSelected(s=>({...s,[c.id]:e.target.value}))}><option value="">未分配</option>{devices.map((d,i)=><option key={d.deviceId} value={d.deviceId}>{d.label||'摄像头 '+(i+1)}</option>)}</select></label>)}<button type="button" onClick={persist}>保存机位分配</button></>}</fieldset><p role="status">{message}</p></section>;
+}
+export default function CameraDiscovery({allowed,save,sources=[]}){
+ return <BrowserCameras allowed={allowed} save={save} sources={sources}/>;
 }

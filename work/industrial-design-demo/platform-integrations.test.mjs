@@ -44,7 +44,7 @@ test('global review is retained despite passing individual cameras; incomplete e
  assert.throws(()=>validateInspection(input,{...r,cap:{status:'review'}}));
  assert.throws(()=>validateInspection(input,{...r,panoramaUrl:'javascript:alert(1)'}));
 });
-test('legacy external job uses explicit status; simulation display never polls external inference',async()=>{
+test('external job survives page access, syncs results once and requires advertised capability',async()=>{
  const m=mock();const routes=[];
  const i=createIntegrations(m.ops,{fetcher:async(url,options)=>{
   routes.push(url);const job={jobId:'j1',batchId:'batch1',status:'running'};
@@ -53,7 +53,6 @@ test('legacy external job uses explicit status; simulation display never polls e
  await i.route(req('/config'),{kind:'vision',mode:'whole-bottle',baseUrl:'http://external',enabled:true,workflowId:'',version:'v1'});
  await i.route(req('/vision-job'),{action:'start',batchId:'batch1'});
  assert.equal((await i.route(req('','GET'),{})).visionJob.jobId,'j1');
- await i.route(req('/vision-job'),{action:'status'});
  const monitor=await i.route(req('/vision-monitor','GET','viewer'),{});
  assert.equal(monitor.records.length,1);assert.equal(monitor.records[0].bottleId,'b1');
  assert.equal(monitor.job.jobId,'j1');assert.ok(!JSON.stringify(monitor).includes('private'));
@@ -212,7 +211,7 @@ test('selected write requests still reach the agent as proposals rather than rea
 import {rehearsalDefaults} from './vision-rehearsal.mjs';
 test('rehearsal configuration persists independently of real vision settings and rejects stale saves and viewers',async()=>{
  const m=mock(),i=createIntegrations(m.ops);const before=await i.route(req('', 'GET'),{});
- let draft=await i.route(req('/vision-rehearsal','GET'),{});assert.equal(draft.cases.length,2);assert.equal(draft.enabled,true);
+ let draft=await i.route(req('/vision-rehearsal','GET'),{});assert.equal(draft.cases.length,2);assert.equal(draft.enabled,false);
  await assert.rejects(i.route(req('/vision-rehearsal','POST','viewer'),draft),/role denied/);
  const saved=await i.route(req('/vision-rehearsal'),draft);assert.equal(saved.revision,1);assert.deepEqual((await i.route(req('/vision-rehearsal','GET'),{})).cases,saved.cases);
  await assert.rejects(i.route(req('/vision-rehearsal'),draft),/已变化/);
@@ -224,18 +223,18 @@ test('preset monitor keeps stages scoped and does not call a real vision job or 
  m.ops.snapshot=()=>({dataMode:'simulation',materialFlow:flow,states:Array.from({length:9},()=>({source:'simulation'}))});const i=createIntegrations(m.ops,{fetcher:async()=>{calls++;throw Error('unexpected external call');}});
  await i.route(req('/vision-rehearsal'),{...rehearsalDefaults(),enabled:true});flow.updated=Date.now();await i.route(req('/vision-monitor','GET'),{});flow.stages[2][0].elapsed=7;const monitor=await i.route(req('/vision-monitor','GET'),{});
  assert.equal(monitor.rehearsal.active,true);assert.equal(monitor.records[0].bottleId,'b1');assert.equal(monitor.records[0].verdict,'pass');assert.equal(calls,0);
- m.ops.snapshot=()=>({dataMode:'real'});const real=await i.route(req('/vision-monitor','GET'),{});assert.equal(real.rehearsal.active,true);assert.equal(real.records.length,1);
+ m.ops.snapshot=()=>({dataMode:'real'});const real=await i.route(req('/vision-monitor','GET'),{});assert.equal(real.rehearsal.active,false);assert.equal(real.records.length,0);
 });
 
 test('persistent sample selection enforces role, mode and station, then locks the next run',async()=>{
  const m=mock();m.ops.snapshot=()=>({dataMode:'mixed',materialFlow:null,states:Array.from({length:9},()=>({source:'simulation'}))});const i=createIntegrations(m.ops);
- await i.route(req('/vision-rehearsal-sample'),{stageIndex:2,caseId:'defect'});
+ await assert.rejects(i.route(req('/vision-rehearsal-sample'),{stageIndex:2,caseId:'defect'}),/未启用/);
  await i.route(req('/vision-rehearsal'),{...rehearsalDefaults(),enabled:true});
  await assert.rejects(i.route(req('/vision-rehearsal-sample','POST','viewer'),{stageIndex:2,caseId:'defect'}),/role denied/);
  await assert.rejects(i.route(req('/vision-rehearsal-sample'),{stageIndex:0,caseId:'defect'}),/有效工位/);
  await i.route(req('/vision-rehearsal-sample'),{stageIndex:2,caseId:'defect'});const result=await i.route(req('/vision-rehearsal-start'),{stageIndex:2});assert.equal(result.rehearsal.manualFlows[2].caseId,'defect');
  const monitor=await i.route(req('/vision-monitor','GET'),{});assert.equal(monitor.rehearsal.selectedSamples[2],'defect');
- m.ops.snapshot=()=>({dataMode:'real'});await i.route(req('/vision-rehearsal-sample'),{stageIndex:2,caseId:'normal'});
+ m.ops.snapshot=()=>({dataMode:'real'});await assert.rejects(i.route(req('/vision-rehearsal-sample'),{stageIndex:2,caseId:'normal'}),/未启用/);
 });
 
 test('single rehearsal start needs no production task and rejects viewers or real-mode stations',async()=>{
@@ -244,7 +243,7 @@ test('single rehearsal start needs no production task and rejects viewers or rea
  await assert.rejects(i.route(req('/vision-rehearsal-start','POST','viewer'),{stageIndex:2}),/role denied/);
  const r=await i.route(req('/vision-rehearsal-start'),{stageIndex:2});assert.ok(r.bottleId.startsWith('CAP-'));assert.equal(r.records[0].capturedCount,0);assert.ok(r.rehearsal.manualFlows[2]);
  await assert.rejects(i.route(req('/vision-rehearsal-start'),{stageIndex:2}),/正在检测/);
- m.ops.snapshot=()=>({dataMode:'real'});assert.equal((await i.route(req('/vision-monitor','GET'),{})).rehearsal.active,true);
+ m.ops.snapshot=()=>({dataMode:'real'});await assert.rejects(i.route(req('/vision-rehearsal-start'),{stageIndex:2}),/未启用/);
 });
 test('actual detection keeps exact submitted camera frames even on service failure',async()=>{
  const m=mock(),i=createIntegrations(m.ops,{fetcher:async()=>{throw Error('service down');}});await i.route(req('/config'),{kind:'vision',baseUrl:'http://127.0.0.1:8093',enabled:true,workflowId:'',version:'test'});
@@ -252,28 +251,12 @@ test('actual detection keeps exact submitted camera frames even on service failu
  for(const camera of r.cameras){assert.equal(camera.originalUrl,input.images.find(frame=>frame.cameraId===camera.cameraId).data);assert.equal(camera.status,'error');}
 });
 
-test('simulation snapshots are bound to the active bottle and preserve supplied image data',async()=>{
+test('camera captures are bound to the active bottle and preserve supplied image data',async()=>{
  const m=mock();m.ops.snapshot=()=>({dataMode:'simulation',materialFlow:null});const i=createIntegrations(m.ops);await i.route(req('/vision-rehearsal'),{...rehearsalDefaults(),enabled:true});
- const start=await i.route(req('/vision-rehearsal-start'),{stageIndex:2,source:'simulation'});const body={stageIndex:2,bottleId:start.bottleId,cameraId:'top',data:'data:image/png;base64,AAAA'};
+ const start=await i.route(req('/vision-rehearsal-start'),{stageIndex:2,source:'camera'});const body={stageIndex:2,bottleId:start.bottleId,cameraId:'top',data:'data:image/png;base64,AAAA'};
  await assert.rejects(i.route(req('/vision-rehearsal-capture','POST','viewer'),body),/role denied/);
  await assert.rejects(i.route(req('/vision-rehearsal-capture'),{...body,cameraId:'wrong'}),/无效/);
  await assert.rejects(i.route(req('/vision-rehearsal-capture'),{...body,bottleId:'wrong'}),/结束/);
- await i.route(req('/vision-rehearsal-capture'),body);await new Promise(resolve=>setTimeout(resolve,2100));const r=await i.route(req('/vision-monitor','GET'),{});assert.equal(r.records[0].cameras[0].originalUrl,body.data);assert.equal(r.records[0].cameras[1].originalUrl,null);
+ await i.route(req('/vision-rehearsal-capture'),body);const r=await i.route(req('/vision-monitor','GET'),{});assert.equal(r.records[0].cameras[0].originalUrl,body.data);assert.equal(r.records[0].cameras[1].originalUrl,null);
  await i.route(req('/vision-rehearsal-stop'),{stageIndex:2});assert.equal((await i.route(req('/vision-monitor','GET'),{})).records[0].verdict,'review');
-});
-
-test('fresh and previously disabled installations use bundled simulation in both vision stations without network services',async()=>{
- const m=mock();let calls=0;m.ops.snapshot=()=>({dataMode:'real',protocol:{enabled:true},states:Array.from({length:9},()=>({source:'real'})),materialFlow:null});
- const i=createIntegrations(m.ops,{fetcher:async()=>{calls++;throw Error('external dependency must not be used');}});
- const c=await i.route(req('/vision-rehearsal','GET'),{});assert.equal(c.enabled,true);assert.deepEqual(c.stageIndices,[2,5]);
- await i.route(req('/vision-rehearsal'),{...c,enabled:false,stageIndices:[2]});
- const s=await i.route(req('/vision-monitor','GET'),{});assert.equal(s.rehearsal.active,true);assert.deepEqual(s.rehearsal.stageIndices,[2,5]);
- await assert.rejects(i.route(req('/vision-rehearsal-start'),{stageIndex:2,source:'camera'}),/仅提供模拟/);
- const run=await i.route(req('/vision-rehearsal-start'),{stageIndex:5});assert.equal(run.rehearsal.manualFlows[5].source,'simulation');assert.equal(calls,0);
-});
-test('missing migrated upload is replaced with a bundled picture',async()=>{
- const m=mock(),i=createIntegrations(m.ops);const c=await i.route(req('/vision-rehearsal','GET'),{});
- c.cases[0].cameras[0].images.opencv='/uploads/vision-demo/missing-migration.webp';c.cases[0].cameras[1].images.yolo='';c.enabled=false;
- const stored=await i.read();await m.ops.setAIConfig({...stored.root,integrations:{...stored.state,visionRehearsal:c}});
- const normalized=await i.route(req('/vision-rehearsal','GET'),{});assert.equal(normalized.cases[0].cameras[0].images.opencv,'/images/vision-demo/normal-opencv-top.webp');assert.equal(normalized.cases[0].cameras[1].images.yolo,'/images/vision-demo/normal-yolo-side-0.webp');
 });

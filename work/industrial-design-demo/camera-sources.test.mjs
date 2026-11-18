@@ -5,6 +5,7 @@ const defaults=()=>cameraIds.map(id=>({id,type:'video',url:''}));
 test('four optional feeds preserve distinct addresses and reject unsupported sources',()=>{
  const a=defaults();assert.equal(validateCameraSources(a).length,4);
  a[0].type='mjpeg';a[0].url='http://localhost:8080/feed';assert.equal(validateCameraSources(a)[0].url,a[0].url);
+ a[0].type='usb';a[0].url='browser-device-id';assert.equal(validateCameraSources(a)[0].url,'browser-device-id');a[0].type='mjpeg';
  for(const url of ['rtsp://localhost/feed','javascript:alert(1)','https://user:pass@camera/feed']){a[0].url=url;assert.throws(()=>validateCameraSources(a));}
  assert.throws(()=>validateCameraSources([defaults()[0],...defaults().slice(0,3)]));
 });

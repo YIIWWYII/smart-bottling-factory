@@ -6,6 +6,16 @@ function Feed({camera,source,capture,hidden=false}){
  useEffect(()=>{const media=host.current?.querySelector('img,video');return()=>{if(!media)return;if(media.tagName==='VIDEO')media.pause();media.removeAttribute('src');if(media.tagName==='VIDEO')media.load();};},[source?.url,source?.type,attempt]);
  const [status,setStatus]=useState('loading');
  useEffect(()=>{
+  if(source?.type!=='usb'||!source.url)return;
+  let stopped=false,stream;
+  if(!navigator.mediaDevices?.getUserMedia){setStatus('error');return;}
+  navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:source.url}},audio:false}).then(value=>{
+   if(stopped){value.getTracks().forEach(track=>track.stop());return;}
+   stream=value;const video=host.current?.querySelector('video');if(video){video.srcObject=value;video.play().catch(()=>setStatus('error'));}
+  }).catch(()=>setStatus('error'));
+  return()=>{stopped=true;stream?.getTracks().forEach(track=>track.stop());};
+ },[source?.type,source?.url,attempt]);
+ useEffect(()=>{
   setStatus('loading');
   const started=Date.now();
   // MJPEG is a never-ending response: onLoad is not a reliable first-frame signal.
@@ -19,7 +29,7 @@ function Feed({camera,source,capture,hidden=false}){
  useEffect(()=>{if(status!=='error'||!source?.url||attempt>=2)return;const timer=setTimeout(()=>{setStatus('loading');setAttempt(n=>n+1);},2000);return()=>clearTimeout(timer);},[status,source?.url,attempt]);
  const retry=()=>{setStatus('loading');setAttempt(n=>n+1);};
  const missing=!source?.url||status==='error';
- return <article hidden={hidden} ref={host} className="actual-camera" data-camera-id={camera.id}><strong>{camera.label}</strong>{!missing&&(source.type==='mjpeg'?<img key={source.url+':'+attempt} crossOrigin={capture?'anonymous':undefined} src={source.url} alt={camera.label+'实际画面'} onLoad={()=>setStatus('ready')} onError={()=>setStatus('error')}/>:<video key={source.url+':'+attempt} crossOrigin={capture?'anonymous':undefined} src={source.url} autoPlay muted playsInline controls onPlaying={()=>setStatus('ready')} onError={()=>setStatus('error')}/>)}{(missing||status==='loading')&&<div className="actual-camera-empty">{!source?.url?'未分配摄像头':status==='error'?'该机位连接失败':'正在连接实际画面…'}{source?.url&&status==='error'&&<><small>{attempt<2?'正在自动重新连接…':'请检查相机连接或是否被其他软件占用'}</small><button type="button" onClick={retry}>重新连接此机位</button></>}</div>}</article>;
+ return <article hidden={hidden} ref={host} className="actual-camera" data-camera-id={camera.id}><strong>{camera.label}</strong>{!missing&&(source.type==='mjpeg'?<img key={source.url+':'+attempt} crossOrigin={capture?'anonymous':undefined} src={source.url} alt={camera.label+'实际画面'} onLoad={()=>setStatus('ready')} onError={()=>setStatus('error')}/>:<video key={source.url+':'+attempt} crossOrigin={source.type!=='usb'&&capture?'anonymous':undefined} src={source.type==='usb'?undefined:source.url} autoPlay muted playsInline controls onPlaying={()=>setStatus('ready')} onError={()=>setStatus('error')}/>)}{(missing||status==='loading')&&<div className="actual-camera-empty">{!source?.url?'未分配摄像头':status==='error'?'该机位连接失败':'正在连接实际画面…'}{source?.url&&status==='error'&&<><small>{attempt<2?'正在自动重新连接…':'请检查相机连接或是否被其他软件占用'}</small><button type="button" onClick={retry}>重新连接此机位</button></>}</div>}</article>;
 }
 export default function ActualCameraFeeds({indices,sources,cameras=visionCameras,capture=false,visibleIndices=indices}){return <div className={'actual-camera-grid '+(visibleIndices.length===1?'single':'')}>{indices.map(i=><Feed hidden={!visibleIndices.includes(i)} capture={capture} key={cameras[i].id+':' +(sources.find(s=>s.id===cameras[i].id)?.url||'')} camera={cameras[i]} source={sources.find(s=>s.id===cameras[i].id)}/>)}</div>;}
 export function CameraSourceSettings({sources,save,allowed,cameras=visionCameras}){

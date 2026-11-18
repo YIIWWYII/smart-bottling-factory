@@ -1,0 +1,20 @@
+services:
+  database:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: bottleworks
+      MYSQL_USER: bottleworks
+      MYSQL_PASSWORD: demo-only-password
+      MYSQL_ROOT_PASSWORD: demo-root-only-password
+    ports:
+      - "127.0.0.1:53307:3306"
+    volumes:
+      - platform-demo-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysql", "-h", "127.0.0.1", "-u", "bottleworks", "-pdemo-only-password", "bottleworks", "-e", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+volumes:
+  platform-demo-db:
