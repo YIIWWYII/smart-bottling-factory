@@ -2,6 +2,7 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {networkInterfaces} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {rehearsalDefaults,rehearsalCameraIds as cameraIds} from './vision-rehearsal.mjs';
 const materials=path.resolve('public/images/vision-demo');
@@ -42,4 +43,24 @@ export function createDemoServer({storage=path.resolve('.runtime/vision-demo.jso
   }catch(e){reply(400,{error:e.message});}
  });
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){createDemoServer().listen(Number(process.env.VISION_DEMO_PORT||8093),process.env.VISION_DEMO_HOST||'0.0.0.0',()=>console.log('Demo vision listening on port '+(process.env.VISION_DEMO_PORT||8093)+'; no real inference'));}
+if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){
+ const port=Number(process.env.VISION_DEMO_PORT||8093),host=process.env.VISION_DEMO_HOST||'0.0.0.0',server=createDemoServer();
+ server.once('error',async error=>{
+  if(error.code==='EADDRINUSE'){
+   const addresses=host==='0.0.0.0'?Object.values(networkInterfaces()).flat().filter(a=>a.family==='IPv4'&&!a.internal).map(a=>a.address):[host];
+   const available=await Promise.all((addresses.length?addresses:['127.0.0.1']).map(async address=>{
+    const url='http://'+(address.includes(':')?'['+address+']':address)+':'+port;
+    try{
+     const response=await fetch(url+'/health',{signal:AbortSignal.timeout(1200),redirect:'error'});
+     if(!response.ok)return null;
+     const health=await response.json();
+     return health.status==='ready'&&health.contract==='bottleworks-vision-v1'&&health.demo===true&&['opencv','yolo','patchcore','inspect'].every(name=>health.capabilities?.includes(name))?url:null;
+    }catch{return null;}
+   }));
+   if(available.some(Boolean)){console.log('Demo vision is already running. Reuse: '+available.filter(Boolean).join(', '));return;}
+   console.error('Port '+port+' is in use, but no compatible vision service responded on the requested interface. Close the conflicting program or set VISION_DEMO_PORT to a free port.');
+  }else console.error('Unable to start demo vision: '+error.message);
+  process.exitCode=1;
+ });
+ server.listen(port,host,()=>console.log('Demo vision listening on port '+port+'; no real inference'));
+}
