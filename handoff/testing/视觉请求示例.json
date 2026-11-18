@@ -1,0 +1,12 @@
+{
+  "requestId": "TEST-0001",
+  "bottleId": "BOTTLE-0001",
+  "batchId": "LAN-DEMO",
+  "caseId": "normal",
+  "images": [
+    { "cameraId": "top", "data": "data:image/webp;base64,..." },
+    { "cameraId": "side-0", "data": "data:image/webp;base64,..." },
+    { "cameraId": "side-120", "data": "data:image/webp;base64,..." },
+    { "cameraId": "side-240", "data": "data:image/webp;base64,..." }
+  ]
+}

@@ -113,8 +113,8 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
  const read=async()=>{
   const root=await ops.getAIConfig()||{},state={coze:{enabled:false},vision:{enabled:false},packages:[],records:[],commands:[],...root.integrations};
   if(handoffDemo){
-   const visionUrl='http://127.0.0.1:8093',agentUrl='http://127.0.0.1:8887',botId='123456789012';
-   state.vision={enabled:true,mode:'whole-bottle',baseUrl:visionUrl,workflowId:'',version:'',...root.integrations?.vision,backupBaseUrl:root.integrations?.vision?.backupBaseUrl||visionUrl};
+   const visionUrl='http://127.0.0.1:8093',localVisionUrl='http://127.0.0.1:18093',agentUrl='http://127.0.0.1:8887',botId='123456789012';
+   state.vision={enabled:true,mode:'whole-bottle',baseUrl:visionUrl,workflowId:'',version:'',...root.integrations?.vision,backupBaseUrl:root.integrations?.vision?.backupBaseUrl||localVisionUrl};
    state.coze={enabled:true,baseUrl:agentUrl,botId,token:'demo-token',workflowId:'',version:'',...root.integrations?.coze,backupBaseUrl:root.integrations?.coze?.backupBaseUrl||agentUrl,backupBotId:root.integrations?.coze?.backupBotId||botId,backupToken:root.integrations?.coze?.backupToken||'demo-token'};
    state.visionRehearsal??={...rehearsalDefaults(),enabled:true,stageIndices:[2,5]};
   }
