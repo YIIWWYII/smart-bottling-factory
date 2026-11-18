@@ -1,9 +1,0 @@
-interface:
-  display_name: 告警分析
-  default_prompt: 分析当前未恢复告警
-enabled: true
-tools:
-  - query_logs
-  - query_devices
-  - search_knowledge
-requiredTools: []
