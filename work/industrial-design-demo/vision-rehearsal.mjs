@@ -2,7 +2,7 @@ import {materialProgress,inspectionCaptureTime} from './src/materialFlow.js';
 export const rehearsalCameraIds=['top','side-0','side-120','side-240'];
 const defectNotes={'side-0':['标签上部污渍','标签破口','标签褶皱'],'side-240':['侧后标签污渍']};
 export const rehearsalBranches=['original','opencv','yolo','patchcore'];
-export const rehearsalDefaults=()=>({version:1,revision:0,enabled:false,stageIndices:[2],cases:['normal','defect'].map((id,i)=>({id,name:i?'缺陷瓶':'正常瓶',cameras:rehearsalCameraIds.map((cameraId,j)=>({cameraId,status:i&&defectNotes[cameraId]?'reject':'pass',defects:i?(defectNotes[cameraId]||[]):[],images:Object.fromEntries(rehearsalBranches.map(branch=>[branch,'/images/vision-demo/'+id+'-'+branch+'-'+cameraId+'.webp']))}))}))});
+export const rehearsalDefaults=()=>({version:1,revision:0,enabled:true,stageIndices:[2,5],cases:['normal','defect'].map((id,i)=>({id,name:i?'缺陷瓶':'正常瓶',cameras:rehearsalCameraIds.map((cameraId,j)=>({cameraId,status:i&&defectNotes[cameraId]?'reject':'pass',defects:i?(defectNotes[cameraId]||[]):[],images:Object.fromEntries(rehearsalBranches.map(branch=>[branch,'/images/vision-demo/'+id+'-'+branch+'-'+cameraId+'.webp']))}))}))});
 const imagePath=value=>typeof value==='string'&&/^\/(?:images\/vision-demo|uploads\/vision-demo)\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp)$/.test(value);
 export function validateRehearsal(value){
  if(!value||value.version!==1||typeof value.enabled!=='boolean'||!Array.isArray(value.stageIndices)||!value.stageIndices.length||new Set(value.stageIndices).size!==value.stageIndices.length||value.stageIndices.some(i=>![2,5].includes(i)))throw Error('请选择外观检测或成品二次检测工位。');
