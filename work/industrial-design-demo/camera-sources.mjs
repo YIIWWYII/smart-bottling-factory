@@ -5,9 +5,9 @@ export function validateCameraSources(items){
  const allowed=items[0]?.id?.startsWith('SEC-')?secondaryCameraIds:cameraIds;
  const seen=new Set();return items.map(item=>{
   if(!allowed.includes(item.id)||seen.has(item.id))throw Error('相机编号无效或重复。');seen.add(item.id);
-  if(!['video','mjpeg'].includes(item.type))throw Error('请选择视频或 MJPEG。');
+  if(!['video','mjpeg','usb'].includes(item.type))throw Error('请选择 USB 摄像头、视频或 MJPEG。');
   const url=String(item.url||'').trim();if(url.length>2000)throw Error('地址过长。');
-  if(url){const u=new URL(url);if(!['http:','https:'].includes(u.protocol)||u.username||u.password)throw Error('请使用不含用户名和密码的 HTTP/HTTPS 网关地址。');}
+  if(url&&item.type!=='usb'){const u=new URL(url);if(!['http:','https:'].includes(u.protocol)||u.username||u.password)throw Error('请使用不含用户名和密码的 HTTP/HTTPS 网关地址。');}
   return {id:item.id,type:item.type,url};
  });
 }
