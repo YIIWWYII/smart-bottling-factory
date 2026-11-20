@@ -29,6 +29,59 @@ function mock(){
  return {ops,fetcher,context,get writes(){return writes;}};
 }
 const req=(suffix,method='POST',actor='admin')=>({url:'/api/ai/integrations'+suffix,method,headers:{actor}});
+test('handoff chat prefers working Coze and answers known questions locally after API failure',async()=>{
+ const m=mock(); let working=true,calls=0;
+ const integrations=createIntegrations(m.ops,{handoffDemo:true,fetcher:async url=>{
+  if(url.endsWith('/v3/chat')){calls++;return Response.json(working?{code:0,data:{id:'chat',conversation_id:'conv',status:'completed'}}:{code:1,msg:'unavailable'});}
+  if(url.includes('/message/list'))return Response.json({code:0,data:[{role:'assistant',type:'answer',content:'外部回答'}]});
+  throw Error('unexpected request');
+ }});
+ await integrations.route(req('/config'),{kind:'coze',baseUrl:'http://external',botId:'42',token:'private',enabled:true,workflowId:''});
+ const question='介绍一下装瓶产线';
+ assert.equal((await integrations.chat(req(''),question,{})).answer,'外部回答');
+ working=false;
+ const fallback=await integrations.chat(req(''),question+'？',{});
+ assert.equal(fallback.serviceSource,'local-demo');assert.match(fallback.answer,/灌装/);assert.equal(calls,2);
+ const disconnected=createIntegrations({ ...m.ops,getAIConfig:async()=>({}) },{handoffDemo:true,fetcher:async()=>assert.fail('requires no network')});
+ assert.equal((await disconnected.chat(req(''),question,{})).serviceSource,'local-demo');
+ assert.equal((await disconnected.chat(req(''),'把设备参数改成 42',{})).operation,undefined);
+});
+test('platform bounds stalled Coze and simultaneous visual captures to one two-second wait without handoff defaults',async()=>{
+ const m=mock();m.ops.snapshot=()=>({dataMode:'simulation',materialFlow:null});
+ await m.ops.setAIConfig({integrations:{coze:{enabled:true,baseUrl:'http://agent',botId:'42',token:'private'},vision:{enabled:true,baseUrl:'http://vision'},records:[]}});
+ const pending=[];
+ const i=createIntegrations(m.ops,{localFallback:true,fetcher:(url,{signal})=>{
+  if(url==='http://vision')return Response.json({});
+  return new Promise(resolve=>pending.push({url,signal,resolve}));
+ }});
+ const start=await i.route(req('/vision-rehearsal-start'),{stageIndex:2,source:'camera'});
+ const capture=cameraId=>i.route(req('/vision-rehearsal-capture'),{stageIndex:2,bottleId:start.bottleId,cameraId,data:image});
+ const started=performance.now();
+ const [answer,top,side]=await Promise.all([i.chat(req(''),'介绍一下装瓶产线',{}),capture('top'),capture('side-0')]);
+ const elapsed=performance.now()-started;
+ assert.ok(elapsed>=1900&&elapsed<3500,`elapsed ${elapsed}ms`);
+ assert.equal(answer.serviceSource,'local-demo');assert.doesNotMatch(answer.answer,/本地演示/);
+ assert.deepEqual([top.serviceSource,side.serviceSource],['local-materials','local-materials']);
+ assert.equal(pending.length,3);assert.ok(pending.every(r=>r.signal.aborted));
+ for(const request of pending)request.resolve(Response.json({code:0,data:{id:'late',status:'completed'}}));
+ assert.equal((await i.route(req('/vision-monitor','GET'),{})).records[0].capturedCount,2);
+ assert.equal((await i.read()).state.commands.length,0);
+ const offline=createIntegrations({...m.ops,getAIConfig:async()=>({}),snapshot:()=>m.ops.snapshot()},{localFallback:true,fetcher:()=>assert.fail('no configured service')});
+ assert.equal((await offline.chat(req(''),'介绍一下装瓶产线',{})).serviceSource,'local-demo');
+ assert.equal((await offline.route(req('/inspect'),input)).serviceSource,'local-materials');
+ m.ops.snapshot=()=>({dataMode:'real'});
+ await assert.rejects(offline.route(req('/inspect'),input),/请先配置并启用视觉服务/);
+});
+test('handoff vision manual inspection uses preset results only at simulated stations',async()=>{
+ const m=mock();m.ops.snapshot=()=>({dataMode:'simulation'});
+ const integrations=createIntegrations(m.ops,{handoffDemo:true,fetcher:async()=>{throw Error('offline');}});
+ const result=await integrations.route(req('/inspect'),{...input,caseId:'defect'});
+ assert.equal(result.serviceSource,'local-materials');assert.equal(result.verdict,'reject');assert.equal(result.cameras[0].originalUrl,image);
+ const partial=await integrations.route(req('/inspect'),{...input,requestId:'partial',images:input.images.slice(1)});
+ assert.equal(partial.verdict,'review');
+ m.ops.snapshot=()=>({dataMode:'real'});
+ assert.equal((await integrations.route(req('/inspect'),{...input,requestId:'real'})).status,'failed');
+});
 test('camera discovery validates capture contract, builds stream addresses and denies viewers',async()=>{
  const m=mock();const integration=createIntegrations(m.ops,{fetcher:async url=>({ok:true,json:async()=>url.endsWith('/health')?{contract:'bottleworks-capture-v1'}:{devices:[{id:'0',name:'USB camera'},{id:'../bad',name:'invalid'}]}})});
  const r=await integration.route(req('/capture-discover'),{baseUrl:'http://localhost:8097'});

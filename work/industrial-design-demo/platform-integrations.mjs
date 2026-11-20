@@ -11,6 +11,18 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
+async function withHandoffDeadline(fetcher,attempt){
+ const controller=new AbortController(),{signal}=controller;
+ let timer;
+ const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{
+  controller.abort(new Error('外部服务未在 2 秒内返回结果。'));reject(signal.reason);
+ },2000);});
+ const request=(url,options={})=>{
+  signal.throwIfAborted();
+  return fetcher(url,{...options,signal:options.signal?AbortSignal.any([signal,options.signal]):signal});
+ };
+ try{return await Promise.race([attempt(request,signal),timeout]);}finally{clearTimeout(timer);}
+}
 export const cameraIds=['top','side-0','side-120','side-240'];
 export function serviceUrl(value){
  let u;try{u=new URL(value);}catch{fail('请输入完整的服务地址。');}
@@ -80,7 +92,7 @@ export async function runAlarmWorkflow(config,alarms,fetcher=fetch){
 }
 
 // Stored alongside the existing AI configuration in MySQL; uploaded files are private.
-export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handoffs'),fetcher=fetch,handoffDemo=false}={}){
+export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handoffs'),fetcher=fetch,handoffDemo=false,localFallback=handoffDemo}={}){
  const inference=createInferenceQueue();
  const rehearsal=createVisionRehearsal();
  const updateVisionDemo=async()=>{const {state}=await read();return rehearsal.observe(state.visionRehearsal||rehearsalDefaults(),ops.snapshot?.()||{});};
@@ -116,14 +128,14 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    const visionUrl='http://127.0.0.1:8093',localVisionUrl='http://127.0.0.1:18093',agentUrl='http://127.0.0.1:8887',botId='123456789012';
    state.vision={enabled:true,mode:'whole-bottle',baseUrl:visionUrl,workflowId:'',version:'',...root.integrations?.vision,backupBaseUrl:root.integrations?.vision?.backupBaseUrl||localVisionUrl};
    state.coze={enabled:true,baseUrl:agentUrl,botId,token:'demo-token',workflowId:'',version:'',...root.integrations?.coze,backupBaseUrl:root.integrations?.coze?.backupBaseUrl||agentUrl,backupBotId:root.integrations?.coze?.backupBotId||botId,backupToken:root.integrations?.coze?.backupToken||'demo-token'};
-   state.visionRehearsal??={...rehearsalDefaults(),enabled:true,stageIndices:[2,5]};
   }
+  if(localFallback)state.visionRehearsal??={...rehearsalDefaults(),enabled:true,stageIndices:[2,5]};
   return {root,state};
  };
- const save=async state=>{const latest=await ops.getAIConfig()||{};await ops.setAIConfig({...latest,integrations:state});};
+ const save=async(state,signal)=>{const latest=await ops.getAIConfig()||{};signal?.throwIfAborted();await ops.setAIConfig({...latest,integrations:state});};
  const publicState=s=>({...s,coze:{...s.coze,token:undefined,backupToken:undefined,tokenConfigured:!!s.coze.token,backupTokenConfigured:!!s.coze.backupToken},vision:{...s.vision,token:undefined,backupToken:undefined,tokenConfigured:!!s.vision.token,backupTokenConfigured:!!s.vision.backupToken},commands:undefined});
  const context=async req=>ops.route({headers:req.headers,url:'/api/ops/context',method:'GET'},{},{});
- async function proposal(req,out){
+ async function proposal(req,out,signal){
   if(!out.operation)return null;
   const ctx=await context(req),o=out.operation,kind=o.kind||'parameter';
   let details;
@@ -141,11 +153,11 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    details={title:'切换数据来源',before:ctx.dataMode,unit:''};
   }else fail('未开放此类写入操作。');
   const cmd={id:randomUUID(),actor:ops.actor(req).id,...details,kind,reason:String(o.reason||'用户请求').slice(0,500),value:o.value,status:'pending',createdAt:Date.now(),mode:ctx.dataMode,protocol:!!ctx.protocol?.enabled};
-  await exclusive(async()=>{const {state}=await read();state.commands=[cmd,...state.commands||[]].slice(0,200);await save(state);});
+  await exclusive(async()=>{const {state}=await read();state.commands=[cmd,...state.commands||[]].slice(0,200);await save(state,signal);});
   await ops.log(ops.actor(req),'AI 提出参数调整',`${cmd.device} / ${cmd.title} → ${cmd.value}，等待人工确认`,'待确认',{category:'ai',requestId:cmd.id});return cmd;
  }
- async function batchAlarmReport(req,question=''){
-  const {state}=await read();state.coze=await preferredService(state.coze,fetcher);
+ async function batchAlarmReport(req,question='',config=null,request=fetcher){
+  const {state}=await read();const coze=config||state.coze;
   const context=await ops.route({headers:req.headers,url:'/api/ops/context',method:'GET'},{},{});
   let alarms=alarmSource(context.dataMode).map(row=>({...row.alarm,resolvedAt:row.resolvedAt,done:!!row.resolvedAt}));
   const day=at=>new Date(at+8*3600000).toISOString().slice(0,10),dates=question.match(/\d{4}-\d{2}-\d{2}/g)||[];
@@ -156,15 +168,47 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
   const activeOnly=/当前|未恢复|待处理/.test(question);if(activeOnly)alarms=alarms.filter(a=>!a.done);
   const coverage=(dates.length?dates.join(' 至 '):'最近100条已记录事件')+(activeOnly?' · 未恢复告警':'');
   if(!alarms.length)return {answer:'统计范围：'+coverage+'。当前数据模式没有符合条件的告警记录。',goalStatus:'completed',trace:[],count:0};
-  const result=await inference.run(()=>runAlarmWorkflow(state.coze,alarms,fetcher));
+  let result;
+  try{
+   const analyze=async(send,signal)=>{
+    const service=config||await preferredService(coze,send);
+    return inference.run(()=>{signal?.throwIfAborted();return runAlarmWorkflow(service,alarms,send);});
+   };
+   if(localFallback&&(!coze.enabled||!coze.baseUrl||!coze.alarmWorkflowId))throw Error('未配置告警工作流');
+   result=localFallback?await withHandoffDeadline(request,analyze):await analyze(request);
+  }catch(error){
+   if(!localFallback||error.status===403)throw error;
+   result={answer:'告警记录汇总：\n'+alarms.map(a=>`- ${a.title||'未命名告警'}：${a.done?'已恢复':'待核对'}`).join('\n'),goalStatus:'completed',serviceSource:'local-demo',trace:[]};
+  }
   const report={id:randomUUID(),mode:context.dataMode,createdAt:new Date().toISOString(),count:alarms.length,coverage,...result,answer:'统计范围：'+coverage+'。\n\n'+result.answer};
   await exclusive(async()=>{const {state:latest}=await read();latest.alarmReports=[report,...latest.alarmReports||[]].slice(0,20);await save(latest);});
   await ops.log(ops.actor(req),'生成批量告警复盘',String(alarms.length)+' 条','成功',{category:'ai'});return report;
  }
  async function chat(req,question,ctx,history=[]){
-  const {state,root}=await read();if(!state.coze.enabled)return null;state.coze=await preferredService(state.coze,fetcher);
+  if(!localFallback)return connectedChat(req,question,ctx,history);
   if(isBatchAlarmQuestion(question)&&!ctx.automaticAlarm)return batchAlarmReport(req,question);
+  const {state}=await read(),config=state.coze;
+  const canned=config.botId==='123456789012'&&config.token==='demo-token';
+  if(config.enabled&&config.baseUrl&&!canned&&(config.botId||config.workflowId||(ctx.automaticAlarm&&config.alarmWorkflowId))){
+   try{
+    const result=await withHandoffDeadline(fetcher,(request,signal)=>connectedChat(req,question,ctx,history,config,request,signal));
+    if(result?.operation||['completed','needs_information','awaiting_confirmation'].includes(result?.goalStatus))return result;
+   }catch(error){if([400,403].includes(error.status))throw error;}
+  }
+  const {questions}=JSON.parse(await fs.readFile(new URL('./config/demo-questions.json',import.meta.url),'utf8'));
+  const normalize=value=>value.trim().toLowerCase().replace(/[\s，。！？、,.!?]/g,'');
+  const match=ctx.automaticAlarm?null:questions.find(row=>row.questions.some(text=>normalize(text)===normalize(question))&&(!row.target||(ctx.selectionLocked&&String(ctx.target||'').includes(row.target))));
+  const answer=match?.answer||(ctx.automaticAlarm?'可先核对告警记录与对应工位的读数，再检查设备状态和阈值。此处仅提供检查步骤，未判定故障原因。':'当前未连接到可回答此问题的智能体。可试用演示题：'+questions.filter(row=>!row.target).map(row=>row.questions[0]).join('；')+'。');
+  return {answer,serviceSource:'local-demo',goalStatus:match||ctx.automaticAlarm?'completed':'needs_information',trace:[],snapshotAt:ctx.updated};
+ }
+ async function connectedChat(req,question,ctx,history=[],config=null,request=fetcher,signal){
+  const {state,root}=await read();if(!state.coze.enabled)return null;state.coze=config||await preferredService(state.coze,fetcher);
+  if(isBatchAlarmQuestion(question)&&!ctx.automaticAlarm)return batchAlarmReport(req,question,state.coze,request);
+  if(ctx.automaticAlarm&&!state.coze.botId&&state.coze.alarmWorkflowId){
+   return inference.run(()=>{signal?.throwIfAborted();return runAlarmWorkflow(state.coze,[{...ctx.alarm,done:!!ctx.eventResolvedAt,resolvedAt:ctx.eventResolvedAt}],request);});
+  }
   if(state.coze.botId)return inference.run(async()=>{
+   signal?.throwIfAborted();
    const prepared=[];
    const readingSelected=ctx.selectionLocked&&!/调整|改为|设为|修改|设置为|设置到|写入|启动|暂停|停止|切换/.test(question.replace(/(?:不|不要|无需|禁止|不能)(?:修改|调整|设置|写入|启动|暂停|停止|切换)/g,''));
    if(ctx.automaticAlarm||readingSelected){
@@ -182,16 +226,17 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    }
    if(ctx.automaticAlarm&&state.coze.alarmWorkflowId){
     const event={...ctx.alarm,done:!!ctx.eventResolvedAt,resolvedAt:ctx.eventResolvedAt};
-    const result=await runAlarmWorkflow(state.coze,[event],fetcher);
+    const result=await runAlarmWorkflow(state.coze,[event],request);
     const evidence=prepared.filter(t=>t.status==='success').map(t=>t.tool==='query_devices'?'设备设定参数：'+(t.result.setpoints||[]).map(p=>(p.deviceName||p.device)+' / '+p.name+' '+p.value+' '+p.unit+'（允许 '+p.min+'～'+p.max+' '+p.unit+'）').join('；')+'。当前读数：'+((t.result.readings||[]).map(r=>r.station+' '+r.metric+' '+(r.value??'未提供')+' '+r.unit+'，来源 '+r.source).join('；')||'本次未返回对应实测读数'):t.tool==='query_logs'?'当前未恢复告警：'+t.result.activeCount+' 条':t.tool==='search_knowledge'?'参考资料：'+(t.result.documents||[]).map(d=>(d.title||d.id)+' '+(d.version||'')).join('、'):'').filter(Boolean).join('\n');
     return {...result,model:'Coze · 告警分析报告',answer:'事件：'+event.title+'\n事件时间：'+(Number.isFinite(Date.parse(event.time))?new Date(event.time).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未提供')+'\n'+(ctx.eventResolvedAt?'此事件已结束，以下为历史事件复盘。':'此事件尚未标记恢复。')+'\n事件记录：'+(event.detail||'')+'\n\n'+result.answer+'\n\n核对依据（查询时刻）：\n'+evidence,trace:[...prepared,...result.trace],snapshotAt:ctx.updated};
    }
-   return runNativeAgent({...state.coze,skills:readSkillConfig(root.skills)},req,question,ctx,history,fetcher,prepared);
+   signal?.throwIfAborted();
+   return runNativeAgent({...state.coze,skills:readSkillConfig(root.skills)},req,question,ctx,history,request,prepared,signal);
   });
   if(parseSkillCommand(question,ctx,readSkillConfig(root.skills)))throw Error('技能需要配置已发布的原生智能体 ID。');
   const result=await runAgent({question,context:ctx,history,
-   decide:(agentContext,h)=>runCoze(state.coze,{question,context:JSON.stringify(agentContext),history:JSON.stringify(h)},fetcher),
-   execute:createAgentTools(ops,req,{commands:async()=>{const {state}=await read();return state.commands.filter(c=>c.actor===ops.actor(req).id).slice(0,20);},proposal:o=>proposal(req,{operation:o})})});
+   decide:(agentContext,h)=>runCoze(state.coze,{question,context:JSON.stringify(agentContext),history:JSON.stringify(h)},request),
+   execute:createAgentTools(ops,req,{commands:async()=>{const {state}=await read();return state.commands.filter(c=>c.actor===ops.actor(req).id).slice(0,20);},proposal:o=>proposal(req,{operation:o},signal)})});
   await ops.log(ops.actor(req),'智能体工具查询',JSON.stringify(result.trace.map(t=>({tool:t.tool,status:t.status,at:t.at}))),result.goalStatus,{category:'ai'});
   return {...result,snapshotAt:ctx.updated};
  }
@@ -238,23 +283,25 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    await ops.log(user,'选择视觉演示瓶体',body.caseId,'成功',{category:'interface',stageIndex:body.stageIndex});
    return {ok:true,caseId:body.caseId};
   });
-  if(p.endsWith('/vision-rehearsal-capture')&&write)return exclusive(async()=>{
+  if(p.endsWith('/vision-rehearsal-capture')&&write){
    ops.requireRole(user,['admin','engineer','operator']);
    const demo=await updateVisionDemo();if(!demo.active||!demo.stageIndices.includes(body.stageIndex))fail('当前工位未启用离线回放。',409);
    if(!rehearsalCameraIds.includes(body.cameraId)||typeof body.data!=='string'||body.data.length>2000000||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(body.data))fail('采集图像无效或过大。');
    const {state}=await read();let serviceResult=null;
    if(state.vision?.enabled&&state.vision.baseUrl){
-    try{
-     const service=await preferredService(state.vision,fetcher),flow=demo.manualFlows?.[body.stageIndex];
-     const response=await fetcher(serviceUrl(service.baseUrl)+'/inspect',{method:'POST',headers:{'Content-Type':'application/json',...(service.token?{Authorization:'Bearer '+service.token}:{})},body:JSON.stringify({requestId:body.bottleId+'-'+body.cameraId,bottleId:body.bottleId,batchId:'camera',caseId:flow?.caseId||'normal',images:[{cameraId:body.cameraId,data:body.data}]}),signal:AbortSignal.timeout(3000)});
+    const inspect=async send=>{
+     const service=await preferredService(state.vision,send),flow=demo.manualFlows?.[body.stageIndex];
+     const response=await send(serviceUrl(service.baseUrl)+'/inspect',{method:'POST',headers:{'Content-Type':'application/json',...(service.token?{Authorization:'Bearer '+service.token}:{})},body:JSON.stringify({requestId:body.bottleId+'-'+body.cameraId,bottleId:body.bottleId,batchId:'camera',caseId:flow?.caseId||'normal',images:[{cameraId:body.cameraId,data:body.data}]}),signal:AbortSignal.timeout(3000)});
      if(response.ok){const data=await response.json();const row=data?.demo===true&&data.bottleId===body.bottleId&&data.requestId===body.bottleId+'-'+body.cameraId?data.cameras?.find(c=>c.cameraId===body.cameraId):null;
-      if(row&&['pass','reject'].includes(row.status)&&['opencvUrl','overlayUrl','heatmapUrl'].every(k=>typeof row[k]==='string'&&/^data:image[/](png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(row[k])))serviceResult={status:row.status,defects:row.defects||[],opencvUrl:row.opencvUrl,overlayUrl:row.overlayUrl,heatmapUrl:row.heatmapUrl,source:service.usingBackup?'backup':'primary'};
+      if(row&&['pass','reject'].includes(row.status)&&['opencvUrl','overlayUrl','heatmapUrl'].every(k=>typeof row[k]==='string'&&/^data:image[/](png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(row[k])))return {status:row.status,defects:row.defects||[],opencvUrl:row.opencvUrl,overlayUrl:row.overlayUrl,heatmapUrl:row.heatmapUrl,source:service.usingBackup?'backup':'primary'};
      }
-    }catch{}
+    };
+    try{serviceResult=localFallback?await withHandoffDeadline(fetcher,inspect):await inspect(fetcher);}catch{}
    }
+   const current=await updateVisionDemo();if(!current.active||!current.stageIndices.includes(body.stageIndex))fail('当前工位未启用离线回放。',409);
    try{rehearsal.capture(body.stageIndex,body.bottleId,body.cameraId,body.data,Date.now(),serviceResult);}catch(e){fail(e.message,409);}
    return {ok:true,serviceSource:serviceResult?.source||'local-materials'};
-  });
+  }
   if(p.endsWith('/vision-rehearsal-stop')&&write)return exclusive(async()=>{
    ops.requireRole(user,['admin','engineer','operator']);
    if(![2,5].includes(body.stageIndex))fail('请选择有效工位。');
@@ -385,7 +432,7 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    const {state}=await read(),v=state.vision;
    if(!v.enabled||v.mode!=='whole-bottle')fail('请先保存并启用整瓶视觉服务。',409);
    if(!['start','status','stop'].includes(body.action))fail('未知检测任务操作。');
-   if(body.action==='start'&&state.visionRehearsal?.enabled)fail('请先关闭表演赛预设演示，再启动真实视觉检测任务。',409);
+   if(body.action==='start'&&state.visionRehearsal?.enabled&&(!localFallback||(await updateVisionDemo()).active))fail('请先关闭预置结果展示，再启动真实视觉检测任务。',409);
    const health=await requestService(v.baseUrl,'/health',v.token,undefined,fetcher);
    if(health.contract!=='bottleworks-vision-v1'||!health.capabilities?.includes('inspection-jobs-v1'))fail('外部视觉服务尚未提供连续采集任务接口；仍可上传图片测试。',409);
    let job=state.visionJob;
@@ -412,24 +459,42 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    state.visionJob=job;await save(state);await ops.log(user,'外部视觉任务',body.action+' / '+job.jobId);return job;
   });
   if(p.endsWith('/inspect')&&write){
-   const {state}=await read();if(!state.vision.enabled)fail('请先配置并启用视觉服务。',409);
    for(const k of ['requestId','bottleId','batchId'])if(typeof body[k]!=='string'||!body[k].trim()||body[k].length>120)fail('填写有效的请求、瓶子与批次编号。');
    if(!Array.isArray(body.images)||body.images.length>4||new Set(body.images.map(i=>i.cameraId)).size!==body.images.length||body.images.some(i=>!cameraIds.includes(i.cameraId)||typeof i.data!=='string'||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(i.data)||i.data.length>2000000))fail('每个机位上传一张不超过1.4MB的PNG/JPEG/WebP图片。');
    return exclusive(async()=>{
     const {state:latest}=await read(),prior=latest.records.find(r=>r.requestId===body.requestId);
-    const fingerprint=createHash('sha256').update(JSON.stringify({bottleId:body.bottleId,batchId:body.batchId,images:[...body.images].sort((a,b)=>a.cameraId.localeCompare(b.cameraId))})).digest('hex');
-    if(prior){if(prior.fingerprint!==fingerprint)fail('请求编号已用于不同输入，复测请使用新编号。',409);return prior;}
-    const input={requestId:body.requestId,bottleId:body.bottleId,batchId:body.batchId,images:body.images,caseId:body.caseId==='defect'?'defect':'normal',version:latest.vision.version};
+    const stageIndex=body.stageIndex===5?5:2,snapshot=ops.snapshot?.();
+    const local=localFallback&&!snapshot?.protocol?.enabled&&(snapshot?.dataMode==='simulation'||(snapshot?.dataMode==='mixed'&&snapshot.states?.[stageIndex]?.source==='simulation'));
+    const online=latest.vision.enabled&&latest.vision.baseUrl;
+    if(!local&&!online)fail('请先配置并启用视觉服务。',409);
+    const caseId=body.caseId==='defect'?'defect':'normal';
+    const fingerprint=createHash('sha256').update(JSON.stringify({bottleId:body.bottleId,batchId:body.batchId,...(caseId==='defect'?{caseId}:{}),images:[...body.images].sort((a,b)=>a.cameraId.localeCompare(b.cameraId))})).digest('hex');
+    if(prior){if(prior.fingerprint!==fingerprint||(!local&&prior.serviceSource==='local-materials'))fail('请求编号已用于不同输入或检测模式，复测请使用新编号。',409);return prior;}
+    const input={requestId:body.requestId,bottleId:body.bottleId,batchId:body.batchId,images:body.images,caseId,version:latest.vision.version};
     const record={fingerprint,requestId:input.requestId,bottleId:input.bottleId,batchId:input.batchId,createdAt:new Date().toISOString(),version:input.version};
-    try{const service=await preferredService(latest.vision,fetcher);const result=await inspectCameraServices(service,input,(...args)=>requestService(...args,fetcher));Object.assign(record,validateInspection(input,result),{status:'completed',serviceSource:service.usingBackup?'backup':'primary'});}catch(e){record.status='failed';record.verdict=null;record.error=e.message;}
-    record.stageIndex=body.stageIndex===5?5:2;record.source='camera-capture';
+    const inspect=async send=>{
+     const service=await preferredService(latest.vision,send),result=await inspectCameraServices(service,input,(...args)=>requestService(...args,send));
+     return {...validateInspection(input,result),status:'completed',serviceSource:service.usingBackup?'backup':'primary'};
+    };
+    try{
+     if(!online)throw Error('未配置视觉服务');
+     Object.assign(record,local?await withHandoffDeadline(fetcher,inspect):await inspect(fetcher));
+    }catch(e){
+     if(!local){record.status='failed';record.verdict=null;record.error=e.message;}
+     else{
+      const preset=validateRehearsal(latest.visionRehearsal||rehearsalDefaults()).cases.find(row=>row.id===caseId);
+      const cameras=preset.cameras.map(c=>input.images.some(i=>i.cameraId===c.cameraId)?{cameraId:c.cameraId,status:c.status,defects:c.defects,opencvUrl:c.images.opencv,overlayUrl:c.images.yolo,heatmapUrl:c.images.patchcore}:{cameraId:c.cameraId,status:'missing'});
+      Object.assign(record,{cameras,status:'completed',verdict:cameras.some(c=>c.status==='reject')?'reject':cameras.some(c=>c.status==='missing')?'review':'pass',reason:'外部检测未返回结果，已显示本地预置检测素材。',version:'rehearsal-1',demo:true,serviceSource:'local-materials'});
+     }
+    }
+    record.stageIndex=stageIndex;record.source='camera-capture';
     record.cameras=cameraIds.map(cameraId=>{const result=record.cameras?.find(c=>c.cameraId===cameraId),frame=input.images.find(i=>i.cameraId===cameraId);return {...(result||{cameraId,status:frame?'error':'missing',reason:record.error||'未收到本机位图像'}),originalUrl:frame?.data||null,capturedAt:frame?record.createdAt:null};});
     latest.records=[record,...latest.records].slice(0,200);await save(latest);await ops.log(user,'四机位检测',`${record.batchId} / ${record.bottleId} / ${record.verdict||record.error}`,record.status,{category:'vision',requestId:record.requestId});return record;
    });
   }
   fail('接入接口不存在。',404);
  }
- const agentTool=(req,name,args)=>createAgentTools(ops,req,{commands:async()=>{const {state}=await read();return state.commands.filter(c=>c.actor===ops.actor(req).id).slice(0,20);},proposal:o=>proposal(req,{operation:o})})(name,args);
+ const agentTool=(req,name,args,signal)=>createAgentTools(ops,req,{commands:async()=>{const {state}=await read();return state.commands.filter(c=>c.actor===ops.actor(req).id).slice(0,20);},proposal:o=>proposal(req,{operation:o},signal)})(name,args);
  return {route,chat,read,agentTool,batchAlarmReport,updateVisionDemo,runtime:inference.status,setAlarmSource:fn=>{alarmSource=fn;}};
 }
 

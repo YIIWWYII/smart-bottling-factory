@@ -30,7 +30,7 @@ export function startCozeTools(ops,integrations,{port=8094,token=readToolToken()
    let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>16000)throw Error('工具参数过大');}
    const args=JSON.parse(raw||'{}'),name=req.url.slice(7),scope=args.scope;delete args.scope;
    const session=scope?sessions.get(scope):null;
-   if(scope&&(!session||Date.now()>session.expires))throw Error('请求上下文已过期，请重新提问');
+   if(scope&&(!session||session.signal?.aborted||Date.now()>session.expires))throw Error('请求上下文已过期，请重新提问');
    if(name==='propose_change'&&!session)return send(200,{result:JSON.stringify({status:'preview_only',message:'独立预览不生成有效确认单，也不执行。请从平台助手生成绑定当前用户的确认单。'})});
    if(name==='query_commands'&&!session)return send(200,{result:'[]'});
    if(session&&++session.calls>12)throw Error('已达到本次工具调用上限');
@@ -48,7 +48,7 @@ export function startCozeTools(ops,integrations,{port=8094,token=readToolToken()
    if(name==='propose_change'&&session.operation)return send(200,{result:JSON.stringify(session.operation)});
    if(name==='propose_change'&&args.kind==='parameter'&&typeof args.value==='string'&&/^-?\d+(\.\d+)?$/.test(args.value))args.value=Number(args.value);
    const actorReq=session?.req||{headers:{cookie:'bw_demo_actor=viewer'}};
-   const result=await ops.withRequest(actorReq,()=>integrations.agentTool(actorReq,name,args));
+   const result=await ops.withRequest(actorReq,()=>integrations.agentTool(actorReq,name,args,session?.signal));
    if(session){session.trace.push({tool:name,arguments:args,at:new Date().toISOString(),status:'success',result});if(name==='propose_change')session.operation=result;}
    // Keep the raw hourly array in the trace for charts; provide explicit time
    // labels to the model so it does not have to count array positions.
@@ -67,9 +67,9 @@ export function compactToolResult(name,result){
  return result;
 }
 
-export async function runNativeAgent(config,req,question,context,history,fetcher=fetch,prepared=[]){
+export async function runNativeAgent(config,req,question,context,history,fetcher=fetch,prepared=[],signal){
  const command=parseSkillCommand(question,context,configuredSkills(config.skills));
- const scope=randomBytes(24).toString('hex'),session={req,expires:Date.now()+180000,calls:0,trace:prepared.map(item=>({...item})),operation:null,skill:command?.skill,readOnly:context.automaticAlarm===true};sessions.set(scope,session);
+ const scope=randomBytes(24).toString('hex'),session={req,signal,expires:Date.now()+180000,calls:0,trace:prepared.map(item=>({...item})),operation:null,skill:command?.skill,readOnly:context.automaticAlarm===true};sessions.set(scope,session);
  const base=config.baseUrl.replace(/\/$/,''),headers={'Content-Type':'application/json',Authorization:'Bearer '+config.token};
  let chat;
  const needsEvidence=!!command||context.selectionLocked||(/(当前|今天|查询|查看|告警|调整|切换|启动|暂停)/.test(question)&&/(工位|产线|设备|VOC|产量|生产|水洗|告警|模式|任务)/i.test(question));
