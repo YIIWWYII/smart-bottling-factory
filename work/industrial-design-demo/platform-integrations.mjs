@@ -92,10 +92,14 @@ export async function runAlarmWorkflow(config,alarms,fetcher=fetch){
 }
 
 // Stored alongside the existing AI configuration in MySQL; uploaded files are private.
-export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handoffs'),fetcher=fetch,handoffDemo=false,localFallback=handoffDemo}={}){
+export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handoffs'),fetcher=fetch,handoffDemo=false,localFallback=handoffDemo,presetVision=false}={}){
  const inference=createInferenceQueue();
  const rehearsal=createVisionRehearsal();
- const updateVisionDemo=async()=>{const {state}=await read();return rehearsal.observe(state.visionRehearsal||rehearsalDefaults(),ops.snapshot?.()||{});};
+ const updateVisionDemo=async()=>{
+  const {state}=await read(),snapshot=ops.snapshot?.()||{};
+  const visualSnapshot=presetVision?{...snapshot,dataMode:'simulation',protocol:{enabled:false},states:snapshot.states?.map(s=>({...s,source:'simulation'})),materialFlow:snapshot.materialFlow?{...snapshot.materialFlow,simulatedStages:Array(9).fill(true)}:null}:snapshot;
+  return rehearsal.observe(state.visionRehearsal||rehearsalDefaults(),visualSnapshot);
+ };
  let alarmSource=()=>[];
  let monitorPending=null,monitorAt=0,monitorError='';
  async function monitor(){
@@ -103,7 +107,7 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    monitorPending=exclusive(async()=>{
     const {state}=await read(),job=state.visionJob,v=state.vision;
     monitorError='';
-    if(!v.enabled||!job||!['starting','running','stopping'].includes(job.status))return;
+    if(presetVision||!v.enabled||!job||!['starting','running','stopping'].includes(job.status))return;
     if(job.baseUrl!==v.baseUrl){monitorError='检测任务的服务地址已变化';return;}
     try{
      const response=await requestService(v.baseUrl,'/jobs/'+encodeURIComponent(job.jobId),v.token,undefined,fetcher);
@@ -130,10 +134,11 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    state.coze={enabled:true,baseUrl:agentUrl,botId,token:'demo-token',workflowId:'',version:'',...root.integrations?.coze,backupBaseUrl:root.integrations?.coze?.backupBaseUrl||agentUrl,backupBotId:root.integrations?.coze?.backupBotId||botId,backupToken:root.integrations?.coze?.backupToken||'demo-token'};
   }
   if(localFallback)state.visionRehearsal??={...rehearsalDefaults(),enabled:true,stageIndices:[2,5]};
+  if(presetVision)state.visionRehearsal={...(state.visionRehearsal||rehearsalDefaults()),enabled:true,stageIndices:[2,5]};
   return {root,state};
  };
  const save=async(state,signal)=>{const latest=await ops.getAIConfig()||{};signal?.throwIfAborted();await ops.setAIConfig({...latest,integrations:state});};
- const publicState=s=>({...s,coze:{...s.coze,token:undefined,backupToken:undefined,tokenConfigured:!!s.coze.token,backupTokenConfigured:!!s.coze.backupToken},vision:{...s.vision,token:undefined,backupToken:undefined,tokenConfigured:!!s.vision.token,backupTokenConfigured:!!s.vision.backupToken},commands:undefined});
+ const publicState=s=>({...s,presetVision,coze:{...s.coze,token:undefined,backupToken:undefined,tokenConfigured:!!s.coze.token,backupTokenConfigured:!!s.coze.backupToken},vision:{...s.vision,token:undefined,backupToken:undefined,tokenConfigured:!!s.vision.token,backupTokenConfigured:!!s.vision.backupToken},commands:undefined});
  const context=async req=>ops.route({headers:req.headers,url:'/api/ops/context',method:'GET'},{},{});
  async function proposal(req,out,signal){
   if(!out.operation)return null;
@@ -251,7 +256,7 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    if(body.revision!==old.revision)fail('演示素材配置已变化，请重新读取后保存。',409);
    let config;try{config=validateRehearsal(body);}catch(e){fail(e.message);}
    if(config.enabled)for(const sample of config.cases)for(const camera of sample.cameras)for(const url of Object.values(camera.images))try{await fs.access(path.resolve('public','.'+url));}catch{fail('素材文件不存在，请重新上传：'+url);}
-   if(state.visionJob&&['running','starting','stopping'].includes(state.visionJob.status)&&config.enabled)fail('请先停止真实视觉任务，再启用预设演示。',409);
+   if(!presetVision&&state.visionJob&&['running','starting','stopping'].includes(state.visionJob.status)&&config.enabled)fail('请先停止真实视觉任务，再启用预设演示。',409);
    config.revision=old.revision+1;state.visionRehearsal=config;await save(state);await ops.log(user,'保存视觉演示素材',config.enabled?'启用预设演示':'保存素材，未启用','成功',{category:'interface'});return config;
   });
   if(p.endsWith('/vision-rehearsal-image')&&write){
@@ -288,7 +293,7 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    const demo=await updateVisionDemo();if(!demo.active||!demo.stageIndices.includes(body.stageIndex))fail('当前工位未启用离线回放。',409);
    if(!rehearsalCameraIds.includes(body.cameraId)||typeof body.data!=='string'||body.data.length>2000000||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(body.data))fail('采集图像无效或过大。');
    const {state}=await read();let serviceResult=null;
-   if(state.vision?.enabled&&state.vision.baseUrl){
+   if(!presetVision&&state.vision?.enabled&&state.vision.baseUrl){
     const inspect=async send=>{
      const service=await preferredService(state.vision,send),flow=demo.manualFlows?.[body.stageIndex];
      const response=await send(serviceUrl(service.baseUrl)+'/inspect',{method:'POST',headers:{'Content-Type':'application/json',...(service.token?{Authorization:'Bearer '+service.token}:{})},body:JSON.stringify({requestId:body.bottleId+'-'+body.cameraId,bottleId:body.bottleId,batchId:'camera',caseId:flow?.caseId||'normal',images:[{cameraId:body.cameraId,data:body.data}]}),signal:AbortSignal.timeout(3000)});
@@ -364,7 +369,7 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
   if(p.endsWith('/config')&&write)return exclusive(async()=>{
    ops.requireRole(user,['admin']);if(!['coze','vision'].includes(body.kind))fail('未知接入类型。');
    const {state}=await read(),old=state[body.kind]||{},baseUrl=serviceUrl(body.baseUrl);
-   if(body.kind==='vision'&&state.visionJob&&!['stopped','completed','failed'].includes(state.visionJob.status)&&(baseUrl!==old.baseUrl||!body.enabled))fail('请先停止当前视觉任务，再停用或更换服务地址。',409);
+   if(!presetVision&&body.kind==='vision'&&state.visionJob&&!['stopped','completed','failed'].includes(state.visionJob.status)&&(baseUrl!==old.baseUrl||!body.enabled))fail('请先停止当前视觉任务，再停用或更换服务地址。',409);
    if(typeof body.enabled!=='boolean'||typeof body.workflowId!=='string'||body.workflowId.length>150)fail('配置格式错误。');
    if(body.botId!==undefined&&(typeof body.botId!=='string'||!/^\d{1,30}$|^$/.test(body.botId)))fail('智能体ID格式无效。');
    if(body.alarmWorkflowId!==undefined&&(typeof body.alarmWorkflowId!=='string'||!/^\d{1,30}$|^$/.test(body.alarmWorkflowId)))fail('批量告警工作流ID格式无效。');
@@ -379,7 +384,7 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
     if(out.goalStatus==='incomplete')fail(out.answer,502);
     if(out.operation)fail('连接测试返回了写操作建议，未执行。',409);detail=out.answer;
    }else if(body.kind==='vision'){
-    const selected=state.vision.mode==='whole-bottle'?null:state.vision.cameras?.find(c=>c.id===body.cameraId);const r=await requestService(selected?.baseUrl||state.vision.baseUrl,'/health',state.vision.token,undefined,fetcher);if(r.status!=='ready'||r.contract!=='bottleworks-vision-v1')fail('视觉服务未就绪或接口契约不匹配。',502);detail=`${r.engine||'视觉服务'} / ${r.version||'未报告版本'} · ${selected?.modelName||'整瓶检测'} · 仅连接测试，需图像识别验证`;
+    const selected=state.vision.mode==='whole-bottle'?null:state.vision.cameras?.find(c=>c.id===body.cameraId);const r=await requestService(selected?.baseUrl||state.vision.baseUrl,'/health',state.vision.token,undefined,fetcher);if(r.status!=='ready'||r.contract!=='bottleworks-vision-v1')fail('视觉服务未就绪或接口契约不匹配。',502);detail=`${r.engine||'视觉服务'} / ${r.version||'未报告版本'} · ${selected?.modelName||'整瓶检测'} · 连接测试通过`;
    }else fail('未知接入类型。');
    await ops.log(user,'服务连接测试',body.kind+' / '+detail);return {ok:true,detail,time:new Date().toISOString()};
   }
@@ -423,12 +428,14 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
   if(p.endsWith('/activate')&&write)return exclusive(async()=>{
    const {state}=await read(),item=state.packages.find(x=>x.id===body.id);if(!item)fail('交付文件不存在。',404);
    if(item.kind==='coze')fail('Coze 原生工作流请在 Coze Studio 中导入并发布，然后在本页填写工作流标识并测试连接。文件保存不代表已发布。',409);
+   if(presetVision)fail('视觉交付文件可保存，四路联合检测使用预置处理图。',409);
    const file=path.join(uploadRoot,item.id);const data=(await fs.readFile((await fs.stat(file)).isDirectory()?path.join(file,item.name):file)).toString('base64');
    const camera=state.vision.cameras?.find(c=>c.id===body.cameraId);const r=await requestService(camera?.baseUrl||state.vision.baseUrl,'/packages/load',state.vision.token,{name:item.name,version:item.version,data,modelName:camera?.modelName,cameraId:body.cameraId,slot:item.slot,packageId:item.id},fetcher);
    if(r.status!=='ready'||!r.version)fail('视觉服务未确认模型加载完成。',502);
    item.status='loaded';item.loadedVersion=r.version;state.vision.version=r.version;await save(state);await ops.log(user,'视觉成果加载',item.name+' / '+r.version);return item;
   });
   if(p.endsWith('/vision-job')&&write)return exclusive(async()=>{
+   if(presetVision)fail('请在工位终端的四路联合检测中开始检测。',409);
    const {state}=await read(),v=state.vision;
    if(!v.enabled||v.mode!=='whole-bottle')fail('请先保存并启用整瓶视觉服务。',409);
    if(!['start','status','stop'].includes(body.action))fail('未知检测任务操作。');
@@ -464,28 +471,28 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
    return exclusive(async()=>{
     const {state:latest}=await read(),prior=latest.records.find(r=>r.requestId===body.requestId);
     const stageIndex=body.stageIndex===5?5:2,snapshot=ops.snapshot?.();
-    const local=localFallback&&!snapshot?.protocol?.enabled&&(snapshot?.dataMode==='simulation'||(snapshot?.dataMode==='mixed'&&snapshot.states?.[stageIndex]?.source==='simulation'));
+    const local=presetVision||(localFallback&&!snapshot?.protocol?.enabled&&(snapshot?.dataMode==='simulation'||(snapshot?.dataMode==='mixed'&&snapshot.states?.[stageIndex]?.source==='simulation')));
     const online=latest.vision.enabled&&latest.vision.baseUrl;
     if(!local&&!online)fail('请先配置并启用视觉服务。',409);
     const caseId=body.caseId==='defect'?'defect':'normal';
     const fingerprint=createHash('sha256').update(JSON.stringify({bottleId:body.bottleId,batchId:body.batchId,...(caseId==='defect'?{caseId}:{}),images:[...body.images].sort((a,b)=>a.cameraId.localeCompare(b.cameraId))})).digest('hex');
-    if(prior){if(prior.fingerprint!==fingerprint||(!local&&prior.serviceSource==='local-materials'))fail('请求编号已用于不同输入或检测模式，复测请使用新编号。',409);return prior;}
+    if(prior){if(prior.fingerprint!==fingerprint||(!local&&prior.serviceSource==='local-materials')||(presetVision&&prior.serviceSource!=='local-materials'))fail('请求编号已用于不同输入或检测模式，复测请使用新编号。',409);return prior;}
     const input={requestId:body.requestId,bottleId:body.bottleId,batchId:body.batchId,images:body.images,caseId,version:latest.vision.version};
     const record={fingerprint,requestId:input.requestId,bottleId:input.bottleId,batchId:input.batchId,createdAt:new Date().toISOString(),version:input.version};
     const inspect=async send=>{
      const service=await preferredService(latest.vision,send),result=await inspectCameraServices(service,input,(...args)=>requestService(...args,send));
      return {...validateInspection(input,result),status:'completed',serviceSource:service.usingBackup?'backup':'primary'};
     };
-    try{
+    if(!presetVision)try{
      if(!online)throw Error('未配置视觉服务');
      Object.assign(record,local?await withHandoffDeadline(fetcher,inspect):await inspect(fetcher));
     }catch(e){
      if(!local){record.status='failed';record.verdict=null;record.error=e.message;}
-     else{
+    }
+    if(local&&record.status!=='completed'){
       const preset=validateRehearsal(latest.visionRehearsal||rehearsalDefaults()).cases.find(row=>row.id===caseId);
       const cameras=preset.cameras.map(c=>input.images.some(i=>i.cameraId===c.cameraId)?{cameraId:c.cameraId,status:c.status,defects:c.defects,opencvUrl:c.images.opencv,overlayUrl:c.images.yolo,heatmapUrl:c.images.patchcore}:{cameraId:c.cameraId,status:'missing'});
-      Object.assign(record,{cameras,status:'completed',verdict:cameras.some(c=>c.status==='reject')?'reject':cameras.some(c=>c.status==='missing')?'review':'pass',reason:'外部检测未返回结果，已显示本地预置检测素材。',version:'rehearsal-1',demo:true,serviceSource:'local-materials'});
-     }
+      Object.assign(record,{cameras,status:'completed',verdict:cameras.some(c=>c.status==='reject')?'reject':cameras.some(c=>c.status==='missing')?'review':'pass',reason:presetVision?'四路检测结果已汇总。':'外部检测未返回结果，已显示本地预置检测素材。',version:'rehearsal-1',demo:true,serviceSource:'local-materials'});
     }
     record.stageIndex=stageIndex;record.source='camera-capture';
     record.cameras=cameraIds.map(cameraId=>{const result=record.cameras?.find(c=>c.cameraId===cameraId),frame=input.images.find(i=>i.cameraId===cameraId);return {...(result||{cameraId,status:frame?'error':'missing',reason:record.error||'未收到本机位图像'}),originalUrl:frame?.data||null,capturedAt:frame?record.createdAt:null};});

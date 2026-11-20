@@ -72,6 +72,22 @@ test('platform bounds stalled Coze and simultaneous visual captures to one two-s
  m.ops.snapshot=()=>({dataMode:'real'});
  await assert.rejects(offline.route(req('/inspect'),input),/请先配置并启用视觉服务/);
 });
+test('preset vision never calls detection services even when configured and reachable',async()=>{
+ const m=mock();m.ops.snapshot=()=>({dataMode:'real',protocol:{enabled:true},states:Array(9).fill({source:'real'})});
+ const calls=[];
+ const i=createIntegrations(m.ops,{presetVision:true,localFallback:true,fetcher:async url=>{
+  calls.push(url);
+  return Response.json({status:'ready',contract:'bottleworks-vision-v1'});
+ }});
+ const started=performance.now(),result=await i.route(req('/inspect'),{...input,caseId:'defect'});
+ assert.ok(performance.now()-started<1000);assert.equal(result.verdict,'reject');assert.equal(result.serviceSource,'local-materials');
+ const start=await i.route(req('/vision-rehearsal-start'),{stageIndex:2,source:'camera'});
+ await i.route(req('/vision-rehearsal-capture'),{stageIndex:2,bottleId:start.bottleId,cameraId:'top',data:image});
+ assert.equal((await i.route(req('/vision-monitor','GET'),{})).records.find(r=>r.bottleId===start.bottleId).cameras[0].originalUrl,image);
+ assert.equal((await i.route(req('/test'),{kind:'vision'})).ok,true);
+ await assert.rejects(i.route(req('/vision-job'),{action:'start',batchId:'test'}),/四路联合检测/);
+ assert.deepEqual(calls,['http://localhost:8093/health']);
+});
 test('handoff vision manual inspection uses preset results only at simulated stations',async()=>{
  const m=mock();m.ops.snapshot=()=>({dataMode:'simulation'});
  const integrations=createIntegrations(m.ops,{handoffDemo:true,fetcher:async()=>{throw Error('offline');}});
