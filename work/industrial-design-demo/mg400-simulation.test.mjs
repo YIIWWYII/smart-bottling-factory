@@ -6,7 +6,7 @@ const offline={online:false,connected:false,feedback:null,receivedAt:null,phase:
 const stopped={mode:'stopped',quality:'simulated'};
 const running={mode:'running',quality:'simulated'};
 
-test('simulation advances with elapsed time and preserves physical connection state',()=>{
+test('simulation stays stopped by default and starts only when requested',()=>{
  const sim=createMG400Simulation();
  const first=sim.status('simulation',offline,running,false,1000);
  const next=sim.status('simulation',offline,running,false,2000);
@@ -16,7 +16,12 @@ test('simulation advances with elapsed time and preserves physical connection st
  assert.equal(next.display.source,'simulation');
  assert.equal(next.display.online,true);
  assert.equal(next.display.receivedAt,2000);
- assert.notDeepEqual(first.display.feedback.q_actual,next.display.feedback.q_actual);
+ assert.equal(first.display.simulationRunning,false);
+ assert.equal(next.display.simulationRunning,false);
+ assert.deepEqual(first.display.feedback.q_actual,next.display.feedback.q_actual);
+ sim.setRunning(true);
+ sim.status('simulation',offline,running,false,2000);
+ assert.notDeepEqual(next.display.feedback.q_actual,sim.status('simulation',offline,running,false,3000).display.feedback.q_actual);
 });
 
 test('manual simulation runs while the line is idle and pause retains its pose',()=>{

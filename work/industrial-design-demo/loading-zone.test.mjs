@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
-import {createLoadingZone} from './src/loadingZone.js';
+import {createLoadingZone,createLoadingTable} from './src/loadingZone.js';
 import {createMG400Simulation} from './mg400-simulation.mjs';
 test('authored MG400 bottle reaches belt, preserves pause and hides disabled asset',async(t)=>{
  const mapping=JSON.parse(await fs.readFile('public/config/mg400-model-mapping.json','utf8'));
@@ -32,7 +32,7 @@ test('loading scene applies simulated and real joint feedback to the imported GL
  assert.ok(joint);
  const basePosition=gltf.scene.position.clone(),baseRotation=gltf.scene.quaternion.clone();
  const state={mode:'running',quality:'simulated',source:'simulation'},sim=createMG400Simulation();
- const physical={online:false,connected:false,feedback:null};
+ const physical={online:false,connected:false,feedback:null};sim.status('mixed',physical,state,false,Date.now()-1000);sim.setRunning(true);
  const start=Date.now()-1000;
  zone.update(.1,state,false,true,null,sim.status('mixed',physical,state,false,start).display);
  const before=joint.rotation.y;
@@ -49,4 +49,14 @@ test('loading scene applies simulated and real joint feedback to the imported GL
  zone.update(.1,state,false,true,null,sim.status('real',physical,state).display);
  assert.equal(joint.rotation.y,actualPose);
  assert.equal(zone.zone.userData.phase,'反馈中断 · 姿态保留');
+});
+
+test('loading table exists before a robot is imported',()=>{
+ const scene=new THREE.Group(),table=createLoadingTable(scene);
+ assert.equal(scene.getObjectByName('LoadingRobotTable'),table);
+ assert.equal(table.children.length,5);
+ assert.ok(table.getObjectByName('Loading table surface'));
+ assert.equal(table.getObjectByName('Loading_MG400'),undefined);
+ table.traverse(o=>{o.geometry?.dispose();});
+ for(const material of new Set(table.children.map(o=>o.material)))material.dispose();
 });

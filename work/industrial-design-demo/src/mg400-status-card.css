@@ -62,3 +62,14 @@
     .mg400-status-metrics { grid-template-columns: 1fr; }
     .mg400-status-metrics > div:last-child { grid-column: auto; }
 }
+
+/* New status-card composition: readable instrument cards matching the station metrics. */
+.station-app .control-instrument .mg400-status-card{display:block;margin:0 0 16px;padding:0;color:#294d63;border:0;background:transparent}
+.mg400-status-card header{display:flex;align-items:center;gap:12px;padding:0 0 14px;margin-bottom:16px;border-bottom:1px solid #8ea9b7;color:#294d63}
+.mg400-status-card header>svg{color:#83aabe}.mg400-status-card h3{margin:0;color:#23475d;font-size:18px;line-height:1.35}.mg400-status-card header small{display:block;color:#5b7789;font-size:12px;line-height:1.5}.mg400-status-card header .mg400-state{margin-left:auto;font-size:13px;font-weight:700}.mg400-status-card .mg400-state.simulated{color:#d88a1e}.mg400-status-card .mg400-state.online{color:#218b78}.mg400-status-card .mg400-state.fault{color:#c04d54}.mg400-status-card .mg400-state.offline{color:#708898}
+.mg400-status-group{margin:0 0 16px}.mg400-status-group h4{margin:0 0 9px;color:#345d73;font-size:13px;font-weight:700;letter-spacing:.02em}
+.mg400-status-grid{display:grid;gap:10px}.mg400-status-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.mg400-status-grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.mg400-status-grid.signals{grid-template-columns:1fr 1fr 1.55fr;margin:0 0 12px}
+.mg400-status-value{display:flex;flex-direction:column;gap:7px;min-width:0;box-sizing:border-box;padding:13px 12px;border:1px solid #547488;border-radius:10px;background:linear-gradient(145deg,#1b394c,#0d2333);box-shadow:inset 0 1px 3px #081a2ba8,0 1px 0 #eefaff8c;color:#c6dce9}
+.mg400-status-value>span{font-size:12px;line-height:1.45;color:#c1d8e5;font-weight:650}.mg400-status-value>strong{display:block;min-height:30px;font-size:22px;line-height:1.35;letter-spacing:-.02em;color:var(--status-accent,#67dbe9);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.mg400-status-value>strong small{font-size:12px;color:#b6cbd9;margin-left:4px;letter-spacing:0}.mg400-status-value>small{margin-top:auto;font-size:11px;line-height:1.4;color:#aec6d6}
+.mg400-status-card footer{margin:10px 0 0;color:#597687;font-size:11px;line-height:1.5}.mg400-status-card details{margin-top:10px;color:#4b6b7c}.mg400-status-card details summary{cursor:pointer;font-size:12px}.mg400-status-card dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.mg400-status-card dt{color:#607d8e;font-size:12px}.mg400-status-card dd{margin:0;color:#24475d;font-size:14px}
+@media(max-width:850px){.mg400-status-grid.three{grid-template-columns:1fr 1fr}.mg400-status-grid.signals{grid-template-columns:1fr 1fr}.mg400-status-grid.signals .mg400-status-value:last-child{grid-column:1/-1}.mg400-status-grid.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
