@@ -11,7 +11,7 @@ import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {api,useTwin} from './TwinState';
 import {inspectionCameras,cameraPosition,inspectionTarget} from './visionCameras';
-export default function VisionCameraMonitor({stageIndex=2}){
+export default function VisionCameraMonitor({stageIndex=2,active=true}){
  const cameras=inspectionCameras(stageIndex),code=stageIndex===5?'secondary':'vision',finished=stageIndex===5;
  const twin=useTwin(),host=useRef(),live=useRef(),[error,setError]=useState(''),[ready,setReady]=useState(false),[stamp,setStamp]=useState('');
  const previewHost=useRef(),actualLayer=useRef(),simulationLayer=useRef(),captureSeen=useRef(new Set());
@@ -117,7 +117,7 @@ export default function VisionCameraMonitor({stageIndex=2}){
  <nav aria-label="四路检测画面来源"><button aria-pressed={viewMode==='actual'} onClick={()=>setViewMode('actual')}>实际画面</button><button aria-pressed={viewMode==='simulation'} onClick={()=>setViewMode('simulation')}>模拟画面</button></nav>
  <div className="vision-detection-toolbar"><div><strong>{captureBusy?'正在检测':manualFlow?'检测中':'实时监看'}</strong><p>{manualFlow?.source==='camera'?'等待物体经过取景中心，采集后实时画面继续播放。':manualFlow?'瓶子进入检测中心后依次采集，预览保持运行。':viewMode==='actual'?'点击开始，再让瓶子经过取景中心；原图保存本次相机采集帧。':'瓶子持续运行，点击开始记录一轮采集和处理结果。'}</p></div>{canSwitch&&<div className="vision-capture-actions"><button type="button" disabled={captureBusy||!!manualFlow||(viewMode==='simulation'&&!ready)} onClick={()=>void beginInspection()}>{captureBusy?'检测中…':manualFlow?'采集中…':'开始检测'}</button>{manualFlow&&<button type="button" onClick={()=>api('/api/ai/integrations/vision-rehearsal-stop',{stageIndex}).catch(e=>setCaptureMessage(e.message))}>结束本轮</button>}</div>}</div>
  {captureMessage&&<p className="vision-capture-message" role="status">{captureMessage}</p>}
- <div className="vision-live-preview" hidden={viewMode!=='actual'} ref={previewHost}><ActualCameraFeeds capture cameras={cameras} indices={[0,1,2,3]} sources={sources}/>{shutterLayer(actualLayer)}</div>
+ <div className="vision-live-preview" hidden={viewMode!=='actual'} ref={previewHost}><ActualCameraFeeds capture suspended={!active||viewMode!=='actual'} cameras={cameras} indices={[0,1,2,3]} sources={sources}/>{shutterLayer(actualLayer)}</div>
  <div hidden={viewMode!=='simulation'}><div className="vision-feed quad"><div className="vision-render" ref={host}/>{shutterLayer(simulationLayer)}<div className="vision-feed-labels">{cameras.map(c=><div key={c.id}><strong>{c.label}</strong><span>{ready?'实时模拟':'加载模型…'}</span></div>)}</div>{error&&<p role="alert" className="camera-error">{error}</p>}</div></div>
  <VisionInspectionResults stageIndex={stageIndex} source={rehearsalActive?'rehearsal':'actual'} record={actualResult} onLatest={()=>setActualResult(null)} onState={setInspectionState}/>
  </section>;

@@ -5,7 +5,8 @@ import {productionProduct} from './productionProduct';
 import {productionBottles} from './productionBottle';
 import {createLoadingZone,createLoadingTable,loadingAssetCode} from './loadingZone';
 import {createSceneAssets} from './sceneAssets';
-import {isTeachingRobotAsset} from './builtinPlacements';
+import {isTeachingRobotAsset,loadingRobotPlacement} from './builtinPlacements';
+import {bindBlenderMG400} from './mg400Blender';
 import {enableTouchOrbit} from './touchInteraction';
 import {installVisionCameras} from './visionCameras';
 import {linkageInfo} from './safetyScenarios';
@@ -28,6 +29,19 @@ let motion;
 function loadModel(code){
  if(!models.has(code))models.set(code,new GLTFLoader().loadAsync(`/models/factory-realistic/${code}.glb?revision=reference-2`).catch(e=>{models.delete(code);throw e;}));
  return models.get(code);
+}
+function createPreprocessCameraModel(root){
+ const group=new THREE.Group();group.name='PreprocessCameraModel';
+ const dark=new THREE.MeshStandardMaterial({color:0x263c4e,metalness:.25,roughness:.42});
+ const silver=new THREE.MeshStandardMaterial({color:0xb7c8d1,metalness:.55,roughness:.32});
+ const {x,z}=loadingRobotPlacement;
+ group.position.set(x-.78,0,z+.31);
+ group.rotation.y=-Math.PI/3;
+ const base=new THREE.Mesh(new THREE.BoxGeometry(.23,.035,.18),silver);base.position.y=.0175;group.add(base);
+ const pole=new THREE.Mesh(new THREE.CylinderGeometry(.018,.018,1.10,12),silver);pole.position.y=.57;group.add(pole);
+ const body=new THREE.Mesh(new THREE.BoxGeometry(.15,.10,.12),dark);body.position.y=1.16;group.add(body);
+ const lens=new THREE.Mesh(new THREE.CylinderGeometry(.035,.035,.025,16),new THREE.MeshStandardMaterial({color:0x79b8d2,metalness:.35,roughness:.22}));lens.rotation.x=Math.PI/2;lens.position.set(0,1.16,-.07);group.add(lens);
+ group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});root.add(group);return group;
 }
 function loadMotion(){return motion??=fetch('/models/factory/motion.json?revision=no-people').then(r=>{if(!r.ok)throw Error('动作文件加载失败');return r.json();}).catch(e=>{motion=null;throw e;});}
 
@@ -55,20 +69,20 @@ function batchStatic(root,animated){
  }
 }
 
-export default function BlenderScene({stationFraming=false,device=null,paused=false,onDeviceSelect,compact=false,selected=null,autoFocus=false,deviceStates=null,showMarkers=false,onTwinSelect,sceneAssets=null,editAssetId=null,onAssetSelect,onPlacementChange,transformMode="translate"}){
+export default function BlenderScene({stationFraming=false,hideLoadingRobot=false,loadingRobotPreview=false,device=null,paused=false,onDeviceSelect,compact=false,selected=null,autoFocus=false,deviceStates=null,showMarkers=false,onTwinSelect,sceneAssets=null,editAssetId=null,onAssetSelect,onPlacementChange,transformMode="translate"}){
  const twin=useTwin();
  const mg400State=useRef(null);
  useEffect(()=>{let alive=true,timer;mg400State.current=null;if(device&&device!=='wash')return;const poll=async()=>{try{if(!document.hidden){const result=await api('/api/ops/mg400');if(alive)mg400State.current=result;}}catch{if(mg400State.current)mg400State.current={...mg400State.current,display:{online:false,feedback:null}};}finally{if(alive)timer=setTimeout(poll,250);}};poll();return()=>{alive=false;clearTimeout(timer);};},[device]);
  const markerRefs=useRef([]),linkageRefs=useRef({});
  const activeLinks=(twin?.safetyCases||[]).map(linkageInfo).filter(s=>s&&s.action&&s.phase!=='resolved'&&(!device||deviceCodes[s.stageIndex]===device));
- const loadingModelRevision=JSON.stringify((sceneAssets||twin?.ops?.assets||[]).filter(a=>a.code===loadingAssetCode).map(a=>[a.modelUrl,a.mg400Mapping]));
+ const loadingModelRevision=JSON.stringify((sceneAssets||twin?.ops?.assets||[]).filter(a=>loadingRobotPreview?a.stageIndex===0&&isTeachingRobotAsset(a):a.code===loadingAssetCode).map(a=>[a.modelUrl,a.mg400Mapping,...(loadingRobotPreview?[a.enabled,a.placement]:[])]));
  const host=useRef(),state=useRef({paused,onDeviceSelect}),reset=useRef(()=>{});
  const [status,setStatus]=useState('loading'),[running,setRunning]=useState(true),[retry,setRetry]=useState(0);
  deviceStates=deviceStates||twin?.states||[];
  state.current={logistics:twin?.logistics,materialFlow:twin?.materialFlow,product:twin?.ops?.products?.find(p=>p.id==='yibao'&&p.enabled)||productionProduct(twin),onAssetSelect,editAssetId,onPlacementChange,transformMode,assets:sceneAssets||twin?.ops?.assets||[],protocol:twin?.ops?.protocol,safetyCases:twin?.safetyCases||[],controls:twin?.ops?.controls||{},paused:paused||!running,onDeviceSelect,selected,autoFocus,deviceStates,onTwinSelect};
  useEffect(()=>{
   const el=host.current;let disposed=false,raf,renderer,controls,environment,root,mixer,resize,visibilityObserver;
-  let inViewport=true,mechanics,loadingZone,bottleModels;
+  let inViewport=true,mechanics,loadingZone,bottleModels,loadingRobotModel,applyLoadingRobot;
   let alarmIndicators,facilities,placedAssets,downstream;
   const geometries=new Set(),materials=new Set(),beltUniforms=[],actions=[],deviceMeshes=[],deviceAnchors=[],products=[];
   let focusGoal=null,lastFocus=null,lastLook=null,viewportFit=null,userMoved=false,dirty=true,lastRender=0,lastState=null;
@@ -98,11 +112,20 @@ export default function BlenderScene({stationFraming=false,device=null,paused=fa
   };
   renderer.domElement.addEventListener('pointerdown',down);renderer.domElement.addEventListener('pointerup',up);
   const contextLost=e=>{e.preventDefault();setStatus('error');};renderer.domElement.addEventListener('webglcontextlost',contextLost);
-   const loadingAsset=state.current.assets.find(a=>a.code===loadingAssetCode&&a.modelUrl);
-   const loadingModel=loadingAsset&&(!device||device==='wash'||device==='robot')?new GLTFLoader().loadAsync(loadingAsset.modelUrl).catch(error=>{console.warn('Optional MG400 model unavailable:',error);return null;}):Promise.resolve(null);
+   const loadingAsset=state.current.assets.find(a=>a.code===loadingAssetCode&&a.modelUrl)||(loadingRobotPreview?state.current.assets.find(a=>a.stageIndex===0&&isTeachingRobotAsset(a)&&a.modelUrl):null);
+   const loadingModel=loadingAsset&&(!loadingRobotPreview||loadingAsset.enabled!==false)&&!hideLoadingRobot&&(!device||device==='wash'||device==='robot')?new GLTFLoader().loadAsync(loadingAsset.modelUrl).catch(error=>{console.warn('Optional MG400 model unavailable:',error);return null;}):Promise.resolve(null);
   Promise.all([loadModel(device||'hall'),loadMotion(),loadFacilities(device),loadingModel]).then(([gltf,data,auxiliary,loader])=>{
    if(disposed)return;
-   dirty=true;root=gltf.scene.clone(true);if(!device||device==='wash')createLoadingTable(root);downstream=createDownstream(root,loader);installVisionCameras(root);el.dataset.visionCameraCount=String(root.getObjectByName('Asset_vision')?.children.filter(o=>o.name.startsWith('VisionRig_')).length||0);
+   dirty=true;root=gltf.scene.clone(true);if((!device||device==='wash')&&!hideLoadingRobot)createLoadingTable(root);downstream=createDownstream(root,loader);installVisionCameras(root);el.dataset.visionCameraCount=String(root.getObjectByName('Asset_vision')?.children.filter(o=>o.name.startsWith('VisionRig_')).length||0);
+   if(loadingRobotPreview){
+    createPreprocessCameraModel(root);el.dataset.preprocessCameraModel='ready';
+    el.dataset.loadingTable='ready';el.dataset.loadingRobotUrl=loadingAsset?.modelUrl||'';el.dataset.loadingRobotState=loader?'binding':loadingAsset?.modelUrl?'unavailable':'empty';
+    if(loader){
+     loadingRobotModel=loader.scene;loadingRobotModel.name='Preprocessing_MG400';const p={...loadingRobotPlacement,...loadingAsset.placement},box=new THREE.Box3().setFromObject(loadingRobotModel);
+     loadingRobotModel.scale.setScalar(p.scale);loadingRobotModel.position.set(p.x,p.y-box.min.y*p.scale,p.z);loadingRobotModel.rotation.y=THREE.MathUtils.degToRad(p.rotation);root.add(loadingRobotModel);
+     bindBlenderMG400(loadingRobotModel,{mapping:loadingAsset.mg400Mapping}).then(apply=>{if(!disposed){applyLoadingRobot=apply;el.dataset.loadingRobotState='ready';dirty=true;}}).catch(error=>{el.dataset.loadingRobotState='mapping-error';el.dataset.loadingRobotError=error.message;console.warn('MG400 mapping:',error.message);});
+    }
+   }
    const equipmentBounds=stationFraming?new THREE.Box3():null;
    if(equipmentBounds){root.updateMatrixWorld(true);root.traverse(o=>{if(!o.isMesh)return;for(let n=o;n;n=n.parent)if(n.name.startsWith('Product_'))return;let visible=true;for(let n=o;n;n=n.parent)if(!n.visible)visible=false;if(visible){o.geometry.computeBoundingBox();equipmentBounds.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));}});}
    facilities=attachFacilities(root,auxiliary);if(equipmentBounds)for(const name of auxiliary.map(a=>a.name))equipmentBounds.expandByObject(root.getObjectByName('Auxiliary_'+name));
@@ -119,7 +142,7 @@ if(c.name.startsWith('FactoryHD.beltblue')){
 }
 clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.material=Array.isArray(o.material)?o.material.map(clone):clone(o.material);}});
    const nodes=new Map();root.traverse(o=>{if(o.userData.webId)nodes.set(o.userData.webId,o);});
-   const trackGroups=new Map();const animated=new Set([...facilities.preserve,...downstream.preserve]);
+   const trackGroups=new Map();const animated=new Set([...facilities.preserve,...downstream.preserve]);loadingRobotModel?.traverse(node=>animated.add(node));
    for(const t of data.tracks){const o=nodes.get(t.id);if(!o||isParameterDrivenPart(o.name))continue;animated.add(o);const group=trackGroups.get(t.controller)||[];
     if(o.name.startsWith('Product_')){products.push({object:o,track:prepareProductTrack(t,data.times,data.duration),code:t.controller,loops:0,lastTime:0,baseScale:o.scale.clone()});o.userData.productTwin={kind:'product',id:o.name+'-0',name:'在制瓶 · '+o.name,stageIndex:deviceCodes.indexOf(t.controller)};}
     else group.push(new THREE.VectorKeyframeTrack(o.uuid+'.position',data.times,t.positions));
@@ -135,7 +158,7 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
    }
    alarmIndicators=createAlarmIndicators(root);for(const o of alarmIndicators.preserve)animated.add(o);
    mechanics=createDeviceMechanics(root);for(const o of mechanics.preserve)animated.add(o);
-   batchStatic(root,animated);loadingZone=createLoadingZone(root.getObjectByName('Asset_wash'),loader,loadingAsset?.mg400Mapping);if(loadingZone){loadingZone.zone.traverse(o=>{if(o.isMesh)for(const m of [o.material].flat())materials.add(m);});if(equipmentBounds)equipmentBounds.expandByObject(loadingZone.zone);}
+   batchStatic(root,animated);loadingZone=loadingRobotPreview?null:createLoadingZone(root.getObjectByName('Asset_wash'),loader,loadingAsset?.mg400Mapping);if(loadingZone){loadingZone.zone.traverse(o=>{if(o.isMesh)for(const m of [o.material].flat())materials.add(m);});if(equipmentBounds)equipmentBounds.expandByObject(loadingZone.zone);}
    bottleModels=productionBottles([...products.filter(p=>!['robot','agv','warehouse'].includes(p.code)).map(p=>({object:p.object,height:.34})),...(loadingZone?.bottleTargets||[]),...downstream.bottleTargets],text=>{el.dataset.productModel=text;dirty=true;});
    root.traverse(o=>{if(o.isMesh){geometries.add(o.geometry);o.castShadow=!o.material.transparent;o.receiveShadow=!o.material.transparent;}});
    const bounds=equipmentBounds||new THREE.Box3().setFromObject(root),center=bounds.getCenter(new THREE.Vector3()),extent=bounds.getSize(new THREE.Vector3());
@@ -174,12 +197,17 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
     const direction=new THREE.Vector3(device==='wash'?.3:.1,device==='wash'?.3:.14,1.8).normalize();
     camera.position.copy(direction);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);
     const framingCenter=equipmentBounds.getCenter(new THREE.Vector3()).sub(center);
+    if(loadingRobotPreview)framingCenter.y-=extent.y*.055;
     const rotation=camera.quaternion.clone().invert(),tanY=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));
-    let distance=1;
+    const fill=device==='wash'?.91:.84;
+    let horizontalDistance=1,verticalDistance=1;
     for(const x of [-1,1])for(const y of [-1,1])for(const z of [-1,1]){
      const corner=new THREE.Vector3(x*extent.x/2,y*extent.y/2,z*extent.z/2).applyQuaternion(rotation);
-     distance=Math.max(distance,corner.z+Math.abs(corner.x)/(tanY*camera.aspect*(device==='wash'?.91:.84)),corner.z+Math.abs(corner.y)/(tanY*(device==='wash'?.91:.84)));
+     horizontalDistance=Math.max(horizontalDistance,corner.z+Math.abs(corner.x)/(tanY*camera.aspect*fill));
+     verticalDistance=Math.max(verticalDistance,corner.z+Math.abs(corner.y)/(tanY*fill));
     }
+    // Bring the combined preprocessing equipment closer while fitting its full width.
+    const distance=Math.max(horizontalDistance,verticalDistance*(loadingRobotPreview ? .77 : 1));
     camera.position.copy(framingCenter).add(direction.multiplyScalar(distance));controls.target.copy(framingCenter);controls.update();return;
    }const radius=extent.length()*.5;const angle=THREE.MathUtils.degToRad(camera.fov/2);const distance=radius/Math.sin(Math.min(angle,Math.atan(Math.tan(angle)*camera.aspect)))*(device ? .83 : camera.aspect<1 ? 1.05 : .9);camera.position.copy(new THREE.Vector3(device?.25:1.15,device?.22:1.05,device?1.8:1.3).normalize().multiplyScalar(distance));controls.target.set(0,0,0);controls.update();};
    viewportFit=fit;reset.current=()=>{focusGoal=null;userMoved=false;fit();};fit();setStatus('ready');el.dataset.model=device||'hall';el.dataset.motionTracks=String(animated.size);
@@ -228,7 +256,8 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
    downstream?.update(flow,state.current.logistics,state.current.paused);
    bottleModels?.update(state.current.product);
    loadingZone?.update(delta,state.current.deviceStates[0],state.current.paused,state.current.assets.some(a=>a.code===loadingAssetCode&&a.enabled)&&!state.current.assets.some(a=>isTeachingRobotAsset(a)&&a.code!==loadingAssetCode&&a.stageIndex===0&&a.enabled&&a.modelUrl&&a.placement?.enabled),flow?{present:!!flow.loader,progress:materialProgress(flow,flow.loader),running:flow.running}: {present:false,progress:0,running:false},mg400State.current?.display);if(loadingZone){el.dataset.loadingPhase=loadingZone.zone.userData.phase;el.dataset.loadingTime=String(loadingZone.zone.userData.cycleTime);}
-   placedAssets?.update(state.current.assets,state.current.protocol,delta,state.current.paused,state.current.editAssetId,state.current.transformMode,code=>processes(code),mg400State.current);
+   applyLoadingRobot?.(mg400State.current?.display);
+   placedAssets?.update(loadingRobotPreview?state.current.assets.filter(a=>!(a.stageIndex===0&&isTeachingRobotAsset(a))):state.current.assets,state.current.protocol,delta,state.current.paused,state.current.editAssetId,state.current.transformMode,code=>processes(code),mg400State.current);
    facilities?.update(delta,state.current.safetyCases);
    alarmIndicators?.update(clock.elapsedTime,state.current.deviceStates.flatMap(s=>s.alarms||[]),window.matchMedia('(prefers-reduced-motion: reduce)').matches,state.current.deviceStates);
    const washState=state.current.deviceStates[0],washFeedback={'PT-WASH-01:washFlow':washState?.measurements?.washFlow??(flow?state.current.controls['PT-WASH-01:washFlow']:0),'PT-AIR-01:airFlow':washState?.measurements?.airFlow??(flow?state.current.controls['PT-AIR-01:airFlow']:0),'PT-WASH-01:runState':washActive?'RUNNING':'PAUSED','PT-AIR-01:runState':washActive?'RUNNING':'PAUSED'};
@@ -236,7 +265,7 @@ clonedMaterials.set(m,c);materials.add(c);}return clonedMaterials.get(m);};o.mat
    el.dataset.mechanismState=JSON.stringify(washEffects);
    controls.update();for(const c of state.current.safetyCases){const info=linkageInfo(c),label=linkageRefs.current[c.id];if(!label||!info)continue;const p=facilities?.project(info.facility,camera);if(!p)continue;label.style.left=Math.max(8,Math.min(el.clientWidth-250,(p.x+1)*.5*el.clientWidth+16))+'px';label.style.top=Math.max(8,Math.min(el.clientHeight-110,(-p.y+1)*.5*el.clientHeight-90))+'px';label.style.visibility=p.z>1||p.z< -1?'hidden':'visible';}const renderStart=performance.now();if(clock.elapsedTime-shadowAt>.15&&(moving||effects||shadowAt<0)){renderer.shadowMap.needsUpdate=true;shadowAt=clock.elapsedTime;}if(el.clientWidth&&el.clientHeight)renderer.render(scene,camera);if(clock.elapsedTime-statsAt>1){statsAt=clock.elapsedTime;el.dataset.renderMs=(performance.now()-renderStart).toFixed(1);el.dataset.fps=String(Math.round(frames/Math.max(frameMs,.001)));frames=0;frameMs=0;el.dataset.pixelRatio=String(pixelRatio);el.dataset.motionTime=String(mixer?.time||0);el.dataset.productCount=String(products.length);el.dataset.productPositions=JSON.stringify(products.slice(0,5).map(p=>({id:p.object.userData.productTwin.id,position:p.object.position.toArray(),visible:p.object.visible,screen:p.object.getWorldPosition(new THREE.Vector3()).project(camera).toArray()})));el.dataset.actionTimes=JSON.stringify(Object.fromEntries(actions.map(({code,action})=>[code,action.time])));el.dataset.placedAssets=JSON.stringify(root?.userData.placedAssets||[]);el.dataset.camera=JSON.stringify(camera.position.toArray());el.dataset.drawCalls=String(renderer.info.render.calls);el.dataset.triangles=String(renderer.info.render.triangles);}};render();
   return()=>{disposed=true;cancelAnimationFrame(raf);resize.disconnect();visibilityObserver.disconnect();releaseTouch();controls.dispose();mixer?.stopAllAction();mechanics?.dispose();loadingZone?.dispose();downstream?.dispose();bottleModels?.dispose();alarmIndicators?.dispose();facilities?.dispose();placedAssets?.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());environment.dispose();renderer.dispose();renderer.domElement.remove();};
- },[device,retry,stationFraming,loadingModelRevision]);
+ },[device,retry,stationFraming,loadingModelRevision,hideLoadingRobot,loadingRobotPreview]);
  return <div className={`blender-view ${compact?'compact':''}`}>
   <div className="blender-canvas" ref={host}/>
   {showMarkers&&status==='ready'&&deviceCodes.map((code,i)=><button key={code} ref={e=>markerRefs.current[i]=e} className={`device-marker ${selected===i?'selected':''} state-${deviceStates?.[i]?.alarmLevel?'fault':deviceStates?.[i]?.mode||'running'}`} aria-label={`选择 ${['预处理','气体检测','外观检测','饮料准备','灌装','二次检测','装箱','AGV 运输','仓储'][i]}`} onClick={e=>{const r=e.currentTarget.getBoundingClientRect();onDeviceSelect?.(i,{x:r.right,y:r.top});}}><b>{String(i+1).padStart(2,'0')}</b>{deviceStates?.[i]?.alarms?.length>0&&<span className="marker-alarm-count">! {deviceStates[i].alarms.length}</span>}</button>)}
