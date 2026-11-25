@@ -96,7 +96,30 @@ export default function MG400Panel({asset=null,onStatus,showVisual=true,stationM
   <div className="mg400-live-monitor">
    <header className="instrument-heading"><SlidersHorizontal size={22}/><h2>机械臂 · 实时数据</h2><span className="control-led"/></header>
    <MG400StatusCard status={{...status,display}} lineSpeed={measuredSpeed?.linear} rotationSpeed={measuredSpeed?.angular}/>
-   <details className="mg400-card-code"><summary>状态卡关键代码</summary><div><strong>1. 读取控制器数据</strong><pre>{`const display = status?.display ?? status;\nconst feedback = valid ? display.feedback : null;`}</pre></div><div><strong>2. 格式化数值</strong><pre>{`const readNumber = (value, unit) =>\n  Number.isFinite(value) ? value.toFixed(1) + unit : '—';`}</pre></div><div><strong>3. 显示数据卡</strong><pre>{`return (\n  <section className="mg400-status-card">\n    {header}{metrics}{jointAngles}\n  </section>\n);`}</pre></div></details>
+   <details className="mg400-card-code">
+    <summary>状态卡关键代码</summary>
+    <p><small>以下代码均来自平台项目的 <code>src/MG400StatusCard.jsx</code>。第 1、2 步提前准备。现场可先粘贴第 5 步的返回代码（预留关节卡的位置），再改第 3 步的一个数字，补上第 4 步的一行。</small></p>
+    <div><strong>1. 读取有效反馈 · 第 30 行</strong>
+     <pre>{'const feedback=valid?display.feedback:null;'}</pre>
+     <small>反馈有效才读数；未连接或反馈过期时，卡片不沿用旧数值。</small>
+    </div>
+    <div><strong>2. 格式化数值 · 第 4 行</strong>
+     <pre>{"const readNumber=(value,unit,places=1)=>Number.isFinite(value)?`${value.toFixed(places)} ${unit}`:'—';"}</pre>
+     <small>数字保留指定的小数位并加上单位，缺失或无效时显示「—」。</small>
+    </div>
+    <div><strong>3. 显示关节角度 · 第 18 行</strong>
+     <pre>{"value={readNumber(feedback?.q_actual?.[index],'°',2)}"}</pre>
+     <small>读取每个关节的角度，显示两位小数和度数单位。现场只把行末的小数位数从 1 改成 2。</small>
+    </div>
+    <div><strong>4. 放入四张关节卡 · 第 37 行</strong>
+     <pre>{'<JointAngleCards feedback={feedback}/>'}</pre>
+     <small>把写好的 J1–J4 关节卡放入状态卡，同时把反馈数据传给它。现场直接粘贴这一行。</small>
+    </div>
+    <div><strong>5. 组装整张状态卡 · 第 34 行</strong>
+     <pre>{'return <section className="mg400-status-card" aria-label="上料机械臂状态">'}</pre>
+     <small>这是整张卡的外层。下面依次放入标题、速度、关节角度、末端位置、信号和数据来源。</small>
+    </div>
+   </details>
    <dl className="mg400-connection-facts"><div><dt>设备地址</dt><dd>{status?.config?.host||'未填写'}</dd></div><div><dt>当前工程</dt><dd>{status?.config?.project||'未选择'}</dd></div><div><dt>执行状态</dt><dd>{status?.execution?.state||display?.phase||'未运行'}</dd></div></dl>
    <details className="robot-feedback-details"><summary>全部反馈字段</summary><pre>{f?JSON.stringify(f,null,2):'暂无有效反馈'}</pre></details>
   </div>
