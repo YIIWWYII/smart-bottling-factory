@@ -138,6 +138,18 @@
 .digital-assistant .ai-qa-item input:focus,.digital-assistant .ai-qa-item textarea:focus{outline:2px solid #9fc2e0;outline-offset:1px;border-color:#79a7ce}
 .digital-assistant .ai-qa-item .ai-confirm-toggle{display:flex;align-items:center;gap:8px;color:#526d83;font-size:12px;font-weight:400}
 .digital-assistant .ai-confirm-toggle input{accent-color:#2863ba}
+.digital-assistant .ai-scenario-group{margin:10px 0;padding:10px;border:1px solid #e0e8ef;border-radius:9px;background:#f9fbfd}
+.digital-assistant .ai-scenario-group>summary{display:flex;justify-content:space-between;align-items:center;cursor:pointer;color:#355b78;font-size:13px;font-weight:650}
+.digital-assistant .ai-scenario-group>summary small{color:#71879a;font-weight:400}
+.digital-assistant .ai-scenario-row{display:grid;grid-template-columns:minmax(90px,.8fr) minmax(120px,1.2fr) auto;align-items:center;gap:6px;margin-top:8px}
+.digital-assistant .ai-scenario-row input{min-width:0;box-sizing:border-box;width:100%;padding:8px;border:1px solid #d3dfeb;border-radius:7px;background:#fff;color:#263e54;font:inherit;font-size:12px}
+.digital-assistant .ai-scenario-row-actions{display:flex;gap:1px}
+.digital-assistant .ai-scenario-row-actions button{display:grid;place-items:center;width:27px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:#567087}
+.digital-assistant .ai-scenario-row-actions button:hover:not(:disabled){background:#eaf1f7}
+.digital-assistant .ai-scenario-row-actions button:disabled{opacity:.3}
+.digital-assistant .ai-scenario-add{display:flex;align-items:center;gap:5px;margin-top:8px;padding:5px 8px;border:1px solid #d3dfeb;border-radius:7px;background:#fff;color:#355b78;font-size:12px}
+.digital-assistant .ai-scenario-group>label{display:block;margin:9px 0;color:#405c74;font-size:12px;font-weight:600}
+.digital-assistant .ai-scenario-group>label input{display:block;box-sizing:border-box;width:100%;margin-top:5px;padding:8px;border:1px solid #d3dfeb;border-radius:7px;background:#fff;color:#263e54;font:inherit;font-size:12px}
 .digital-assistant .ai-qa-settings-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:#fff;border-top:1px solid #e1e7ee}
 .digital-assistant .ai-qa-settings-actions span{color:#657c91;font-size:12px}
 .digital-assistant .ai-qa-settings-actions button{min-height:40px;padding:8px 14px;border:1px solid #2863ba;border-radius:8px;background:#2863ba;color:#fff;font-size:14px}
@@ -148,7 +160,7 @@
 .digital-assistant.is-open .ai-local-history{flex:1;min-height:0;overflow:auto;padding:12px}
 .digital-assistant.is-open .ai-local-history>h3{margin:2px 0 12px;color:#2f4e68}
 .digital-assistant .ai-local-history .ai-operation{background:#fff}
-@media(max-width:600px){.digital-assistant.is-open .ai-workflow-grid{grid-template-columns:1fr}.digital-assistant .ai-qa-settings-heading{align-items:flex-start}.digital-assistant .ai-confirmation-actions button{flex:1}}
+@media(max-width:600px){.digital-assistant.is-open .ai-workflow-grid{grid-template-columns:1fr}.digital-assistant .ai-qa-settings-heading{align-items:flex-start}.digital-assistant .ai-confirmation-actions button{flex:1}.digital-assistant .ai-scenario-row{grid-template-columns:minmax(0,1fr) auto}.digital-assistant .ai-scenario-row input:nth-child(2){grid-column:1/-1;grid-row:2}.digital-assistant .ai-scenario-row-actions{grid-column:2;grid-row:1}}
 
 /* The full assistant uses a quiet desktop layout; the device reply stays compact. */
 .demo-shell .digital-assistant.is-open:not(.is-compact){

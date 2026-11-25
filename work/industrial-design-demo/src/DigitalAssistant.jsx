@@ -12,7 +12,7 @@ import {
   SquarePen, Trash2, Volume2, Wrench, X,
 } from 'lucide-react';
 import {
-  assistantQuestionsKey, assistantRunsKey, assistantScenarioOptions, createAssistantWorkflowRun,
+  assistantQuestionsKey, assistantRunsKey, assistantScenarioOptions, assistantScenarioTemplate, assistantWorkflowStages, createAssistantWorkflowRun,
   readAssistantQuestions, readAssistantRuns, resolveAssistantQuestion,
 } from './assistant-fixed-workflow';
 
@@ -128,6 +128,28 @@ function timeLabel(value) {
 
 function replyTime(value) {
   return new Date(value).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function ScenarioRows({ title, name, result, rows, onChange }) {
+  const move = (index, offset) => {
+    const next = [...rows];
+    [next[index], next[index + offset]] = [next[index + offset], next[index]];
+    onChange(next);
+  };
+  const edit = (index, column, value) => onChange(rows.map((row, i) => i === index ? row.map((cell, j) => j === column ? value : cell) : row));
+  return <details className="ai-scenario-group">
+    <summary>{title} <small>{rows.length} 项</small></summary>
+    {rows.map((row, index) => <div className="ai-scenario-row" key={index}>
+      <input aria-label={`${name} ${index + 1}`} placeholder={name} maxLength={100} value={row[0]} onChange={event => edit(index, 0, event.target.value)} />
+      {result && <input aria-label={`${result} ${index + 1}`} placeholder={result} maxLength={500} value={row[1]} onChange={event => edit(index, 1, event.target.value)} />}
+      <div className="ai-scenario-row-actions">
+        <button type="button" aria-label={`上移第 ${index + 1} 项`} title="上移" disabled={!index} onClick={() => move(index, -1)}><ChevronUp size={15} /></button>
+        <button type="button" aria-label={`下移第 ${index + 1} 项`} title="下移" disabled={index === rows.length - 1} onClick={() => move(index, 1)}><ChevronDown size={15} /></button>
+        <button type="button" aria-label={`删除第 ${index + 1} 项`} title="删除" onClick={() => onChange(rows.filter((_, i) => i !== index))}><Trash2 size={14} /></button>
+      </div>
+    </div>)}
+    <button type="button" className="ai-scenario-add" onClick={() => onChange([...rows, result ? ['', ''] : ['']])}><Plus size={15} />添加条目</button>
+  </details>;
 }
 
 export default function DigitalAssistant({ route }) {
@@ -643,7 +665,7 @@ export default function DigitalAssistant({ route }) {
     if (!value.length || busy) return;
     const { number, entry } = resolveAssistantQuestion(value, questions);
     if (!entry) {
-      showNotice(number === null ? '请输入编号，或用开头的空格数选择回复。' : `尚未设置编号 ${number} 的固定回复。`);
+      showNotice(number === null ? '请输入编号，或用开头的空格数选择场景。' : `尚未设置编号 ${number} 的模拟场景。`);
       return;
     }
     const context = target || document.querySelector('main [data-ai-context]')?.dataset.aiContext || document.querySelector('main h1')?.innerText || pageLabel(route);
@@ -655,7 +677,7 @@ export default function DigitalAssistant({ route }) {
     if (compact) setNearbyId(run.id);
     setQuestion('');
     setActiveRun({ run, step: 0, phase: 'workflow' });
-    const stages = run.tasks.filter((task) => task.status === 'completed').length;
+    const stages = assistantWorkflowStages(run);
     const characters = Array.from(run.answer);
     const chunkSize = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       ? characters.length : Math.max(2, Math.ceil(characters.length / 100));
@@ -681,7 +703,7 @@ export default function DigitalAssistant({ route }) {
       };
       typeReply(0);
     };
-    busyTimerRef.current = window.setTimeout(() => advance(1), 430);
+    advance(0);
   };
 
   const stopRun = () => {
@@ -690,7 +712,9 @@ export default function DigitalAssistant({ route }) {
     const { run, step, partial } = activeRun;
     const stopped = {
       ...run, answer: partial || '', status: 'stopped', confirmation: null,
-      tasks: run.tasks.slice(0, step), toolCalls: run.toolCalls.slice(0, step),
+      tasks: run.tasks.filter(task => task.status !== 'waiting').slice(0, step),
+      toolCalls: run.toolCalls.filter(tool => tool.status !== 'waiting').slice(0, step),
+      scenario: { ...run.scenario, steps: run.scenario.steps.slice(0, step) },
     };
     persistRuns((current) => [stopped, ...current].slice(0, MAX_RUNS));
     setActiveRun(null);
@@ -751,6 +775,7 @@ export default function DigitalAssistant({ route }) {
   const addQuestion = () => {
     const next = renumberQuestions([...questionDraft, {
       id: '', number: questionDraft.length + 1, prompt: '', answer: '', needsConfirmation: false,
+      kind: 'general', workflow: { ...assistantScenarioTemplate({ kind: 'general' }), steps: [], tasks: [], tools: [] },
     }]);
     setQuestionDraft(next);
     setQuestionsSaved(false);
@@ -758,7 +783,7 @@ export default function DigitalAssistant({ route }) {
 
   const removeQuestion = (index) => {
     if (questionDraft.length <= 1) {
-      setQaError('至少保留一条固定问答。');
+      setQaError('至少保留一个模拟场景。');
       return;
     }
     setQuestionDraft(renumberQuestions(questionDraft.filter((_, itemIndex) => itemIndex !== index)));
@@ -776,14 +801,15 @@ export default function DigitalAssistant({ route }) {
 
   const saveQuestions = () => {
     if (questionDraft.some((item) => !item.prompt.trim() || !item.answer.trim())) {
-      setQaError('每一条都需要填写问题名称和固定回复。');
+      setQaError('每个场景都需要填写场景名称和回复。');
       return;
     }
-    const saved = renumberQuestions(questionDraft.map((item) => ({
-      ...item,
-      prompt: item.prompt.trim(),
-      answer: item.answer.trim(),
-      needsConfirmation: Boolean(item.needsConfirmation),
+    const cleanRows = (rows) => rows.map(row => row.map(value => value.trim())).filter(([name]) => name);
+    const saved = renumberQuestions(questionDraft.map((item) => ({ ...item,
+      prompt: item.prompt.trim(), answer: item.answer.trim(),
+      workflow: { ...item.workflow, title: item.workflow.title.trim() || item.prompt.trim(),
+        steps: cleanRows(item.workflow.steps), tasks: cleanRows(item.workflow.tasks), tools: cleanRows(item.workflow.tools),
+      },
     })));
     try {
       localStorage.setItem(assistantQuestionsKey, JSON.stringify(saved));
@@ -791,11 +817,13 @@ export default function DigitalAssistant({ route }) {
       setQuestions(saved);
       setQuestionsSaved(true);
       setQaError('');
-      showNotice('固定问答已保存在本机浏览器。');
+      showNotice('模拟场景已保存在本机浏览器。');
     } catch {
       setQaError('浏览器暂时无法保存，请检查本机存储空间。');
     }
   };
+
+  const editWorkflow = (index, patch) => updateQuestionDraft(index, { workflow: { ...questionDraft[index].workflow, ...patch } });
 
   const conversations = new Map();
   for (const run of runs) {
@@ -846,17 +874,23 @@ export default function DigitalAssistant({ route }) {
 
   const renderProcess = (run, step = null, phase = '', expanded = false) => (
     <details className="ai-workflow-record" open={expanded || undefined}>
-      <summary><span>{phase === 'workflow' ? run.tasks[step].title : phase === 'answer' ? '正在输出回复' : statusLabel(run)}</span>
-        {phase === 'workflow' && <small>{step + 1} / {run.tasks.filter(task => task.status === 'completed').length}</small>}
+      <summary><span>{phase === 'workflow' ? run.scenario?.steps?.[step]?.[0] || run.tasks[step]?.title || run.toolCalls[step]?.name : phase === 'answer' ? '正在输出回复' : statusLabel(run)}</span>
+        {phase === 'workflow' && <small>{step + 1} / {assistantWorkflowStages(run)}</small>}
         {!phase && run.durationMs > 0 && <small>用时 {(run.durationMs / 1000).toFixed(1)} 秒</small>}
         <ChevronDown size={14} />
       </summary>
       <div className="ai-workflow-grid">
-        <section className="ai-workflow-block">
+        {!!run.scenario?.steps?.length && <section className="ai-workflow-block">
+          <h4><Clock3 size={15} /> 执行轨迹</h4>
+          <ol className="ai-tool-calls">{run.scenario.steps.slice(0, step === null ? undefined : step + 1).map(([name, result], index) => (
+            <li key={index}><span><code>{name}</code>{result && !(phase === 'workflow' && index === step) && <small>{result}</small>}</span></li>
+          ))}</ol>
+        </section>}
+        {!!run.tasks.length && <section className="ai-workflow-block">
           <h4><ListChecks size={15} /> 任务清单</h4>
           <ol className="ai-task-list">
             {run.tasks.map((task, index) => {
-              const status = step === null || index < step ? task.status : index === step && phase === 'workflow' ? 'running' : 'queued';
+              const status = step === null || (task.status !== 'waiting' && index < step) ? task.status : index === step && phase === 'workflow' && task.status !== 'waiting' ? 'running' : 'queued';
               return <li key={task.id} className={`task-${status}`}>
                 <span>{status === 'completed' ? <Check size={14} /> : <Clock3 size={14} />}</span>
                 <span>{task.title}</span>
@@ -864,18 +898,18 @@ export default function DigitalAssistant({ route }) {
               </li>;
             })}
           </ol>
-        </section>
-        <section className="ai-workflow-block">
+        </section>}
+        {!!run.toolCalls.length && <section className="ai-workflow-block">
           <h4><Wrench size={15} /> 工具调用</h4>
           <ul className="ai-tool-calls">
-            {run.toolCalls.slice(0, step === null ? undefined : step + (phase === 'workflow' ? 1 : 0)).map((tool, index) => (
+            {run.toolCalls.filter(tool => step === null || tool.status !== 'waiting').slice(0, step === null ? undefined : step + (phase === 'workflow' ? 1 : 0)).map((tool, index) => (
               <li key={tool.id}>
                 <span><code>{tool.name}</code>{index !== step && <small>{tool.result}</small>}</span>
                 <b className={`tool-${index === step && tool.status !== 'waiting' ? 'running' : tool.status}`}>{index === step && tool.status !== 'waiting' ? '处理中' : tool.status === 'waiting' ? '等待确认' : '已返回'}</b>
               </li>
             ))}
           </ul>
-        </section>
+        </section>}
       </div>
       <p className="ai-workflow-footnote">模拟运行</p>
     </details>
@@ -912,7 +946,7 @@ export default function DigitalAssistant({ route }) {
     <div className="ai-run-pair" key={run.id}>
       <div className="ai-user-turn"><article className="ai-message user" aria-label="你的提问"><p>{run.input.trim() && !/^\d+$/.test(run.input.trim()) ? run.input.replace(/^\d+\s+/, '').trim() : run.prompt}</p></article><time dateTime={run.createdAt} title={timeLabel(run.createdAt)}>{replyTime(run.createdAt)}</time></div>
       <article className="ai-message assistant" aria-label="鸿眸助手回复">
-        {renderProcess(run, active?.step, active?.phase)}
+        {renderProcess(run, active?.step, active?.phase, Boolean(active))}
         {active?.phase === 'answer' && <p className="ai-final-answer is-streaming" aria-hidden="true">{active.partial}<span className="ai-stream-caret" /></p>}
         {!active && <>
           {run.answer && <p className="ai-final-answer">{run.answer}</p>}
@@ -1055,23 +1089,32 @@ export default function DigitalAssistant({ route }) {
             <input type="range" min={interfaceScaleRange.min} max={interfaceScaleRange.max} step={5} value={interfaceScale} aria-valuetext={interfaceScale + '%'} onChange={(event) => changeInterfaceScale(event.target.valueAsNumber)} />
             <span className="ai-font-value" aria-hidden="true">{interfaceScale}%</span>
           </label>
-          <div className="ai-qa-settings-heading"><strong>固定问答</strong><button type="button" className="secondary" onClick={addQuestion}><Plus size={16} />添加问题</button></div>
+          <div className="ai-qa-settings-heading"><strong>模拟场景</strong><button type="button" className="secondary" onClick={addQuestion}><Plus size={16} />添加场景</button></div>
           <div className="ai-qa-settings-list">
             {questionDraft.map((item, index) => <article className="ai-qa-item" key={item.id || index}>
-              <header><strong>问题 {index + 1}</strong><div>
-                <button type="button" aria-label={`问题${index + 1}上移`} title="上移" disabled={index === 0} onClick={() => moveQuestion(index, -1)}><ChevronUp size={17} /></button>
-                <button type="button" aria-label={`问题${index + 1}下移`} title="下移" disabled={index === questionDraft.length - 1} onClick={() => moveQuestion(index, 1)}><ChevronDown size={17} /></button>
-                <button type="button" aria-label={`删除问题${index + 1}`} title="删除" onClick={() => removeQuestion(index)}><Trash2 size={16} /></button>
+              <header><strong>场景 {index + 1}</strong><div>
+                <button type="button" aria-label={`场景${index + 1}上移`} title="上移" disabled={index === 0} onClick={() => moveQuestion(index, -1)}><ChevronUp size={17} /></button>
+                <button type="button" aria-label={`场景${index + 1}下移`} title="下移" disabled={index === questionDraft.length - 1} onClick={() => moveQuestion(index, 1)}><ChevronDown size={17} /></button>
+                <button type="button" aria-label={`删除场景${index + 1}`} title="删除" onClick={() => removeQuestion(index)}><Trash2 size={16} /></button>
               </div></header>
-        <label>问题名称（显示用）<input value={item.prompt} maxLength={80} placeholder={`问题${index + 1}`} onChange={(event) => updateQuestionDraft(index, { prompt: event.target.value })} /></label>
-              <label>固定回复<textarea value={item.answer} maxLength={1200} rows={4} placeholder="输入要固定返回的内容" onChange={(event) => updateQuestionDraft(index, { answer: event.target.value })} /></label>
-              <label>工作流类型<select aria-label={`问题${index + 1}的工作流类型`} value={item.kind || 'general'} onChange={(event) => updateQuestionDraft(index, { kind: event.target.value, needsConfirmation: ['device-command', 'bottle-match'].includes(event.target.value) ? true : item.needsConfirmation })}>{assistantScenarioOptions.map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
-              <label className="ai-confirm-toggle"><input type="checkbox" checked={Boolean(item.needsConfirmation)} onChange={(event) => updateQuestionDraft(index, { needsConfirmation: event.target.checked })} />此问题显示二次确认卡</label>
+              <label>场景名称<input value={item.prompt} maxLength={80} placeholder={`场景${index + 1}`} onChange={(event) => updateQuestionDraft(index, { prompt: event.target.value })} /></label>
+              <label>模拟回复<textarea value={item.answer} maxLength={1200} rows={4} placeholder="输入场景回复内容" onChange={(event) => updateQuestionDraft(index, { answer: event.target.value })} /></label>
+              <label>场景分类<select value={item.kind || 'general'} onChange={(event) => updateQuestionDraft(index, { kind: event.target.value })}>{assistantScenarioOptions.map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
+              <label>轨迹标题<input value={item.workflow.title} maxLength={100} onChange={(event) => editWorkflow(index, { title: event.target.value })} /></label>
+              <ScenarioRows title="执行轨迹" name="步骤名称" result="步骤结果" rows={item.workflow.steps} onChange={(steps) => editWorkflow(index, { steps })} />
+              <ScenarioRows title="任务清单" name="任务名称" rows={item.workflow.tasks} onChange={(tasks) => editWorkflow(index, { tasks })} />
+              <ScenarioRows title="工具调用" name="工具名称" result="返回内容" rows={item.workflow.tools} onChange={(tools) => editWorkflow(index, { tools })} />
+              <label className="ai-confirm-toggle"><input type="checkbox" checked={Boolean(item.needsConfirmation)} onChange={(event) => updateQuestionDraft(index, { needsConfirmation: event.target.checked })} />显示二次确认卡</label>
+              {item.needsConfirmation && <details className="ai-scenario-group"><summary>二次确认卡</summary>
+                {[['title', '卡片标题'], ['before', '当前状态'], ['value', '待确认内容'], ['reason', '说明']].map(([key, label]) => <label key={key}>{label}
+                  <input value={item.workflow.confirmation[key]} maxLength={300} onChange={(event) => editWorkflow(index, { confirmation: { ...item.workflow.confirmation, [key]: event.target.value } })} />
+                </label>)}
+              </details>}
             </article>)}
           </div>
           </div>
           {qaError && <p className="ai-qa-error" role="alert">{qaError}</p>}
-          <div className="ai-qa-settings-actions"><span>{questionsSaved ? '设置已保存到本机' : '有未保存的修改'}</span><button type="button" className="primary" disabled={questionsSaved} onClick={saveQuestions}>保存固定问答</button></div>
+          <div className="ai-qa-settings-actions"><span>{questionsSaved ? '设置已保存到本机' : '有未保存的修改'}</span><button type="button" className="primary" disabled={questionsSaved} onClick={saveQuestions}>保存模拟场景</button></div>
         </section> : <>
           {target && <div className="ai-context-label" hidden={view !== 'chat' || conversationView === 'trace'}><span>已锁定：{target.slice(0, 130)}</span><button onClick={() => { unlock(); setCompact(false); setInspect(true); }}>重新选择</button></div>}
 
