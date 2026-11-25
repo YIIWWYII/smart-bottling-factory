@@ -197,14 +197,31 @@ export function createIntegrations(ops,{uploadRoot=path.resolve('.runtime/handof
   if(config.enabled&&config.baseUrl&&!canned&&(config.botId||config.workflowId||(ctx.automaticAlarm&&config.alarmWorkflowId))){
    try{
     const result=await withHandoffDeadline(fetcher,(request,signal)=>connectedChat(req,question,ctx,history,config,request,signal));
-    if(result?.operation||['completed','needs_information','awaiting_confirmation'].includes(result?.goalStatus))return result;
-   }catch(error){if([400,403].includes(error.status))throw error;}
+    if(ctx.automaticAlarm){
+     if(result?.goalStatus==='completed'&&result.answer?.trim()&&!result.operation)return result;
+    }else if(result?.operation||['completed','needs_information','awaiting_confirmation'].includes(result?.goalStatus))return result;
+   }catch(error){if(!ctx.automaticAlarm&&[400,403].includes(error.status))throw error;}
+  }
+  if(ctx.automaticAlarm){
+   const alarm=ctx.alarm||{};
+   const answer=[
+    '## 事件概况',
+    (alarm.title||'设备告警')+'。'+(ctx.eventResolvedAt?'事件已结束。':'截至分析时，事件尚未标记恢复。'),
+    alarm.detail||'告警记录未提供触发明细。',
+    '## 初步判断',
+    '当前记录可以说明告警触发情况。根因需结合设备状态、读数变化及近期参数变更核实。',
+    '## 排查建议',
+    '1. 核对该工位的读数、数据来源、告警阈值和触发时间。',
+    '2. 比对告警前后趋势和近期设定记录，确认偏差是否持续。',
+    '3. 记录核对结果，确认读数回到正常范围并复查告警是否恢复。',
+   ].join('\n\n');
+   return {answer,serviceSource:'local-demo',goalStatus:'completed',trace:[],snapshotAt:ctx.updated};
   }
   const {questions}=JSON.parse(await fs.readFile(new URL('./config/demo-questions.json',import.meta.url),'utf8'));
   const normalize=value=>value.trim().toLowerCase().replace(/[\s，。！？、,.!?]/g,'');
-  const match=ctx.automaticAlarm?null:questions.find(row=>row.questions.some(text=>normalize(text)===normalize(question))&&(!row.target||(ctx.selectionLocked&&String(ctx.target||'').includes(row.target))));
-  const answer=match?.answer||(ctx.automaticAlarm?'可先核对告警记录与对应工位的读数，再检查设备状态和阈值。此处仅提供检查步骤，未判定故障原因。':'当前未连接到可回答此问题的智能体。可试用演示题：'+questions.filter(row=>!row.target).map(row=>row.questions[0]).join('；')+'。');
-  return {answer,serviceSource:'local-demo',goalStatus:match||ctx.automaticAlarm?'completed':'needs_information',trace:[],snapshotAt:ctx.updated};
+  const match=questions.find(row=>row.questions.some(text=>normalize(text)===normalize(question))&&(!row.target||(ctx.selectionLocked&&String(ctx.target||'').includes(row.target))));
+  const answer=match?.answer||'当前未连接到可回答此问题的智能体。可试用演示题：'+questions.filter(row=>!row.target).map(row=>row.questions[0]).join('；')+'。';
+  return {answer,serviceSource:'local-demo',goalStatus:match?'completed':'needs_information',trace:[],snapshotAt:ctx.updated};
  }
  async function connectedChat(req,question,ctx,history=[],config=null,request=fetcher,signal){
   const {state,root}=await read();if(!state.coze.enabled)return null;state.coze=config||await preferredService(state.coze,fetcher);

@@ -260,6 +260,19 @@ test('automatic event reporting keeps factual lookups and uses the existing read
  const result=await integration.chat(req('/chat'),'分析事件',{automaticAlarm:true,alarm:{id:'a',title:'抓取节拍异常',time:'2026-11-04T06:00:00Z'},eventResolvedAt:'2026-11-04T07:00:00Z'},[]);
  assert.equal(result.goalStatus,'completed');assert.match(result.answer,/历史事件/);assert.doesNotMatch(result.answer,/闭环处理/);assert.equal(m.writes,0);assert.deepEqual(result.trace.map(t=>t.tool),['query_logs','query_devices','search_knowledge','batch_alarm_workflow']);
 });
+test('automatic alerts produce an event-specific report when the remote service fails',async()=>{
+ const m=mock();
+ let requests=0;
+ const integration=createIntegrations(m.ops,{localFallback:true,fetcher:async()=>{requests++;throw Object.assign(Error('unavailable'),{status:403});}});
+ const result=await integration.chat(req('/chat'),'分析事件',{automaticAlarm:true,alarm:{title:'采样时长异常',detail:'采样时间 120 s，告警阈值 110 s'},eventResolvedAt:'2026-11-04T07:00:00Z'});
+ assert.ok(requests>0);
+ assert.equal(result.goalStatus,'completed');
+ assert.equal(result.serviceSource,'local-demo');
+ assert.match(result.answer,/采样时长异常。事件已结束/);
+ assert.match(result.answer,/采样时间 120 s，告警阈值 110 s/);
+ assert.match(result.answer,/排查建议/);
+ assert.equal(m.writes,0);
+});
 test('batch reports persist in the platform and current-only questions do not mix ended events',async()=>{
  const m=mock();await m.ops.setAIConfig({integrations:{coze:{enabled:true,baseUrl:'http://coze',alarmWorkflowId:'wf',token:'t'},commands:[]}});
  const integration=createIntegrations(m.ops,{fetcher:async()=>({ok:true,json:async()=>({code:0,data:JSON.stringify({report:'告警总数1，未恢复0'})})})});

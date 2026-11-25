@@ -4,7 +4,7 @@ import { X, ArrowUpRight, Check, CircleHelp } from 'lucide-react';
 export function IconButton({ icon: Icon=CircleHelp, label, onClick, className='', ...props }) {
   return <button type="button" className={`icon-button ${className}`} title={label} aria-label={label} onClick={onClick} {...props}><Icon size={18}/></button>;
 }
-export function Brand({compact=false}) {return <div className={`brand ${compact?'compact':''}`}><div className="brand-mark"><i/><i/><i/></div><div><strong>瓶安智慧工厂<span className="brand-period">.</span></strong>{!compact&&<small>瓶安智慧工厂</small>}</div></div>;}
+export function Brand({compact=false}) {return <div className={`brand ${compact?'compact':''}`}><div className="brand-mark"><i/><i/><i/></div><div><strong>鸿眸瓶安<span className="brand-period">.</span></strong>{!compact&&<small>AI驱动的智慧工厂协同系统</small>}</div></div>;}
 export function Badge({children,tone=''}){return <span className={`badge ${tone}`}><span className="dot"/>{children}</span>;}
 export function SectionLabel({no,children,aside}) {return <div className="section-label"><span>{no&&<em className="mono">{no}</em>}{children}</span>{aside&&<span className="muted">{aside}</span>}</div>;}
 export function Stat({label,value,unit,change,children}) {return <div className="stat"><span className="stat-label">{label}</span><div className="stat-number">{value}<small>{unit}</small></div><div className="stat-foot">{change&&<span><ArrowUpRight size={13}/>{change}</span>}{children}</div></div>;}

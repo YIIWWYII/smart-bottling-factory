@@ -42,7 +42,7 @@ test('blank field-site address and ports allow platform startup but cannot conne
 });
 test('controller trajectory presets reference complete packaged projects',()=>{
  const presets=createMG400ConfigStore().read().values.trajectories.controller.presets;
- assert.deepEqual(presets.map(item=>item.projectName),['blockly_2026yibao','blockly_kkkl']);
+ assert.deepEqual(presets.map(item=>item.projectName),['blockly_2026yibao','blockly_kkkl','kkkk1123']);
  for(const preset of presets){
   const root=new URL('./config/'+preset.packagePath+'/',import.meta.url),manifest=JSON.parse(fs.readFileSync(new URL('prj.json',root),'utf8'));
   for(const file of [...manifest.cpus,manifest.global,manifest.teach_point])assert.ok(fs.existsSync(new URL(file,root)),`${preset.projectName}/${file}`);

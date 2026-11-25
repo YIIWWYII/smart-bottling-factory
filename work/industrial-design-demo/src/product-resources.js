@@ -6,7 +6,7 @@ export const productDefaults = [
  {id:'jasmine',name:'茉莉花茶',aliases:[],category:'茶饮料',flavor:'茉莉花香',description:'以茉莉与茶叶为视觉主题，展示花茶饮料。',modelUrl:'',backgroundUrl:'/images/beverages/jasmine.webp',modelSource:'https://www.baoxiaohe.com/models/3092/'},
  {id:'orange',name:'果粒橙',aliases:[],category:'果汁饮料',flavor:'橙香果粒',description:'橙香与果粒主题，展示果汁饮料。',modelUrl:'',backgroundUrl:'/images/beverages/orange.webp',modelSource:'https://m.mfcad.com/tuzhi/show_196620.html'},
  {id:'fanta',name:'芬达',aliases:['Fanta'],category:'碳酸饮料',flavor:'橙味',description:'明亮橙色与活泼气泡，呈现橙味汽水。',modelUrl:'/models/beverage/fanta.glb',backgroundUrl:'/images/beverages/fanta.webp',modelSource:'https://github.com/rahoolkumardev/Coke-3d-Model/blob/main/fanta.glb'}
-].map(p=>({enabled:true,ingredients:'',spec:'',version:1,modelNote:p.id==='sprite'?'罐装演示贴图 · AI 绘制标签，非官方包装':p.modelUrl?'网络模型 · 来源授权范围待确认':'模型待配置 · 已保留素材线索',backgroundNote:'AI 生成宣传场景，非实拍',recipeId:'',...p}));
+].map(p=>({enabled:true,ingredients:'',spec:'',version:1,modelNote:p.id==='sprite'?'罐装演示贴图 · AI 绘制标签，非官方包装':p.id==='cola'?'Blender 调整瓶底凹面 · 保留罐身贴图':p.modelUrl?'网络模型 · 来源授权范围待确认':'模型待配置 · 已保留素材线索',backgroundNote:'AI 生成宣传场景，非实拍',recipeId:'',...p}));
 
 // Display copy is illustrative advertising, separate from recipe facts.
 export const beverageCampaigns={
@@ -20,7 +20,7 @@ export const beverageCampaigns={
 
 export const productResourceDocuments=[
  {id:'PRODUCT-YIBAO-GUIDE',title:'怡宝产品与展示说明',kind:'document',status:'published',version:1,owner:'项目组',content:'产品名称：怡宝假日一刻，桃桃假日。\n包装：白色瓶盖、细长 PET 瓶、米白至桃粉色标签；容量与配料以实物标签为准。\n模型结构：瓶身、饮料、白色瓶盖、防盗环与照片展开标签；源文件在 blender-integration/beverage/yibao-peach-bottle.blend。\n平台模型：public/models/beverage/yibao-peach-bottle.glb。\n背景：用户提供的桃花、蜜桃与水面宣传图，public/images/beverages/yibao-peach.webp。\n模型尺寸为展示近似，不是现场测量数据；不能用于计算机械臂抓取点位。实际规格、配料、批次和包装以现场实物标签为准。\n产品展示资料不包含或替代设备控制配方。'},
- {id:'PRODUCT-COLA-GUIDE',title:'可乐产品与展示说明',kind:'document',status:'published',version:1,owner:'项目组',content:'产品名称：可乐展示款。\n模型：沿用平台已配置的罐装模型 public/models/beverage/coca.glb。\n宣传背景：Lovart 生成，public/images/beverages/cola-lovart.webp。\n包装容量、配料与生产信息以现场实物为准；不从模型外观推断实际规格。\n机械臂轨迹、吸附高度与速度由设备配置单独管理，不因选择产品展示项而更改。'}
+ {id:'PRODUCT-COLA-GUIDE',title:'可乐产品与展示说明',kind:'document',status:'published',version:1,owner:'项目组',content:'产品名称：可乐展示款。\n模型：public/models/beverage/coca.glb，由上游可乐罐 GLB 导入 Blender 后将底部调整为内凹，罐身贴图和拉环保留。可编辑源文件：blender-integration/beverage/coca-concave-bottom.blend。\n宣传背景：Lovart 生成，public/images/beverages/cola-lovart.webp。\n包装容量、配料与生产信息以现场实物为准；不从模型外观推断实际规格。\n机械臂轨迹、吸附高度与速度由设备配置单独管理，不因选择产品展示项而更改。'}
 ];
 
 // Upgrade existing catalogs without replacing user-created products, recipes or uploaded models.

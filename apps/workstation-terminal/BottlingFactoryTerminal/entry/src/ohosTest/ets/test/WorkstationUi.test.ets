@@ -14,7 +14,7 @@ export default function workstationUiTest() {
       await driver.waitForIdle(2000, 5000)
       const ability: UIAbility = await delegator.getCurrentTopAbility()
       expect(ability.context.abilityInfo.name).assertEqual('EntryAbility')
-      await driver.assertComponentExist(ON.text('瓶安智慧产线 · HarmonyOS'))
+      await driver.assertComponentExist(ON.text('鸿眸瓶安 · HarmonyOS'))
       const nativePage = await driver.findComponent(ON.text('原生工位'))
       await nativePage.click()
       await driver.waitForIdle(2000, 5000)
