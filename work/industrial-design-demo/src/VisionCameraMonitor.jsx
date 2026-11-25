@@ -10,13 +10,13 @@ import * as THREE from 'three';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {api,useTwin} from './TwinState';
-import {inspectionCameras,cameraPosition,inspectionTarget} from './visionCameras';
+import {inspectionCameras,inspectionCameraSources,cameraPosition,inspectionTarget} from './visionCameras';
 export default function VisionCameraMonitor({stageIndex=2,active=true}){
  const cameras=inspectionCameras(stageIndex),code=stageIndex===5?'secondary':'vision',finished=stageIndex===5;
  const twin=useTwin(),host=useRef(),live=useRef(),[error,setError]=useState(''),[ready,setReady]=useState(false),[stamp,setStamp]=useState('');
  const previewHost=useRef(),actualLayer=useRef(),simulationLayer=useRef(),captureSeen=useRef(new Set());
  const [viewMode,setViewMode]=useState('actual'),[inspectionState,setInspectionState]=useState(null),[switchBusy,setSwitchBusy]=useState(false),[captureBusy,setCaptureBusy]=useState(false),[captureMessage,setCaptureMessage]=useState(''),[actualResult,setActualResult]=useState(null);
- const sources=twin.ops?.preferences?.cameraSources||[];
+ const sources=inspectionCameraSources(stageIndex,twin.ops?.preferences?.cameraSources||[]);
  const rehearsalActive=!!inspectionState?.rehearsal?.active&&inspectionState.rehearsal.stageIndices?.includes(stageIndex);
  const canSwitch=['admin','engineer','operator'].includes(twin.ops?.user?.role),caseId=inspectionState?.rehearsal?.selectedSamples?.[stageIndex]||'normal';
  const manualFlow=inspectionState?.rehearsal?.manualFlows?.[stageIndex];

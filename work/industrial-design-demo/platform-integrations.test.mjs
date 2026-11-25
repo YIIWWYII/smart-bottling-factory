@@ -342,3 +342,11 @@ test('camera captures are bound to the active bottle and preserve supplied image
  await i.route(req('/vision-rehearsal-capture'),body);const r=await i.route(req('/vision-monitor','GET'),{});assert.equal(r.records[0].cameras[0].originalUrl,body.data);assert.equal(r.records[0].cameras[1].originalUrl,null);
  await i.route(req('/vision-rehearsal-stop'),{stageIndex:2});assert.equal((await i.route(req('/vision-monitor','GET'),{})).records[0].verdict,'review');
 });
+test('finished-product secondary inspection collects four camera frames into stage 5',async()=>{
+ const m=mock();m.ops.snapshot=()=>({dataMode:'simulation',materialFlow:null});
+ const i=createIntegrations(m.ops,{localFallback:true,fetcher:async()=>Response.json({})});
+ const start=await i.route(req('/vision-rehearsal-start'),{stageIndex:5,source:'camera'});
+ for(const cameraId of cameraIds)await i.route(req('/vision-rehearsal-capture'),{stageIndex:5,bottleId:start.bottleId,cameraId,data:image});
+ const record=(await i.route(req('/vision-monitor','GET'),{})).records.find(row=>row.bottleId===start.bottleId);
+ assert.equal(record.stageIndex,5);assert.equal(record.captureSource,'camera');assert.equal(record.capturedCount,4);assert.equal(record.status,'completed');
+});

@@ -10,7 +10,7 @@ function ResultImage({row,name,kind,title,previewCamera,actual=false}){
  const imageHost=useRef();
  const [failed,setFailed]=useState(false),url=kind==='original'?(row?.originalUrl||row?.alignedUrl||row?.imageUrl):kind==='opencv'?(row?.opencvUrl||row?.preprocessedUrl):kind==='yolo'?row?.overlayUrl:row?.heatmapUrl;
  useEffect(()=>setFailed(false),[url]);
- useEffect(()=>{if(!url||!row?.capturedAt||Date.now()-Date.parse(row.capturedAt)>5000||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const animation=animate(imageHost.current,{opacity:[.15,1],translateY:[5,0],duration:350,ease:'out(3)'});return()=>animation.revert();},[url,row?.capturedAt]);
+ useEffect(()=>{if(!url||!row?.capturedAt||Date.now()-Date.parse(row.capturedAt)>5000||matchMedia('(prefers-reduced-motion: reduce)').matches)return;const animation=animate(imageHost.current,{opacity:[.15,1],duration:350,ease:'out(3)'});return()=>animation.revert();},[url,row?.capturedAt]);
  const status=row?.[kind+'Status']||row?.status;
  const caption=kind==='original'?(row?.capturedAt?new Date(row.capturedAt).toLocaleTimeString():'采集帧'):kind==='opencv'?(row?.codeMask?.status==='not-required'?'此机位无条码区域':'条码区域遮罩'):kind==='yolo'?(Array.isArray(row?.detections)?'检测框 '+row.detections.length+' 个':(row?.defects?.length?row.defects.join('、'):'缺陷位置与类别')):(Number.isFinite(row?.anomalyScore)?'异常分数 '+row.anomalyScore.toFixed(3):'外观异常热力分布');
  return <article className="vision-branch-camera" data-branch={kind} data-ready={!!url}><header><strong>{title}</strong><span>{url?(kind==='original'?'已采集':kind==='opencv'?'已处理':labels[status]||'已返回'):previewCamera&&kind==='original'?'实时预览':actual?'等待检测':'等待到位'}</span></header>
