@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {visionCameras,cameraPosition,inspectionTarget} from './src/visionCameras.js';
+import {visionCameras,cameraPosition,inspectionTarget,inspectionCameraSources,secondaryCameras,installVisionCameras} from './src/visionCameras.js';
 import {capabilities} from './src/controlCapabilities.js';
 test('one overhead camera and three 120 degree side cameras have independent controls',()=>{
  assert.equal(visionCameras.length,4);const side=visionCameras.filter(c=>c.angle!==null);
@@ -9,6 +9,13 @@ test('one overhead camera and three 120 degree side cameras have independent con
  assert.ok(cameraPosition(visionCameras[0]).y>inspectionTarget.y);
  for(const c of visionCameras)assert.equal(capabilities.filter(x=>x.id===c.id+':cameraState').length,1);
  assert.ok(!capabilities.some(c=>c.device==='VIS-BOTTOM-01'));
+});
+test('secondary inspection uses dedicated feeds when set and otherwise reuses matching surface feeds',()=>{
+ const sources=[{id:'VIS-TOP-01',type:'usb',url:'camera-top'},{id:'VIS-SIDE-01',type:'mjpeg',url:'http://camera/side-0'},{id:'SEC-SIDE-02',type:'video',url:'http://camera/secondary-120'}];
+ const resolved=inspectionCameraSources(5,sources);
+ assert.deepEqual(resolved.map(source=>source.id),secondaryCameras.map(camera=>camera.id));
+ assert.equal(resolved[0].url,'camera-top');assert.equal(resolved[1].url,'http://camera/side-0');assert.equal(resolved[2].url,'http://camera/secondary-120');assert.equal(resolved[3].url,'');
+ assert.equal(inspectionCameraSources(2,sources),sources);
 });
 
 import {visionFeed} from './src/visionFeed.js';
@@ -29,7 +36,6 @@ test('camera views consume simulation, protocol and real telemetry without local
  twin.states[2].quality='offline';assert.equal(visionFeed(twin,now).rate,0);
 });
 
-import {secondaryCameras,installVisionCameras} from './src/visionCameras.js';
 import * as THREE from 'three';
 test('secondary four-camera rig and telemetry stay separate from empty-bottle inspection',()=>{
  const root=new THREE.Group(),asset=new THREE.Group();asset.name='Asset_secondary';root.add(asset);

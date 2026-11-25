@@ -37,6 +37,7 @@ export default function ServiceIntegrationPanel({kind='coze'}){
   <div hidden={visionTab!=='cameras'} className="vision-workspace-body">
    <CameraDiscovery sources={ops?.preferences?.cameraSources||[]} active={visionTab==='cameras'} allowed={canConfigure} save={items=>twin.mutate('/api/ops/cameras',{items})}/>
    <CameraSourceSettings cameras={inspectionCameras(2)} sources={ops?.preferences?.cameraSources||[]} allowed={canConfigure} save={items=>twin.mutate('/api/ops/cameras',{items})}/><CameraSourceSettings cameras={[]} recognitionCamera sources={ops?.preferences?.cameraSources||[]} allowed={canConfigure} save={items=>twin.mutate('/api/ops/cameras',{items})}/>
+   <CameraSourceSettings cameras={inspectionCameras(5)} sources={ops?.preferences?.cameraSources||[]} allowed={canConfigure} save={items=>twin.mutate('/api/ops/cameras',{items})}/>
    {visionTab==='cameras'&&<section className="vision-pane"><h3>已保存的机位画面</h3><ActualCameraFeeds suspended={visionTab!=='cameras'} cameras={[...inspectionCameras(2),{id:recognitionCameraId,label:'瓶型识别相机（第五路）'}]} indices={[0,1,2,3,4]} sources={ops?.preferences?.cameraSources||[]}/></section>}
   </div>
   <div hidden={visionTab!=='service'} className="vision-workspace-body"><VisionAssets state={state} refresh={refresh} allowed={canConfigure}/><section className="vision-pane"><div className="vision-section-heading"><h3>整瓶检测服务</h3><ConfigurationHelp title="服务连接说明"><p>填写视觉人员交付的HTTP服务地址与版本。令牌由服务提供方给出，无认证时留空。地址须能从平台服务器访问；跨电脑时填写局域网IP。</p><p>保存会更新配置，测试连接会检查服务是否响应。</p></ConfigurationHelp></div>
