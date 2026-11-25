@@ -26,7 +26,10 @@ export function getDefaultAssistantQuestions() {
   entries.push({ id: 'question-8', number: 8, prompt: '识别瓶型并核对轨迹', answer: '请查看瓶型与轨迹匹配链条：匹配时执行，不匹配时等待人工确认换轨迹。', needsConfirmation: true });
   entries.push({ id: 'question-9', number: 9, prompt: '读取告警并生成分析报告', answer: '已读取平台告警快照，生成原因、影响和处置建议报告，并写入 AI 记录。', needsConfirmation: false });
   entries.push({ id: 'question-10', number: 10, prompt: '回答当前点选设备', answer: '已读取当前点选设备的状态、指标和数据来源，返回固定设备说明。', needsConfirmation: false });
-  return entries.map((item, index) => ({ ...item, kind: defaultScenarios[index], needsConfirmation: item.needsConfirmation || ['device-command', 'bottle-match'].includes(defaultScenarios[index]) }));
+  return entries.map((item, index) => {
+    const configured = { ...item, kind: defaultScenarios[index], needsConfirmation: item.needsConfirmation || ['device-command', 'bottle-match'].includes(defaultScenarios[index]) };
+    return { ...configured, workflow: assistantScenarioTemplate(configured) };
+  });
 }
 
 export function readAssistantQuestions() {
@@ -43,7 +46,7 @@ export function readAssistantQuestions() {
           needsConfirmation: Boolean(item.needsConfirmation),
           kind: assistantScenarioOptions.some(([kind]) => kind === item.kind) ? item.kind : defaults.find(preset => preset.prompt === item.prompt)?.kind || 'general',
         }));
-      if (entries.length) return entries;
+      if (entries.length) return entries.map(item => ({ ...item, workflow: readScenarioWorkflow(item) }));
     }
   } catch {}
   return getDefaultAssistantQuestions();
@@ -79,32 +82,59 @@ function scenarioDetails(kind, target) {
   return details[kind] || details.general;
 }
 
+export function assistantScenarioTemplate(entry, selectedTarget = '{设备}') {
+  const scenarioKind = entry.kind || 'general';
+  const scenario = scenarioDetails(scenarioKind, selectedTarget);
+  const confirmation = {
+    title: '问题{编号} · 待确认操作',
+    before: '未提交',
+    value: '等待人工确认',
+    reason: scenarioKind === 'bottle-match' ? '当前轨迹与识别瓶型不一致。本卡只记录人工换品确认，不向设备发送真实指令。' : '本卡只记录确认或取消结果，不向设备发送指令。',
+  };
+  return {
+    title: scenario.title,
+    steps: scenario.steps,
+    tasks: [['接收用户问题'], ['解析序号并选择场景 {编号}'], ...scenario.steps.map(([title]) => [title]), ['整理回复']],
+    tools: [['会话入口', '已创建本次任务记录'], ['问题序号路由', '问题{编号} · {场景}'], ...scenario.steps, ['问答节点', '已读取对应答复']],
+    confirmation,
+  };
+}
+
+function readScenarioWorkflow(entry) {
+  const fallback = assistantScenarioTemplate(entry);
+  const workflow = entry.workflow;
+  if (!workflow) return fallback;
+  const rows = (key, width) => Array.isArray(workflow[key])
+    ? workflow[key].filter(row => Array.isArray(row) && typeof row[0] === 'string' && row[0].trim())
+      .map(row => Array.from({ length: width }, (_, index) => typeof row[index] === 'string' ? row[index] : ''))
+    : fallback[key];
+  return {
+    title: typeof workflow.title === 'string' ? workflow.title : fallback.title,
+    steps: rows('steps', 2), tasks: rows('tasks', 1), tools: rows('tools', 2),
+    confirmation: Object.fromEntries(Object.entries(fallback.confirmation).map(([key, value]) => [key,
+      typeof workflow.confirmation?.[key] === 'string' ? workflow.confirmation[key] : value,
+    ])),
+  };
+}
+
 export function createAssistantWorkflowRun({ text, entry, route, target, selectedTarget }) {
   const id = globalThis.crypto?.randomUUID?.() || `run-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const createdAt = new Date().toISOString();
   const scenarioKind = entry.kind || 'general';
-  const scenario = scenarioDetails(scenarioKind, selectedTarget);
+  const workflow = entry.workflow || assistantScenarioTemplate(entry, selectedTarget || '');
+  const variables = { '设备': selectedTarget || '未点选设备', '编号': entry.number, '场景': entry.prompt };
+  const fill = (text = '') => text.replace(/\{(设备|编号|场景)\}/g, (_, name) => variables[name]);
   const confirmation = entry.needsConfirmation ? {
+    ...Object.fromEntries(Object.entries(workflow.confirmation).map(([key, value]) => [key, fill(value)])),
     id: `${id}-confirmation`,
-    title: `问题${entry.number} · 待确认操作`,
-    before: '未提交',
-    value: '等待人工确认',
-    unit: '',
-    reason: scenarioKind === 'bottle-match' ? '当前轨迹与识别瓶型不一致。本卡只记录人工换品确认，不向设备发送真实指令。' : '本卡只记录确认或取消结果，不向设备发送指令。',
     status: 'pending',
   } : null;
   const tasks = [
-    { id: 'receive', title: '接收用户问题', status: 'completed' },
-    { id: 'route', title: `解析序号并选择问题${entry.number}`, status: 'completed' },
-    ...scenario.steps.map(([title], index) => ({ id: `scenario-${index}`, title, status: 'completed' })),
-    { id: 'reply', title: '读取并返回预设答复', status: 'completed' },
+    ...workflow.tasks.map(([title], index) => ({ id: `task-${index}`, title: fill(title), status: 'completed' })),
     ...(confirmation ? [{ id: 'confirm', title: '等待人工二次确认', status: 'waiting' }] : []),
   ];
   const toolCalls = [
-    { id: 'session', name: '会话入口', result: '已创建本次任务记录', status: 'success' },
-    { id: 'router', name: '问题序号路由', result: `问题${entry.number} · ${entry.prompt}`, status: 'success' },
-    ...scenario.steps.map(([name, result], index) => ({ id: `scenario-${index}`, name, result, status: 'success' })),
-    { id: 'fixed-answer', name: '固定问答节点', result: '已读取对应答复', status: 'success' },
+    ...workflow.tools.map(([name, result], index) => ({ id: `tool-${index}`, name: fill(name), result: fill(result), status: 'success' })),
     ...(confirmation ? [{ id: 'confirm-card', name: '人工确认节点', result: '确认卡已生成，等待选择', status: 'waiting' }] : []),
   ];
   return {
@@ -113,13 +143,21 @@ export function createAssistantWorkflowRun({ text, entry, route, target, selecte
     input: text,
     number: entry.number,
     prompt: entry.prompt,
-    answer: entry.answer,
+    answer: fill(entry.answer),
     route,
     target: target || '',
     tasks,
     toolCalls,
     confirmation,
-    scenario: { kind: scenarioKind, title: scenario.title, steps: scenario.steps },
+    scenario: { kind: scenarioKind, title: fill(workflow.title), steps: workflow.steps.map(([name, result]) => [fill(name), fill(result)]) },
     status: confirmation ? 'waiting' : 'completed',
   };
+}
+
+export function assistantWorkflowStages(run) {
+  return Math.max(
+    run.tasks.filter(task => task.status === 'completed').length,
+    run.toolCalls.filter(tool => tool.status !== 'waiting').length,
+    run.scenario?.steps?.length || 0,
+  );
 }
