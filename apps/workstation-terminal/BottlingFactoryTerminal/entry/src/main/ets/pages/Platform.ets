@@ -17,7 +17,7 @@ struct Platform {
   build() {
     Column({ space: 8 }) {
       Row({ space: 12 }) {
-        Text('瓶安智慧产线 · HarmonyOS').fontSize(20).fontWeight(FontWeight.Bold)
+        Text('鸿眸瓶安 · HarmonyOS').fontSize(20).fontWeight(FontWeight.Bold)
         Button('原生工位').onClick(() => { router.pushUrl({ url: 'pages/Workstation' }) })
       }.width('100%').justifyContent(FlexAlign.SpaceBetween)
       Text(this.notice).fontSize(14).fontColor('#40586E').width('100%')

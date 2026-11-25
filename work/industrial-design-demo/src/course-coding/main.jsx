@@ -66,6 +66,6 @@ function Practice(){
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
   if(!ops)return <main><h1>读取平台数据</h1><p>{error||'等待现有平台服务返回…'}</p></main>;
   const state=mapDevice(ops.protocol),asset=ops.assets.find(a=>a.code==='MG400-TEACH-01');
-  return <main><header><a href="/#admin">返回正式平台</a><p>瓶安智慧工厂 / 平台开发练习</p><h1>编写页面，接入数据，驱动模型</h1><p>本页使用现有平台接口与已上传模型。通信调试请在正式平台“设备配置”中完成。</p></header><div className="workspace"><StatusCard state={backendState||{deviceId:state.deviceId,online:false,running:false,rate:null,gripForce:null}}/><Model url={asset?.modelUrl} protocol={ops.protocol}/></div><ReceiptExercise/><footer>教学映射：PK-ARM-01 模拟设备 → MG400 上料动画。按节拍推进预制动作，不代表真实关节姿态。React 页面开发；鸿蒙应用入口另用 ArkTS。</footer></main>;
+  return <main><header><a href="/#admin">返回正式平台</a><p>鸿眸瓶安 / 平台开发练习</p><h1>编写页面，接入数据，驱动模型</h1><p>本页使用现有平台接口与已上传模型。通信调试请在正式平台“设备配置”中完成。</p></header><div className="workspace"><StatusCard state={backendState||{deviceId:state.deviceId,online:false,running:false,rate:null,gripForce:null}}/><Model url={asset?.modelUrl} protocol={ops.protocol}/></div><ReceiptExercise/><footer>教学映射：PK-ARM-01 模拟设备 → MG400 上料动画。按节拍推进预制动作，不代表真实关节姿态。React 页面开发；鸿蒙应用入口另用 ArkTS。</footer></main>;
 }
 createRoot(document.getElementById('root')).render(<TwinProvider><Practice/></TwinProvider>);
