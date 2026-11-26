@@ -5,7 +5,7 @@ import { animate } from 'animejs';
 import { api, recordEvent, useTwin } from './TwinState';
 import { ReportText } from './ui';
 import AssistantPetPanel from './AssistantPetPanel';
-import { localVoices, speechChunks, voicePreviewText } from './assistant-voices.js';
+import { speechChunks, voicePreviewText } from './assistant-voices.js';
 import { petActions, petDisplayDefaults, petLevel, petReward, petSizeRange, petStorageKey, readPet, updatePet } from './assistant-pet';
 import {
   ArrowLeft, ArrowUp, Bell, Bot, Check, ChevronDown, ChevronRight, ChevronUp, Clock3, ListChecks, MessageSquare,
@@ -293,8 +293,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
   const [speechVoice, setSpeechVoice] = useState(() => {
     try { return localStorage.getItem(speechVoiceKey) || ''; } catch { return ''; }
   });
-  const activeVoice = localVoices.some(({ id }) => id === speechVoice) || speechVoices.some((voice) => voiceId(voice) === speechVoice)
-    ? speechVoice : '';
+  const activeVoice = speechVoices.some((voice) => voiceId(voice) === speechVoice) ? speechVoice : '';
   useEffect(() => {
     if (!speechSupported) return;
     const synth = window.speechSynthesis;
@@ -439,6 +438,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
   };
 
   const speakReply = (run, preferredVoice = activeVoice, restart = false) => {
+    if (!speechSupported) { showNotice('当前浏览器不支持系统语音播报。'); return; }
     if (!restart && speech?.id === run.id && playbackRef.current) { toggleSpeechPause(); return; }
     const chunks = speechChunks(run.answer);
     if (!chunks.length) return;
@@ -446,78 +446,6 @@ export default function DigitalAssistant({ route, alarmPulse }) {
     const synth = window.speechSynthesis;
     const voices = availableSpeechVoices(synth);
     const voice = voices.find((item) => voiceId(item) === preferredVoice || item.name === preferredVoice) || voices[0];
-    const localVoice = localVoices.find(({ id }) => id === preferredVoice) || (!speechSupported || !voice ? localVoices[0] : null);
-    if (localVoice) {
-      const audio = new Audio();
-      const controller = new AbortController();
-      const playback = { paused: false };
-      let objectUrl;
-      const live = () => playbackRef.current === playback;
-      const finish = (message) => {
-        if (!live()) return;
-        stopSpeech();
-        if (message) showNotice(message);
-      };
-      playback.scheduleSettings = () => {
-        audio.playbackRate = speechSettings.current.rate;
-        audio.volume = speechSettings.current.volume;
-      };
-      const playAudio = () => {
-        playback.scheduleSettings();
-        audio.play().catch((error) => {
-          if (!live() || error.name === 'AbortError') return;
-          if (error.name === 'NotAllowedError') {
-            playback.paused = true;
-            setSpeech({ id: run.id, paused: true });
-            showNotice('浏览器暂停了自动播报，请点继续播报。');
-          } else finish('音频无法播放，请重试。');
-        });
-      };
-      playback.syncPause = () => {
-        if (playback.paused) audio.pause();
-        else if (audio.hasAttribute('src')) playAudio();
-      };
-      playback.dispose = () => {
-        controller.abort();
-        audio.onended = audio.onerror = null;
-        audio.pause();
-        audio.removeAttribute('src');
-        audio.load();
-        if (objectUrl) URL.revokeObjectURL(objectUrl);
-      };
-      const playChunk = async (index) => {
-        if (index >= chunks.length) { finish(); return; }
-        try {
-          const response = await fetch('/api/ai/assistant-voice', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ voice: localVoice.id, text: chunks[index] }), signal: controller.signal,
-          });
-          if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw Error(error.error || '平台语音服务暂不可用，请重试。');
-          }
-          const blob = await response.blob();
-          if (!live()) return;
-          if (objectUrl) URL.revokeObjectURL(objectUrl);
-          objectUrl = URL.createObjectURL(blob);
-          audio.src = objectUrl;
-          audio.onended = () => {
-            audio.removeAttribute('src');
-            playChunk(index + 1);
-          };
-          if (!playback.paused) playAudio();
-        } catch (error) { finish(error.message); }
-      };
-      audio.onerror = () => finish('音频无法播放，请重试。');
-      playbackRef.current = playback;
-      setSpeech({ id: run.id, paused: false });
-      if (run.id === voicePreview.id) {
-        audio.src = `/assistant-voices/${localVoice.sample}`;
-        audio.onended = () => finish();
-        playAudio();
-      } else playChunk(0);
-      return;
-    }
     const playback = { utterance: null, index: 0, paused: false, settingsTimer: null };
     const live = () => playbackRef.current === playback;
     const cancelUtterance = () => {
@@ -538,9 +466,9 @@ export default function DigitalAssistant({ route, alarmPulse }) {
     const playChunk = (index) => {
       if (!live()) return;
       if (index >= chunks.length) { finish(); return; }
-      const utterance = new window.SpeechSynthesisUtterance(run.id === voicePreview.id ? '你好，这里是这个音色的试听。' : chunks[index]);
+      const utterance = new window.SpeechSynthesisUtterance(chunks[index]);
       utterance.lang = voice?.lang || 'zh-CN';
-      utterance.rate = speechSettings.current.rate;
+      utterance.rate = Math.min(1.8, Math.max(0.6, speechSettings.current.rate));
       utterance.pitch = 1.08;
       utterance.volume = speechSettings.current.volume;
       if (voice) utterance.voice = voice;
@@ -549,15 +477,17 @@ export default function DigitalAssistant({ route, alarmPulse }) {
         playback.utterance = null;
         playChunk(index + 1);
       };
-      utterance.onerror = () => {
-        if (live()) speakReply(run, localVoices[0].id, true);
+      utterance.onerror = (event) => {
+        if (playback.utterance !== utterance) return;
+        playback.utterance = null;
+        finish(['canceled', 'interrupted'].includes(event.error) ? '' : '系统语音播报失败，请检查本机语音服务。');
       };
       playback.index = index;
       playback.utterance = utterance;
       try {
         if (synth.paused) synth.resume();
         synth.speak(utterance);
-      } catch { if (live()) speakReply(run, localVoices[0].id, true); }
+      } catch { finish('系统语音播报没能启动。'); }
     };
     const applySettings = () => {
       const { utterance, index } = playback;
@@ -569,7 +499,6 @@ export default function DigitalAssistant({ route, alarmPulse }) {
     };
     playback.scheduleSettings = () => {
       clearTimeout(playback.settingsTimer);
-      // Restart just the current chunk after the slider stops moving.
       playback.settingsTimer = setTimeout(applySettings, 220);
     };
     playback.syncPause = () => {
@@ -1240,7 +1169,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
     setNotice('');
     setSpeechVoice(value);
     try { localStorage.setItem(speechVoiceKey, value); } catch {}
-    speakReply(voicePreview, value, true);
+    speakReply({ ...voicePreview, answer: '你好，这里是这个音色的试听。' }, value, true);
   };
   const showView = (next) => {
     if (view === 'settings' && next !== 'settings' && previewSpeaking) stopSpeech();
@@ -1365,12 +1294,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
               <span id={speechVoiceLabel}>播报音色</span>
               <select aria-labelledby={speechVoiceLabel} value={activeVoice} onChange={(event) => changeSpeechVoice(event.target.value)}>
                 <option value="">自动（优先自然音色）</option>
-                {speechVoices.length > 0 && <optgroup label="本机系统音色">
-                  {speechVoices.map((voice) => <option key={voiceId(voice)} value={voiceId(voice)}>{voiceLabel(voice)}</option>)}
-                </optgroup>}
-                <optgroup label="平台音色">
-                  {localVoices.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}
-                </optgroup>
+                {speechVoices.map((voice) => <option key={voiceId(voice)} value={voiceId(voice)}>{voiceLabel(voice)}</option>)}
               </select>
             </label>
             <button type="button" onClick={() => {
@@ -1380,7 +1304,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
             }}>
               {previewSpeaking && !speech.paused ? <Square size={16} /> : <Play size={16} />}{previewSpeaking ? speech.paused ? '继续试听' : '停止试听' : '试听音色'}
             </button>
-            <small>自动模式优先使用系统音色。系统音色不可用时，使用平台音色。</small>
+            {!speechVoices.length && <small>{speechSupported ? '浏览器未提供可选音色，将尝试用系统默认音色。' : '当前浏览器不支持语音播报。'}</small>}
             {notice && <p role="status">{notice}</p>}
           </div>
           <label className="ai-font-setting">

@@ -4,7 +4,6 @@ import {spawn} from 'node:child_process';
 import {configuredSkills,validateSkillSettings} from './src/assistantSkills.js';
 import {parseSkillCommand} from './src/assistantSkills.js';
 import {createAlarmNotifications} from './alarm-notifications.mjs';
-import {renderAssistantSpeech} from './assistant-voice-local.mjs';
 import {startCozeTools,nativeToolSchemas} from './coze-agent.mjs';
 import {stages} from './src/data.js';
 import {mapDevice} from './src/course-coding/deviceMapping.js';
@@ -57,11 +56,7 @@ export function aiPlugin(env){
  const reply=(status,data)=>{res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(data));};
  if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)return reply(403,{error:'仅允许当前本机页面访问。'});
  try{
- let body={};if(req.method==='POST'){if(!req.headers['content-type']?.includes('application/json'))fail('需要 JSON 请求。',415);let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>((req.url?.split('?')[0]==='/api/ops/assets'||req.url?.startsWith('/api/ai/integrations/'))?34000000:req.url==='/api/ai/assistant-voice'?4096:4000000))fail('文件或上下文过大。',413);}try{body=JSON.parse(raw||'{}');}catch{fail('JSON 格式不正确。');}}
- if(req.url==='/api/ai/assistant-voice'&&req.method==='POST'){
-  const wav=await renderAssistantSpeech(body);
-  res.setHeader('Content-Type','audio/wav');res.setHeader('Cache-Control','no-store');res.end(wav);return;
- }
+ let body={};if(req.method==='POST'){if(!req.headers['content-type']?.includes('application/json'))fail('需要 JSON 请求。',415);let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>((req.url?.split('?')[0]==='/api/ops/assets'||req.url?.startsWith('/api/ai/integrations/'))?34000000:4000000))fail('文件或上下文过大。',413);}try{body=JSON.parse(raw||'{}');}catch{fail('JSON 格式不正确。');}}
  if(req.url==='/api/ai/alarm-analyses'&&req.method==='GET'){const context=await ops.route({headers:req.headers,url:'/api/ops/context',method:'GET'},res,{});const c=await read();return reply(200,{enabled:!!(c.integrations?.coze?.enabled&&c.integrations.coze.botId),records:alarmNotifications.list(context.dataMode).slice(0,30).map(row=>({...row,key:row.id,event:{...row.alarm,dataMode:row.mode},eventEnded:!!row.resolvedAt,status:({pending:'queued',analyzing:'running',failed:'incomplete'})[row.status]||row.status,answer:row.answer||row.error||''}))});}
  if(req.url==='/api/ai/alarm-notifications'&&req.method==='GET'){const context=await ops.route({headers:req.headers,url:'/api/ops/context',method:'GET'},res,{});return reply(200,alarmNotifications.list(context.dataMode));}
  if(req.url==='/api/ai/runtime'&&req.method==='GET')return reply(200,integrations.runtime());
