@@ -1,6 +1,6 @@
 import {beverageCampaigns} from './product-resources';
 import {useEffect,useState} from 'react';
-import {ArrowUp,ArrowRight,ArrowLeft,Box,Layers,Workflow,GlassWater,Droplets,Wind,ScanEye,FlaskConical,PackageCheck,Package,Truck,Warehouse} from 'lucide-react';
+import {Activity,ArrowUp,ArrowRight,ArrowLeft,Box,Layers,Workflow,GlassWater,Droplets,Wind,ScanEye,FlaskConical,PackageCheck,Package,Truck,Warehouse} from 'lucide-react';
 import {useTwin,recordEvent,api} from './TwinState';
 import {stages,hourly as demoHourly} from './data';
 import {capabilities} from './controlCapabilities';
@@ -16,12 +16,15 @@ import './exhibit.css';
 const flow=[0,1,2,4,5,6,7,8];
 const num=n=>Number(n||0).toLocaleString('zh-CN');
 function Progress({done,plan}){const p=plan>0?Math.min(100,Math.max(0,done/plan*100)):0;return <div className="ex-progress" role="progressbar" aria-valuenow={Math.round(p)} aria-valuemin={0} aria-valuemax={100} aria-label="批次完成度"><i style={{width:p+'%'}}/></div>;}
-export default function Display({time}){
+export default function Display({time,pageView,onViewChange}){
  const {ops,states,activeTask,dataMode,updated,daily}=useTwin();
+ const robotOperation=ops?.audit?.find(event=>event.dataMode===dataMode&&event.operationLabel);
+ const operationOrigin=robotOperation?.source==='station'?'工位页面发起':robotOperation?.source==='display'?'展板页面发起':robotOperation?'平台服务记录':'暂无记录';
  const demoDaily={day:daily?.day||'今日',produced:8426,completedTasks:[{id:'demo-1'},{id:'demo-2'}],hourly:demoHourly};
  const displayDaily=['simulation','mixed'].includes(dataMode)&&!(daily?.produced>0)?demoDaily:(daily||demoDaily);
- const [view,setView]=useState(()=>new URLSearchParams(location.search).get('course')==='process'||sessionStorage.getItem('display-view')==='logistics'?'process':'drink'),[dimension,setDimension]=useState('3d'),[detail,setDetail]=useState(null),[detailTab,setDetailTab]=useState('info'),[recipeStage,setRecipeStage]=useState(0),[selectedDrink,setSelectedDrink]=useState(null),[drinkCategory,setDrinkCategory]=useState('全部'),[selected,setSelected]=useState(null),[popupPoint,setPopupPoint]=useState(null),[logistics,setLogistics]=useState(false),[archived,setArchived]=useState([]),[historyError,setHistoryError]=useState('');
- useEffect(()=>{sessionStorage.removeItem('display-view');let alive=true;api('/api/ops/tasks?view=archived').then(r=>{if(alive)setArchived(r.items||[]);}).catch(()=>{if(alive)setHistoryError('归档记录暂时无法读取');});return()=>{alive=false;};},[]);
+ const {displayView:view,dimension}=pageView;
+ const [detail,setDetail]=useState(null),[detailTab,setDetailTab]=useState('info'),[recipeStage,setRecipeStage]=useState(0),[selectedDrink,setSelectedDrink]=useState(null),[drinkCategory,setDrinkCategory]=useState('全部'),[selected,setSelected]=useState(null),[popupPoint,setPopupPoint]=useState(null),[logistics,setLogistics]=useState(false),[archived,setArchived]=useState([]),[historyError,setHistoryError]=useState('');
+ useEffect(()=>{let alive=true;api('/api/ops/tasks?view=archived').then(r=>{if(alive)setArchived(r.items||[]);}).catch(()=>{if(alive)setHistoryError('归档记录暂时无法读取');});return()=>{alive=false;};},[]);
  useEffect(()=>{const close=e=>{if(e.key==='Escape')setSelected(null);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[]);
  useEffect(()=>{if(detail&&detailTab==='process')document.querySelector('.product-route')?.scrollIntoView({block:'start'});else window.scrollTo({top:0,behavior:'instant'});},[view,detail]);
  const tasks=ops?.tasks||[],docs=(ops?.documents||[]).filter(d=>d.kind==='recipe'&&d.status==='published');
@@ -38,7 +41,12 @@ export default function Display({time}){
  const campaign=beverageCampaigns[shown?.id]||{theme:'jasmine',eyebrow:'BEVERAGE COLLECTION',lines:[shown?.name||'饮品精选'],caption:shown?.flavor||'发现属于你的风味',seal:'风味精选'};
  const history=[...new Map([...tasks,...archived].filter(t=>t.status==='已完成'||t.archivedAt).map(t=>[t.id,t])).values()];
  const choose=(i,point)=>{setSelected(i);const box=document.querySelector('.process-exhibit')?.getBoundingClientRect();if(box){const marker=document.querySelectorAll('.process-exhibit .device-marker')[i]?.getBoundingClientRect();const x=point?.x??(marker?marker.right:box.left+box.width/2),y=point?.y??(marker?marker.top:box.top+box.height/2);setPopupPoint({left:Math.max(8,Math.min(box.width-370,x-box.left+12)),top:Math.max(8,Math.min(box.height-320,y-box.top-50))});}recordEvent('station',stages[i].name,i);};
- const switchView=v=>{setView(v);setSelected(null);setLogistics(false);recordEvent('view',v==='drink'?'饮料视图':'工艺视图');};
+ useEffect(()=>{setSelected(null);setLogistics(false);},[view]);
+ const switchView=v=>{
+  onViewChange({route:'display',displayView:v,dimension});
+  recordEvent('view',v==='drink'?'饮料视图':'工艺视图');
+ };
+ const setDimension=value=>onViewChange({route:'display',displayView:view,dimension:value});
  const selectDrink=p=>{setSelectedDrink(p.name);recordEvent('view','切换饮料 / '+p.name);};
  const openProduct=(p,tab='info')=>{setDetailTab(tab);setRecipeStage(0);setSelectedDrink(p.name);setDetail(p.name);recordEvent('view','饮料详情 / '+p.name);};
  const live=selected!==null?states[selected]:null,s=selected!==null?stages[selected]:null;
@@ -47,6 +55,11 @@ export default function Display({time}){
  return <main className={`dual-exhibit ${view==='process'?'process-cockpit':''}`}>
  <header className="ex-header"><div className="ex-title"><small>鸿眸瓶安 / 数字展板</small><h1>{view==='drink'?'饮品总览':'工艺驾驶舱'}</h1></div><div className="ex-navigation"><nav aria-label="展板视图"><button aria-pressed={view==='drink'} onClick={()=>switchView('drink')}><GlassWater size={22}/>饮品</button><button aria-pressed={view==='process'} onClick={()=>switchView('process')}><Workflow size={22}/>工艺</button></nav></div><div className="ex-header-meta"><LogLauncher label="产线日志"/><time>{time}</time></div></header>
 
+ <div className="ex-robot-operation" role="status" aria-label="机械臂操作同步">
+  <span><Activity size={17} aria-hidden="true"/>上料机械臂</span>
+  <strong>{robotOperation?.operationLabel||'暂无操作记录'}</strong>
+  {robotOperation&&<><span>{robotOperation.result}</span><span>{operationOrigin}</span><time dateTime={robotOperation.time}>{new Date(robotOperation.time).toLocaleTimeString('zh-CN',{hour12:false})}</time></>}
+ </div>
  {view==='drink'?<>
  <div className={detail?'drink-detail-layout':'drink-overview-layout'}>
  {detail&&<button className="ex-back" onClick={()=>setDetail(null)}><ArrowLeft size={17}/>全部饮品</button>}

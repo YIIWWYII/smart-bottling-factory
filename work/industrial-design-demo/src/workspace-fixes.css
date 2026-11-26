@@ -5,3 +5,56 @@
 }
 .demo-shell .app-wordmark{font-family:inherit;letter-spacing:.02em}
 .demo-shell .ai-launch{white-space:nowrap}
+
+/* Keep the page tabs centered on the viewport, independent of side content. */
+.demo-shell .demo-nav .demo-nav-pages{width:max-content;max-width:100%;justify-self:center;justify-content:center}
+.demo-shell .demo-nav .demo-nav-pages a{flex:1;white-space:nowrap}
+.demo-shell .demo-nav .app-wordmark-copy small{color:#415e77;font-size:15px;font-weight:550}
+.demo-shell[data-color-mode=dark] .demo-nav .app-wordmark-copy small{color:#c3d6e8}
+@media(min-width:1201px){
+ .demo-shell .demo-nav{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);height:auto;min-height:80px;padding:8px clamp(16px,2vw,34px);column-gap:12px}
+ .demo-shell .demo-nav .demo-source{justify-self:end;max-width:100%;flex-wrap:wrap;row-gap:4px}
+}
+@media(max-width:760px){.demo-shell .demo-nav .app-wordmark-copy small{display:block;font-size:13px}}
+@media(max-width:360px){.demo-shell .demo-nav .demo-nav-pages a{font-size:14px;gap:4px}}
+
+.platform-address-button{display:inline-flex;align-items:center;gap:6px;justify-content:center;min-height:38px;padding:6px 10px;white-space:nowrap;font-size:14px}
+.demo-source .platform-address-button{color:inherit}
+@media(min-width:1201px) and (max-width:1350px){.demo-source .platform-address-button span{display:none}}
+
+/* A solid surface keeps network addresses readable over the page. */
+dialog.modal.platform-address-modal,.demo-shell[data-color-mode] dialog.modal.platform-address-modal{
+ --address-ink:#1c344d;--address-muted:#4a637c;--address-line:#c7d9e9;--address-panel:#edf5fd;--address-field:#fff;--address-selected:#e2effb;--address-accent:#175b95;--address-action:#215e92;
+ width:min(550px,calc(100vw - 28px));padding:clamp(16px,4vw,26px);background:#f9fbfe!important;
+ border:1px solid var(--address-line);border-radius:20px;color:var(--address-ink);box-shadow:0 22px 72px #0b213a60;
+ backdrop-filter:none;scrollbar-gutter:auto;
+}
+.demo-shell[data-color-mode=dark] dialog.modal.platform-address-modal,dialog.modal.platform-address-modal.address-dark{
+ --address-ink:#f1f6ff;--address-muted:#b6cbe0;--address-line:#476583;--address-panel:#223a54;--address-field:#1b3048;--address-selected:#294967;--address-accent:#b6dcff;--address-action:#356e9e;
+ background:#1a2e44!important;
+}
+.platform-address-modal::backdrop{background:#0b172a94;backdrop-filter:blur(5px)}
+.demo-shell[data-color-mode] .platform-address-modal :is(h2,p,label),.platform-address-modal :is(h2,p,label){color:inherit!important}
+.demo-shell .platform-address-modal .modal-top,.platform-address-modal .modal-top{position:static;background:none;backdrop-filter:none;align-items:center;margin:0 0 16px}
+.platform-address-modal .modal-top h2{margin:0;font-size:24px;line-height:1.25}
+.platform-address-modal .modal-top button{width:35px;height:35px;min-width:35px;border:1px solid var(--address-line);background:var(--address-field);color:var(--address-ink);box-shadow:none}
+.platform-address-modal p{margin:0;font-size:14px;line-height:1.6}
+.platform-address-modal code{font:600 15px/1.45 ui-monospace,Consolas,monospace;overflow-wrap:anywhere}
+.platform-lan-panel{display:grid;gap:7px;padding:15px;border:1px solid var(--address-line);border-radius:13px;background:var(--address-panel)}
+.platform-address-modal ul{list-style:none;display:grid;gap:7px;margin:4px 0 0;padding:0}
+.platform-address-modal li button{display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;width:100%;padding:9px 11px;text-align:left;border:1px solid var(--address-line);border-radius:9px;background:var(--address-field);color:var(--address-ink);box-shadow:none}
+.platform-address-modal li button:is(:hover,[aria-pressed=true]){border-color:var(--address-accent);background:var(--address-selected);color:var(--address-accent)}
+.platform-address-modal li span,.platform-current span{font-size:13px;color:var(--address-muted)}
+.platform-address-modal p.platform-current{display:flex;align-items:center;flex-wrap:wrap;gap:5px 10px;margin:13px 0;color:var(--address-muted)!important}
+.platform-current code{font-size:14px}
+.platform-current span{border:1px solid var(--address-line);border-radius:6px;padding:1px 6px}
+.platform-other-addresses{margin:0 0 13px;color:var(--address-muted);font-size:13px}
+.platform-other-addresses summary{cursor:pointer;width:fit-content}
+.platform-other-addresses p{margin-top:7px}
+.platform-address-modal label{display:grid;gap:6px;border-top:1px solid var(--address-line);padding-top:13px;font-size:14px;font-weight:600}
+.platform-address-modal input{width:100%;min-width:0;padding:9px 10px;border:1px solid var(--address-line);border-radius:8px;background:var(--address-field);color:var(--address-ink);font:15px ui-monospace,Consolas,monospace}
+.platform-address-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:12px}
+.platform-address-actions button{min-height:38px;padding:7px 13px;border:1px solid var(--address-line);border-radius:8px;background:var(--address-field);color:var(--address-ink);box-shadow:none;font-size:14px}
+.platform-address-actions button[type=submit]{background:var(--address-action);color:white;border-color:transparent}
+.platform-address-actions button:hover{filter:brightness(.94)}
+.platform-address-modal p.platform-address-status:not(:empty){margin-top:6px}

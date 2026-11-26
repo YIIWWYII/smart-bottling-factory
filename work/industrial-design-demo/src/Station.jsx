@@ -18,13 +18,12 @@ import {recognitionCameraId} from '../camera-sources.mjs';
 import { Activity, Check, ChevronLeft, Pause, Play, ShieldCheck, SlidersHorizontal, ScanLine, Layers, ChevronRight } from 'lucide-react';
 import Chart from './Chart';
 import { stages, processGroups } from './data';
-export default function Station({notify}) {
+export default function Station({notify,pageView,onViewChange}) {
  const twin=useTwin();
  const [robotStatus,setRobotStatus]=useState(null),productCameraHost=useRef();
  const productCamera={id:recognitionCameraId,label:'瓶型识别相机'};
  const robotAsset=twin.ops?.assets?.find(a=>a.code==='MG400-TEACH-01')||twin.ops?.assets?.find(a=>a.stageIndex===0&&isTeachingRobotAsset(a));
- const [selected,setSelected]=useState(()=>{const i=Number(sessionStorage.getItem('preview-stage')??0);sessionStorage.removeItem('preview-stage');return i>=0&&i<9?i:0;});
- const [tab,setTab]=useState('equipment'),[showLogistics,setShowLogistics]=useState(()=>{const open=sessionStorage.getItem('station-logistics')==='open';sessionStorage.removeItem('station-logistics');return open;});
+ const {stage:selected,tab,showLogistics}=pageView;
  const [twinSelection,setTwinSelection]=useState(null);
  const [lineBusy,setLineBusy]=useState(false),[lineMessage,setLineMessage]=useState('');
  useEffect(()=>{if(selected!==0){setRobotStatus(null);return;}let active=true,timer;const poll=async()=>{try{if(!document.hidden){const status=await api('/api/ops/mg400');if(active)setRobotStatus(status);}}catch{if(active)setRobotStatus(null);}finally{if(active)timer=setTimeout(poll,750);}};poll();return()=>{active=false;clearTimeout(timer);};},[selected]);
@@ -37,7 +36,14 @@ export default function Station({notify}) {
  const {value:localOutput,label:outputLabel,unit:outputUnit}=stationOutput(twin,selected);
  const activeAlarm=twin.states[selected].alarms?.[0],alarmLevel=twin.states[selected].alarmLevel||activeAlarm?.level;
  const stateLabel=twin.states[selected].quality==='offline'?'离线 / 数据过期':activeAlarm?`设备告警 · ${alarmLevel==='critical'?'严重':'预警'}`:({running:'运行中',stopped:'已暂停',fault:'故障',warning:'预警',holding:'等待联锁解除'})[twin.states[selected].mode]||'待更新';
- const choose=i=>{setSelected(i);if(tab==='vision'&&![2,5].includes(i))setTab('equipment');setShowLogistics(false);setTwinSelection(null);recordEvent('station',stages[i].name,i);};
+ useEffect(()=>{setTwinSelection(null);},[selected,tab]);
+ const choose=i=>{
+  const nextTab=tab==='vision'&&![2,5].includes(i)?'equipment':tab;
+  onViewChange({route:'station',stage:i,tab:nextTab,showLogistics:false});
+  recordEvent('station',stages[i].name,i);
+ };
+ const setTab=nextTab=>onViewChange({route:'station',stage:selected,tab:nextTab,showLogistics});
+ const setShowLogistics=open=>onViewChange({route:'station',stage:selected,tab,showLogistics:open});
 
 
  const stationRealtime=(<aside className={selected===0?"control-instrument preprocess-data-monitor":"control-instrument"} data-ai-context={`工位 ${selected+1} ${s.name}：${s.metric} ${s.value} ${s.unit}（未提供质量公差），${stopped?'已暂停':'运行'}。来源 ${twin.states[selected].source}，质量 ${twin.states[selected].quality}，操作需人工确认。`}><div className="instrument-heading"><SlidersHorizontal size={22}/><h2>{selected===0?'水洗设备 · 状态与参数':'工位核心信息'}</h2><span className="control-led"/></div>  <StationCoreMetrics stageIndex={selected}/><dl className="station-core-facts"><div><dt>设备状态</dt><dd>{stateLabel}</dd></div><div><dt>{outputLabel}</dt><dd>{localOutput??'—'} <small>{outputUnit}</small></dd></div><div><dt>当前告警</dt><dd>{twin.states[selected].alarms?.length||0} 项</dd></div><div><dt>控制方式</dt><dd>{twin.ops?.auto.enabled?'自动调参':'人工接管'}</dd></div></dl><div className="hub-notice">来源：{twin.states[selected].sourceReason||'等待数据'}。真实联锁未接入时不可控制实机。</div><div className="safety-row"><ShieldCheck size={21}/><span>联锁状态<small>{twin.dataMode==='simulation'?'模拟联锁状态':'未接入真实安全信号'}</small></span></div><button className={`pause-command ${stopped?'resume':''}`} onClick={()=>document.getElementById('station-manual-controls')?.scrollIntoView({block:'start'})}><SlidersHorizontal size={18}/> 打开人工控制台</button> <section className="station-assignment"><div><small>本工位关联任务</small><strong>{twin.activeTask?.name||'暂无生产任务'}</strong><span>{twin.activeTask?`${twin.activeTask.status} · ${twin.activeTask.done} / ${twin.activeTask.plan} 瓶`:selected>=7?'物流任务独立显示在现场操作区':'等待任务下发'}</span></div><div><small>AI 调控状态</small><strong>{twin.ops?.auto.enabled?'自动配方应用开启':'人工接管'}</strong><span>操作记录包含调整依据与结果</span></div></section>

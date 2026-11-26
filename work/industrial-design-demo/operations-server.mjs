@@ -32,10 +32,13 @@ const defaultRoleSettings={admin:{label:'管理员',description:'模型配置、
 const file=path.resolve('.local-operations.json');
 const now=()=>new Date().toISOString();
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
+const mg400ActionLabels={enable:'使能',disable:'下使能',run:'运行工程',pause:'暂停工程',resume:'继续工程',stop:'停止工程',clear:'清除报警',speed:'设置速度'};
 const recipe=(id,name,volume)=>({id,title:name+' · 工艺配方',kind:'recipe',status:'published',version:1,content:`${name}，${volume} mL。演示工艺，仅用于虚拟设备。`,productCode:id,productName:name,volume,updated:now(),owner:'系统演示',settings:{'PT-CV-01:conveyorSpeed':volume===500?120:100,'PT-WASH-01:washDuration':15,'PT-AIR-01:airDuration':10,'GAS-PUMP-01:sampleDuration':30,'GAS-CHAMBER-01:settleTime':60,'VIS-LIGHT-01:lightIntensity':70,'BEV-MIX-01:mixSpeed':120,'BEV-HT-01:targetTemperature':85,'FIL-PUMP-01:flowRate':120,'FIL-HEAD-01:fillVolume':volume,'SEC-LEVEL-01:exposure':1200,'PK-ARM-01:pickRate':12,'PK-GRIP-01:gripForce':25,'AGV-01:speedLimit':.8,'WH-LAMP-01:targetLocation':'A-01-01'}});
 function initial(){return {employees:[{id:'admin',name:'本机管理员',role:'admin',enabled:true,stages:[0,1,2,3,4,5,6,7,8]},{id:'engineer',name:'工艺工程师（演示）',role:'engineer',enabled:true,stages:[0,1,2,3,4,5,6,7,8]},{id:'operator',name:'灌装操作员（演示）',role:'operator',enabled:true,stages:[4]},{id:'viewer',name:'观察员（演示）',role:'viewer',enabled:true,stages:[]}],documents:[recipe('LIME-500','青柠气泡水',500),recipe('SODA-350','原味苏打水',350),{id:'LINE-GUIDE',title:'产线能力与数据说明',kind:'document',status:'published',version:1,owner:'系统演示',updated:now(),content:'当前产线有九工序：瓶体预处理、气体安全检测、瓶体外观检测、饮料准备、精密灌装、成品二次检测、智能装箱、AGV 运输、智能仓储。数字模型与状态为模拟，不是真实遥测。模型服务不能绕过设备联锁；换配方后保持暂停，人工核对后恢复。'+capabilities.map(c=>`${stages[c.stageIndex].name} / ${c.device}：${c.label} ${c.min??''} 至 ${c.max??''} ${c.unit}`).join('\n')}],audit:[],controls:Object.fromEntries(capabilities.map(c=>[c.id,c.type==='NUMBER'?Number(c.initial):c.initial])),auto:{enabled:false,minConfidence:.95,obstacleLimit:.3},interlock:false,lastDecision:null,activeProduct:'LIME-500',tick:0,updated:Date.now(),produced:8426,bottles:3574,liquid:1787,completed:0,states:stages.map(s=>({mode:'running',value:s.value,rate:s.rate,target:s.target,history:Array(16).fill(s.value)}))};}
 export async function createOperations(env=process.env){
  const storage=await openDatabase(env),requestContext=new AsyncLocalStorage();
+ let sharedView=null;
+ let viewRevision=Date.now();
  const existing=storage.read();let db=existing||(fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'')):initial());
  db.tasks=existing?storage.tasks():initialTasks.map(t=>({...t,line:'当前产线',version:1,createdAt:now(),updatedAt:now(),deletedAt:null,archivedAt:null}));db.tasks.forEach(t=>{t.archivedAt??=null;t.deletedAt??=null;t.dataMode??='simulation';});db.employees.forEach(e=>{e.roles=Array.isArray(e.roles)&&e.roles.length?e.roles:[e.role];e.role=e.roles[0];});db.roleSettings={...defaultRoleSettings,...(db.roleSettings||{})};db.alerts??=initialAlerts;db.preferences??={dense:false,notifications:true};
  db.products=prepareProductCatalog(db.products??structuredClone(productDefaults),db.documents);db.materials??=[];db.assets??=equipmentAssets.map((a,i)=>({...a,id:'asset-'+i,code:stages[i].code,version:1,enabled:true}));
@@ -170,7 +173,8 @@ const defaults=[
     if(typeof body.running!=='boolean')fail('请选择模拟启动或暂停');
     if(body.running&&(db.interlock||safetyHolds(activeCases()).includes(0)))fail('模拟联锁未解除',409);
     mg400Simulation.setRunning(body.running);
-    log(user,body.running?'启动机械臂模拟':'暂停机械臂模拟','模拟关节数据驱动模型','成功',{stageIndex:0});
+    const operationLabel=body.running?'开始模拟':'暂停模拟';
+    log(user,body.running?'启动机械臂模拟':'暂停机械臂模拟','模拟关节数据驱动模型','成功',{stageIndex:0,operationLabel});
     return mg400DisplayStatus();
    }
    if(p==='/api/ops/mg400/test-stop'&&write)return stopTest();
@@ -183,6 +187,7 @@ const defaults=[
     const result=await manualMG400.start(body,user.id);log(user,'手动调试 MG400',result.command,'已受理',{stageIndex:0});return result;
    }
    if(write&&manualMG400.active&&['connect','disconnect','prepare','execute'].some(action=>p==='/api/ops/mg400/'+action))fail('请先停止手动动作',409);
+   const activePendingCount=()=>{const at=Date.now();return [...mg400.pending.values()].filter(item=>item.expires>=at).length;};
    if(p==='/api/ops/mg400/open-folder'&&write){
     requireRole(user,['admin','engineer']);
     if(process.platform!=='win32'||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress))fail('请在运行平台服务的 Windows 电脑上打开配置目录');
@@ -201,10 +206,21 @@ const defaults=[
     log(user,'保存 MG400 配置',mg400Files[body.key],'成功',{stageIndex:0});
     return {...mg400FileView(),message:'配置已保存；未向机械臂下发运动指令'};
    }
+   if(p==='/api/ops/mg400/projects/delete'&&write){
+    requireRole(user,['admin','engineer']);
+    if(readTestFeedback()||manualMG400.active)fail('请先停止机械臂测试或手动动作',409);
+    const status=mg400.status(),pending=activePendingCount();
+    if(status.connected||pending){const block=trajectoryReplacementBlock(status,pending);if(block)fail(block,409);}
+    let saved;try{saved=mg400Store.deleteProject(body);}catch(error){fail(error.message,409);}
+    if(status.connected)mg400.config.project=saved.values.trajectories.controller.defaultProject;
+    log(user,'删除平台 MG400 轨迹工程',body.projectName,'成功',{stageIndex:0});
+    return {...mg400FileView(),message:saved.cleanupPending?'已移除工程登记，但文件副本未能彻底清理。控制器工程未修改。':'已删除平台工程副本。控制器工程未修改。'};
+   }
    if(p==='/api/ops/mg400/projects'&&write){
     requireRole(user,['admin','engineer']);
     if(readTestFeedback()||manualMG400.active)fail('请先停止机械臂测试或手动动作',409);
-    if(mg400.status().connected||mg400.pending.size){const block=trajectoryReplacementBlock(mg400.status(),mg400.pending.size);if(block)fail(block,409);}
+    const status=mg400.status(),pending=activePendingCount();
+    if(status.connected||pending){const block=trajectoryReplacementBlock(status,pending);if(block)fail(block,409);}
     try{mg400Store.importProject(body);}catch(error){fail(error.message,400);}
     log(user,'导入 MG400 轨迹工程',body.projectName,'成功',{stageIndex:0});
     return {...mg400FileView(),message:'已保存工程文件并加入预设。请在 DobotStudio 中将同名工程导入控制器，再选择运行。'};
@@ -214,23 +230,23 @@ const defaults=[
     if(readTestFeedback()||manualMG400.active)fail('请先停止当前机械臂测试或手动动作，再切换轨迹工程',409);
     let trajectories;
     if(body.projectName!==undefined){
-     try{trajectories=selectTrajectoryPreset(mg400Store.read().values.trajectories,body.projectName,mg400.status(),mg400.pending.size);}catch(error){fail(error.message,409);}
+     try{trajectories=selectTrajectoryPreset(mg400Store.read().values.trajectories,body.projectName,mg400.status(),activePendingCount());}catch(error){fail(error.message,409);}
     }else{
-     const block=trajectoryReplacementBlock(mg400.status(),mg400.pending.size);if(block)fail(block,409);
+     const block=trajectoryReplacementBlock(mg400.status(),activePendingCount());if(block)fail(block,409);
      if(typeof body.content!=='string'||body.content.length>100000)fail('轨迹配置无效或超过 100 KB');
      trajectories=JSON.parse(body.content);
     }
     const saved=mg400Store.save('trajectories',trajectories,body.expected);
     if(mg400.status().connected)mg400.config.project=saved.values.trajectories.controller.defaultProject;
     else mg400.config=applyMG400Files(saved.values);
-    log(user,'替换 MG400 轨迹配置',mg400Files.trajectories,'成功',{stageIndex:0,after:{project:mg400.config.project,connected:mg400.status().connected,enabled:mg400.status().feedback?.enable_status}});
+    log(user,'替换 MG400 轨迹配置',mg400Files.trajectories,'成功',{stageIndex:0,operationLabel:body.projectName!==undefined?`选择工程：${mg400.config.project}`:'替换轨迹配置',after:{project:mg400.config.project,connected:mg400.status().connected,enabled:mg400.status().feedback?.enable_status}});
     return {...mg400FileView(),message:body.projectName!==undefined?'已保存后续运行工程；运行前请确认工程已导入控制器。':'平台轨迹配置已替换。更改轨迹点后，仍需将对应 Lua 工程导入控制器。'};
    }
    if(p==='/api/ops/mg400/config'&&write)fail('MG400 已改为文件配置，请在配置文件页面保存');
-   if(p==='/api/ops/mg400/connect'&&write){requireRole(user,['admin','engineer']);if(mg400.status().connected)fail('请先断开现有连接',409);const files=mg400Store.read().values;if(!mg400CommunicationConfigured(files.communication))fail('机械臂通讯尚未配置，请现场填写 IP 和 Dashboard、反馈、运动端口后再连接',409);const config=applyMG400Files(files);return await mg400.connect(config);}
-   if(p==='/api/ops/mg400/disconnect'&&write){requireRole(user,['admin','engineer']);mg400.close();log(user,'断开 MG400','仅断开通信，不停止或断电机械臂','成功',{stageIndex:0});return mg400.status();}
+   if(p==='/api/ops/mg400/connect'&&write){requireRole(user,['admin','engineer']);if(mg400.status().connected)fail('请先断开现有连接',409);const files=mg400Store.read().values;if(!mg400CommunicationConfigured(files.communication))fail('机械臂通讯尚未配置，请现场填写 IP 和 Dashboard、反馈、运动端口后再连接',409);const config=applyMG400Files(files),status=await mg400.connect(config);log(user,'连接 MG400','已建立通信','已连接',{stageIndex:0,operationLabel:'连接实机'});return status;}
+   if(p==='/api/ops/mg400/disconnect'&&write){requireRole(user,['admin','engineer']);mg400.close();log(user,'断开 MG400','仅断开通信，不停止或断电机械臂','成功',{stageIndex:0,operationLabel:'断开实机'});return mg400.status();}
    if(p==='/api/ops/mg400/prepare'&&write){if(db.dataMode==='simulation')fail('请切换真实或混合数据模式后控制实机',409);if(db.interlock&&!['stop','pause','disable'].includes(body.action))fail('平台联锁尚未解除',409);try{return mg400.prepare(body.action,body.value,user.id);}catch(error){fail(error.message,409);}}
-   if(p==='/api/ops/mg400/execute'&&write){if(db.dataMode==='simulation'||(db.interlock&&!['stop','pause','disable'].includes(mg400.pending.get(body.token)?.action)))fail('当前模式或联锁不允许下发',409);if(body.confirmed!==true)fail('请人工确认');try{const pending=mg400.pending.get(body.token);const result=await mg400.execute(body.token,user.id);if(pending?.action==='speed')saveMG400Speed(pending.value);log(user,'人工 MG400 控制',result.raw,'已受理',{category:'control',stageIndex:0,device:'MG400-TEACH-01',after:result});return result;}catch(e){log(user,'人工 MG400 控制',e.message,'失败或结果未知',{category:'control',stageIndex:0,device:'MG400-TEACH-01'});return {error:e.message,ok:false};}}
+   if(p==='/api/ops/mg400/execute'&&write){if(db.dataMode==='simulation'||(db.interlock&&!['stop','pause','disable'].includes(mg400.pending.get(body.token)?.action)))fail('当前模式或联锁不允许下发',409);if(body.confirmed!==true)fail('请人工确认');const pending=mg400.pending.get(body.token),operationLabel=mg400ActionLabels[pending?.action]||'下发指令';try{const result=await mg400.execute(body.token,user.id);if(pending?.action==='speed')saveMG400Speed(pending.value);log(user,'人工 MG400 控制',result.raw,'已受理',{category:'control',stageIndex:0,device:'MG400-TEACH-01',operationLabel,after:result});return result;}catch(e){log(user,'人工 MG400 控制',e.message,'失败或结果未知',{category:'control',stageIndex:0,device:'MG400-TEACH-01',operationLabel});return {error:e.message,ok:false};}}
    fail('未知机械臂接口',404);
   }
   if(p==='/api/ops/logistics/analysis'&&write){
@@ -404,7 +420,23 @@ const defaults=[
   if(p==='/api/ops/state'&&!write)return snapshot();
   if(p.startsWith('/api/ops/standard/')){const action=p.split('/').pop();if(!write&&action!=='list')fail('需要 POST 请求。',405);if(['extract','audit'].includes(action))fail('请通过 AI 提取接口提交。',403);return standard(user).route(action,body);}
   if(['/api/ops/management','/api/ops/formulas','/api/ops/strategies','/api/ops/material-usage'].includes(p)){if(p!=='/api/ops/management'&&!write)fail('需要 POST。',405);return managementRoute({db,p,body,write,user,requireRole,log});}
-  if(p==='/api/ops/context'&&!write)return {user,roles,roleSettings:db.roleSettings,employees:db.employees,capabilities,controls:activeControls(),protocol:protocolOn()?protocol.status():{enabled:false},auto:db.auto,interlock:db.interlock,lastDecision:db.lastDecision,products:db.products,assets:db.assets,materials:db.materials,documents:db.documents,audit:db.audit,tasks:db.tasks.filter(t=>taskVisible(t)&&!t.deletedAt&&!t.archivedAt),alerts:db.alerts.filter(a=>a.ruleId?a.dataMode===db.dataMode:db.dataMode==='simulation'),preferences:db.preferences,connectionStates:db.connections.map(c=>connectionStatus(c,db.telemetry[c.stageIndex],!!env.TELEMETRY_TOKEN,db.dataMode)),storage:'MySQL',simulation:db.dataMode==='simulation',dataMode:db.dataMode,realStages:db.realStages,lineMode:lineMode(),activeTask:activeTask()};
+  if(p==='/api/ops/shared-view'&&write){
+   const {route,stage,tab,showLogistics,displayView,dimension}=body;
+   if(!['station','display','admin'].includes(route))fail('页面无效。');
+   let view={route};
+   if(route==='station'){
+    if(!Number.isInteger(stage)||stage<0||stage>=stages.length||!['equipment','plan','trend','vision'].includes(tab)||typeof showLogistics!=='boolean')fail('工位视图无效。');
+    if((tab==='vision'&&![2,5].includes(stage))||(showLogistics&&stage<7))fail('此工位不支持该视图。');
+    view={...view,stage,tab,showLogistics};
+   }
+   if(route==='display'){
+    if(!['drink','process'].includes(displayView)||!['3d','2d'].includes(dimension))fail('展板视图无效。');
+    view={...view,displayView,dimension};
+   }
+   sharedView={...view,revision:++viewRevision};
+   return sharedView;
+  }
+  if(p==='/api/ops/context'&&!write)return {sharedView,user,roles,roleSettings:db.roleSettings,employees:db.employees,capabilities,controls:activeControls(),protocol:protocolOn()?protocol.status():{enabled:false},auto:db.auto,interlock:db.interlock,lastDecision:db.lastDecision,products:db.products,assets:db.assets,materials:db.materials,documents:db.documents,audit:db.audit,tasks:db.tasks.filter(t=>taskVisible(t)&&!t.deletedAt&&!t.archivedAt),alerts:db.alerts.filter(a=>a.ruleId?a.dataMode===db.dataMode:db.dataMode==='simulation'),preferences:db.preferences,connectionStates:db.connections.map(c=>connectionStatus(c,db.telemetry[c.stageIndex],!!env.TELEMETRY_TOKEN,db.dataMode)),storage:'MySQL',simulation:db.dataMode==='simulation',dataMode:db.dataMode,realStages:db.realStages,lineMode:lineMode(),activeTask:activeTask()};
   if(p==='/api/ops/tasks'&&write){
    requireRole(user,['admin','engineer']);const action=body.action||'create',old=db.tasks.find(t=>t.id===body.id);if(action!=='create'&&(!old||!taskVisible(old)))fail('任务不存在。',404);if(old&&body.version!==old.version)fail('任务已被其他人修改，请关闭后重新打开。',409);
    const before=old?{...old}:null;

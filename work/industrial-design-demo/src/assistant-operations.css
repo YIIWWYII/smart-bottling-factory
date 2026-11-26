@@ -22,12 +22,17 @@
 
 .digital-assistant .ai-speech-setting{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 14px;flex:none;background:#fff;border-bottom:1px solid #e1e7ee;font-size:14px;font-weight:600;color:#385873;cursor:pointer}
 .digital-assistant .ai-speech-setting input{margin-left:auto;accent-color:#2863ba}
-.digital-assistant .ai-voice-preview{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:none;padding:7px 14px;background:#fff;border-bottom:1px solid #e1e7ee}
-.digital-assistant .ai-voice-preview button{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:4px 9px;border:1px solid #d5e1ee;border-radius:7px;background:#f4f8fc;color:#305477;font-size:13px}
-.digital-assistant .ai-voice-preview button:hover{background:#e9f1fa}
-.digital-assistant .ai-voice-preview p{margin:0;color:#94391b;font-size:13px}
+.digital-assistant .ai-voice-preview{display:flex;align-items:flex-end;gap:8px 12px;flex-wrap:wrap;padding:12px 14px;background:#fff;border-bottom:1px solid #e1e7ee;color:#243d56}
+.digital-assistant .ai-voice-preview label{display:grid;gap:5px;flex:1 1 180px;min-width:0;font-size:14px;font-weight:650}
+.digital-assistant .ai-voice-preview select{width:100%;min-width:0;min-height:40px;padding:5px 8px;border:1px solid #a1b7cc;border-radius:7px;background:#f4f8fc;color:#19354e;font:inherit}
+.digital-assistant .ai-voice-preview button{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:5px 12px;border:1px solid #a1b7cc;border-radius:7px;background:#eff5fb;color:#234d74;font-size:14px;font-weight:650}
+.digital-assistant .ai-voice-preview button:not(:disabled):hover{background:#deedfb}
+.digital-assistant .ai-voice-preview :is(button,select):focus-visible{outline:2px solid #2863ba;outline-offset:2px}
+.digital-assistant .ai-voice-preview :is(small,p){flex-basis:100%;margin:0;font-size:13px;line-height:1.5}
+.digital-assistant .ai-voice-preview p{color:#94391b}
 .digital-assistant .ai-font-setting{display:flex;align-items:center;gap:12px;min-height:44px;padding:4px 14px;flex:none;background:#fff;border-bottom:1px solid #e1e7ee;color:#385873;font-size:14px;font-weight:600}
 .digital-assistant .ai-font-setting input{flex:1;min-width:0;max-width:200px;height:28px;margin:0 0 0 auto;accent-color:#2863ba;cursor:pointer}
+.digital-assistant .ai-speech-range .ai-font-value{min-width:4.2em;text-align:right;font-variant-numeric:tabular-nums}
 .digital-assistant .ai-font-setting input:focus-visible{outline:2px solid #3977d5;outline-offset:2px}
 .digital-assistant .ai-font-value{min-width:5ch;text-align:right;font-variant-numeric:tabular-nums}
 .digital-assistant .ai-reply-speech{display:flex;gap:5px;margin-left:auto}
@@ -231,6 +236,12 @@
 .digital-assistant.is-open>header .ai-robot-settings{display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;border-radius:7px;background:transparent}
 .digital-assistant.is-open>header .ai-robot-settings:hover{background:#e7edf3}
 .digital-assistant .ai-robot [data-part]{transform-box:fill-box;transform-origin:center}
+.digital-assistant .ai-robot [data-part=gaze]{transform:translate(var(--gaze-x,0px),var(--gaze-y,0px));transition:transform 140ms ease-out}
+.digital-assistant .ai-robot [data-part=posture]{transform-origin:50% 84%;transform:rotate(var(--lean,0deg)) scale(var(--stretch-x,1),var(--stretch-y,1));transition:transform 185ms ease-out}
+.digital-assistant .ai-robot[data-state=alarm]{color:#ffd797}
+.digital-assistant .ai-robot[data-state=alarm] [data-part=eyes]{visibility:hidden}
+.digital-assistant .ai-robot[data-state=alarm] [data-part=antenna]{fill:#ff865e}
+@media(prefers-reduced-motion:reduce){.digital-assistant .ai-robot :is([data-part=gaze],[data-part=posture]){transition:none}}
 .digital-assistant .ai-robot [data-part=antenna]{fill:#f1ac60}
 .digital-assistant .ai-robot [data-part=scan],.digital-assistant .ai-robot [data-part=mouth]{visibility:hidden}
 .digital-assistant .ai-robot[data-state=listening]{color:#a1d8ff}

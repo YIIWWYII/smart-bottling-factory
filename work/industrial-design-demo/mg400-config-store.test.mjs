@@ -92,3 +92,23 @@ test('folder import preserves complete controller projects, registers relative p
  assert.throws(()=>store.importProject({projectName:'bad',name:'测试',files,expected}),/已更新/);
  assert.equal(fs.existsSync(path.join(dir,'mg400-projects','bad')),false);
 });
+
+test('deleting a platform project clears its selection, leaves other presets, and allows reimport',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mg400-delete-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ for(const name of Object.values(mg400Files))fs.copyFileSync(new URL('./config/'+name,import.meta.url),path.join(dir,name));
+ const store=createMG400ConfigStore(pathToFileURL(dir+path.sep)),initial=store.read();
+ const source=new URL('./config/mg400-projects/blockly_kkkl/',import.meta.url);
+ const files=fs.readdirSync(source).map(name=>({path:name,data:fs.readFileSync(new URL(name,source)).toString('base64')}));
+ const input={projectName:'demo_delete',name:'待删除工程',files};
+ const imported=store.importProject({...input,expected:initial.raw.trajectories});
+ const selected=store.save('trajectories',selectTrajectoryPreset(imported.values.trajectories,input.projectName),imported.raw.trajectories);
+ const folder=store.projectFolder(input.projectName);
+ assert.throws(()=>store.deleteProject({projectName:input.projectName,expected:imported.raw.trajectories}),/已更新/);
+ assert.ok(fs.existsSync(folder));
+ const deleted=store.deleteProject({projectName:input.projectName,expected:selected.raw.trajectories});
+ assert.deepEqual(deleted.values.trajectories,initial.values.trajectories);
+ assert.equal(deleted.cleanupPending,false);
+ assert.equal(fs.existsSync(folder),false);
+ assert.doesNotThrow(()=>store.importProject({...input,expected:deleted.raw.trajectories}));
+});

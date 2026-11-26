@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">鸿眸瓶安</string>
+    <string name="terminal">鸿眸瓶安 · 工位终端</string>
+    <string name="platform_address">平台地址</string>
+    <string name="address_hint">电脑局域网 IP:5174</string>
+    <string name="invalid_address">请输入有效的平台地址，例如 192.168.1.20:5174。</string>
+    <string name="connect">保存并进入</string>
+    <string name="retry">重试</string>
+    <string name="connection_failed">无法打开平台</string>
+    <string name="network_hint">请确认平板和电脑连接同一个局域网，且电脑上的平台已启动。</string>
+    <string name="http_error">平台返回 HTTP %1$d。</string>
+    <string name="navigation_blocked">此链接与当前平台地址不同。</string>
+    <string name="media_request">只在信任此平台时允许使用相机或麦克风。</string>
+    <string name="choose_file_failed">设备上没有可用的文件选择器。</string>
+</resources>

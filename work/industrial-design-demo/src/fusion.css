@@ -62,7 +62,8 @@
 .demo-shell[data-color-mode] .demo-nav{background:var(--fusion-surface);border-bottom:1px solid var(--fusion-line);box-shadow:none}
 /* Replace legacy glass overrides on the three rebuilt surfaces. */
 .demo-shell[data-color-mode] .display-app,.demo-shell[data-color-mode] .station-app,.demo-shell[data-color-mode] .admin-app{background:var(--fusion-paper)!important}
-.demo-shell[data-color-mode] .demo-nav{background:var(--fusion-surface)!important}
+.demo-shell[data-color-mode] .demo-nav{background:linear-gradient(135deg,#edf4fa,#dce9f5)!important}
+.demo-shell[data-color-mode=dark] .demo-nav{background:linear-gradient(135deg,#2b3e53,#1c2b3c)!important}
 .demo-shell[data-color-mode] .station-app .instrument-shell{background:linear-gradient(125deg,#e4e8ef,#bdc6d3 48%,#edf0f5)!important;border:1px solid #aab5c5!important;box-shadow:inset 0 2px 1px #fff,0 7px 0 #9ba8ba,0 20px 35px #182d4b20!important}
 .demo-shell[data-color-mode] .station-app .control-instrument{background:linear-gradient(150deg,#26364e,#101b2b)!important;color:#eaf1fc;border:1px solid #101b2b!important;box-shadow:inset 0 1px 1px #647993!important}
 .demo-shell[data-color-mode] .station-app .measurement{background:linear-gradient(150deg,#0c1928,#192d43)!important;border:1px solid #465976!important;box-shadow:inset 0 4px 14px #0008!important}

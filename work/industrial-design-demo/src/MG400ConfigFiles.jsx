@@ -1,12 +1,13 @@
 import {useEffect,useState} from 'react';
+import {FolderOpen,Trash2} from 'lucide-react';
 import {api} from './TwinState';
 const labels={communication:'通信',protocol:'协议'};
 export default function MG400ConfigFiles({canConfigure,connected=false,robotStatus=null,onSaved,scope='connection'}){
  const trajectoryMode=scope==='trajectory';
- const [files,setFiles]=useState([]),[key,setKey]=useState(trajectoryMode?'trajectories':'communication'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[projectName,setProjectName]=useState(''),[displayName,setDisplayName]=useState(''),[projectFiles,setProjectFiles]=useState([]);
+ const [files,setFiles]=useState([]),[key,setKey]=useState(trajectoryMode?'trajectories':'communication'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[projectName,setProjectName]=useState(''),[displayName,setDisplayName]=useState(''),[projectFiles,setProjectFiles]=useState([]),[deleting,setDeleting]=useState(null);
  useEffect(()=>{
   if(!canConfigure)return;let active=true;
-  api('/api/ops/mg400/files').then(data=>{if(active){setFiles(data.files);onSaved(data.config);}}).catch(error=>{if(active)setMessage(error.message);});
+  api('/api/ops/mg400/files').then(data=>{if(active){setFiles(data.files);onSaved(data.config,data.files);}}).catch(error=>{if(active)setMessage(error.message);});
   return()=>{active=false;};
  },[canConfigure]);
  const file=files.find(f=>f.key===key);
@@ -22,7 +23,7 @@ export default function MG400ConfigFiles({canConfigure,connected=false,robotStat
  const upload=async event=>{
   const selected=event.target.files?.[0];event.target.value='';if(!selected)return;
   if(!selected.name.toLowerCase().endsWith('.json')||selected.size>100000){setMessage('请选择100 KB以内的JSON配置文件');return;}
-  setBusy(true);setMessage('');try{const content=await selected.text();JSON.parse(content);const result=await api('/api/ops/mg400/files',{key,content,expected:file.content});setFiles(result.files);onSaved(result.config);setMessage(result.message);}catch(error){setMessage(error.message);}finally{setBusy(false);}
+  setBusy(true);setMessage('');try{const content=await selected.text();JSON.parse(content);const result=await api('/api/ops/mg400/files',{key,content,expected:file.content});setFiles(result.files);onSaved(result.config,result.files);setMessage(result.message);}catch(error){setMessage(error.message);}finally{setBusy(false);}
  };
  const chooseProject=event=>{
   const selected=Array.from(event.target.files||[]);setProjectFiles(selected);setMessage('');
@@ -35,7 +36,15 @@ export default function MG400ConfigFiles({canConfigure,connected=false,robotStat
    if(projectFiles.length>100||projectFiles.reduce((sum,f)=>sum+f.size,0)>2*1024*1024)throw Error('最多100个文件，总大小不能超过2 MB');
    const files=await Promise.all(projectFiles.map(async f=>{const bytes=new Uint8Array(await f.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));return {path:f.webkitRelativePath.split('/').slice(1).join('/'),data:btoa(binary)};}));
    const result=await api('/api/ops/mg400/projects',{projectName,name:displayName,files,expected:file.content});
-   setFiles(result.files);onSaved(result.config);setProjectFiles([]);setMessage(result.message);
+   setFiles(result.files);onSaved(result.config,result.files);setProjectFiles([]);setMessage(result.message);
+  }catch(error){setMessage(error.message);}finally{setBusy(false);}
+ };
+ const deleteProject=async preset=>{
+  if(!file||uploadDisabled)return;
+  setBusy(true);setMessage('');
+  try{
+   const result=await api('/api/ops/mg400/projects/delete',{projectName:preset.projectName,expected:file.content});
+   setFiles(result.files);onSaved(result.config,result.files);setDeleting(null);setMessage(result.message);
   }catch(error){setMessage(error.message);}finally{setBusy(false);}
  };
  if(!canConfigure)return <p>仅管理员和工艺工程师可打开机械臂配置。</p>;
@@ -50,8 +59,16 @@ export default function MG400ConfigFiles({canConfigure,connected=false,robotStat
    <button type="submit" disabled={uploadDisabled||!file||!projectFiles.length}>{busy?'正在保存…':'添加轨迹工程'}</button>
   </form>
   <h4>已登记工程</h4>
-  <ul className="mg400-preset-list">{presets.map(preset=><li key={preset.projectName}><div><strong>{preset.name}</strong><p>控制器工程名：{preset.projectName}</p><code>config/{preset.packagePath}/</code></div><button type="button" disabled={busy} onClick={()=>openFolder(preset.projectName)}>打开工程文件夹</button></li>)}</ul>
-  {projectBlocked&&<p role="status">{robotStatus?.externalControl?'请先停止外部测试或手动动作。':'请停止工程并确认机械臂已上使能、反馈空闲后再添加；无需断电。'}</p>}
+  {presets.length===0&&<p>{file?'暂无轨迹工程':'正在读取轨迹工程…'}</p>}
+  <ul className="mg400-preset-list">{presets.map(preset=><li key={preset.projectName}>
+   <div><strong>{preset.name}</strong>{robotStatus?.config?.project===preset.projectName&&<span className="mg400-current-preset">当前已选</span>}<p>控制器工程名：<code>{preset.projectName}</code></p></div>
+   <div className="mg400-preset-actions">
+    <button type="button" disabled={busy} title="打开工程文件夹" aria-label={`打开 ${preset.projectName} 工程文件夹`} onClick={()=>openFolder(preset.projectName)}><FolderOpen size={17}/></button>
+    <button type="button" className="mg400-danger" disabled={uploadDisabled} title="删除轨迹工程" aria-label={`删除 ${preset.projectName}`} onClick={()=>{setDeleting(preset.projectName);setMessage('');}}><Trash2 size={17}/></button>
+   </div>
+   {deleting===preset.projectName&&<div className="mg400-delete-confirm"><p>删除 {preset.name} 的平台副本？控制器中的同名工程会保留。{robotStatus?.config?.project===preset.projectName?'删除后需重新选择运行工程。':''}</p><div className="mg400-preset-actions"><button type="button" disabled={busy} onClick={()=>setDeleting(null)}>取消</button><button type="button" className="mg400-danger" disabled={uploadDisabled} onClick={()=>deleteProject(preset)}>确认删除</button></div></div>}
+  </li>)}</ul>
+  {projectBlocked&&<p role="status">{robotStatus?.externalControl?'请先停止外部测试或手动动作。':'请停止工程并确认机械臂已上使能、反馈空闲后再管理轨迹；无需断电。'}</p>}
   {message&&<p role="status">{message}</p>}
  </section>;
  return <section className="mg400-file-editor">

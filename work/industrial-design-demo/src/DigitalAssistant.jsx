@@ -5,6 +5,7 @@ import { animate } from 'animejs';
 import { api, recordEvent, useTwin } from './TwinState';
 import { ReportText } from './ui';
 import AssistantPetPanel from './AssistantPetPanel';
+import { localVoices, speechChunks, voicePreviewText } from './assistant-voices.js';
 import { petActions, petDisplayDefaults, petLevel, petReward, petSizeRange, petStorageKey, readPet, updatePet } from './assistant-pet';
 import {
   ArrowLeft, ArrowUp, Bell, Bot, Check, ChevronDown, ChevronRight, ChevronUp, Clock3, ListChecks, MessageSquare,
@@ -18,7 +19,37 @@ import {
 
 const MAX_RUNS = 80;
 const autoSpeakKey = 'hongmou-assistant-auto-speak';
-const voicePreview = { id: 'voice-preview', answer: '你好，我是鸿眸助手。今天的产线运行得怎么样？我们一起看看吧。' };
+const speechVoiceKey = 'hongmou-assistant-speech-voice';
+const speechRateKey = 'hongmou-assistant-speech-rate';
+const speechVolumeKey = 'hongmou-assistant-speech-volume';
+const savedNumber = (key, min, max, fallback) => {
+  try {
+    const value = Number(localStorage.getItem(key) ?? fallback);
+    if (value >= min && value <= max) return value;
+  } catch {}
+  return fallback;
+};
+const voiceId = (voice) => voice.voiceURI || voice.name;
+const isChineseVoice = (voice) => /zh|cmn|chinese|中文|普通话/i.test(`${voice.lang} ${voice.name}`);
+const voiceRank = (voice) => {
+  if (/natural|neural|online|xiaoxiao|xiaoyi|yunxi|yunjian|晓晓|晓伊|云希|云健/i.test(voice.name)) return 0;
+  if (/huihui|yaoyao|kangkang|tingting|慧慧|瑶瑶|康康|婷婷/i.test(voice.name)) return 1;
+  return 2;
+};
+const voiceLabel = (voice) => voice.name
+  .replace(/^Microsoft\s+/i, '')
+  .replace(/\s*-\s*Chinese.*$/i, '')
+  .replace(/\s+Online\b/i, '')
+  .replace(/\s*\(Natural\)/i, ' · 自然')
+  .replace(/\s*\(.*?\)\s*$/, '')
+  .trim() || voice.name;
+const availableSpeechVoices = (synth) => {
+  let voices;
+  try { voices = Array.from(synth?.getVoices() ?? []); } catch { voices = []; }
+  const chinese = voices.filter(isChineseVoice);
+  return chinese.length ? chinese.sort((a, b) => voiceRank(a) - voiceRank(b)) : voices;
+};
+const voicePreview = { id: 'voice-preview', answer: voicePreviewText };
 const fontSizeKey = 'hongmou-assistant-font-size';
 const interfaceScaleKey = 'hongmou-assistant-interface-scale';
 const minFontSize = 12;
@@ -30,13 +61,13 @@ const interfaceScaleRange = { min: 75, max: 150, default: 100 };
 const alarmModes = { simulation: '模拟数据', real: '真实数据', mixed: '混合数据' };
 const reportStatuses = { pending: '等待分析', analyzing: '正在分析', completed: '报告已生成', failed: '分析未完成' };
 
-const robotStates = { idle: '待机', listening: '正在聆听', thinking: '正在处理', speaking: '正在播报', paused: '播报已暂停' };
+const robotStates = { idle: '待机', listening: '正在聆听', thinking: '正在处理', speaking: '正在播报', paused: '播报已暂停', alarm: '收到新告警' };
 
-function AssistantRobot({ state = 'idle', size = 32, motion = true, idle = true, gesture, gear, outfit }) {
+function AssistantRobot({ state = 'idle', size = 32, motion = true, follow = false, idle = true, gesture, gear, outfit }) {
   const root = useRef(null);
   const id = useId();
   useEffect(() => {
-    if (!motion) return;
+    if (!motion && state !== 'alarm') return;
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
     let animations = [];
     const sync = () => {
@@ -45,7 +76,12 @@ function AssistantRobot({ state = 'idle', size = 32, motion = true, idle = true,
       if (preference.matches || state === 'paused') return;
       const part = (name) => root.current.querySelector(`[data-part="${name}"]`);
       const loop = (name, options) => animations.push(animate(part(name), { loop: true, ...options }));
-      if (gesture) {
+      if (state === 'alarm') {
+        loop('shiver', { translateX: [0, -1.7, 1.5, -1.1, 0], rotate: [0, -2.4, 2, -1.5, 0], translateY: [0, -1.4, .3, -1, 0], duration: 460, loopDelay: 380, ease: 'inOutSine' });
+        for (const [name, delay] of [['sweat-left', 0], ['sweat-right', 370]]) {
+          loop(name, { translateY: [-3, 6], opacity: [0, 1, 1, 0], scale: [.6, 1, .75], duration: 950, delay, loopDelay: 320, ease: 'outQuad' });
+        }
+      } else if (gesture) {
         const head = part('head');
         const gestures = {
           greet: { rotate: [0, -12, 10, -8, 0], translateY: [0, -4, 0], duration: 1300 },
@@ -60,7 +96,7 @@ function AssistantRobot({ state = 'idle', size = 32, motion = true, idle = true,
       } else if (state === 'idle' && idle) {
         loop('head', { translateY: [0, -2.5], rotate: [0, 2], duration: 2050, alternate: true, ease: 'inOutSine' });
         loop('eyes', { scaleY: [1, 0.13, 1], duration: 240, loopDelay: 3200, delay: 850 });
-        loop('look', { translateX: [0, -7, 0, 6, 0], duration: 3300, loopDelay: 1400, ease: 'inOutSine' });
+        if (!follow) loop('look', { translateX: [0, -7, 0, 6, 0], duration: 3300, loopDelay: 1400, ease: 'inOutSine' });
       } else if (state === 'listening') {
         loop('head', { rotate: [0, -5], duration: 840, alternate: true, ease: 'inOutSine' });
         loop('antenna', { opacity: [0.4, 1], duration: 490, alternate: true });
@@ -77,7 +113,50 @@ function AssistantRobot({ state = 'idle', size = 32, motion = true, idle = true,
       preference.removeEventListener('change', sync);
       animations.forEach((animation) => animation.revert());
     };
-  }, [motion, state, idle, gesture]);
+  }, [motion, state, idle, gesture, follow]);
+
+  useEffect(() => {
+    if (!follow || !motion || gesture || state === 'alarm') return;
+    const svg = root.current;
+    const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let raf = 0;
+    let pointer;
+    const reset = () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      for (const property of ['--gaze-x', '--gaze-y', '--lean', '--stretch-x', '--stretch-y']) svg.style.removeProperty(property);
+    };
+    const move = (event) => {
+      if (preference.matches || event.pointerType === 'touch' || event.buttons) return;
+      pointer = event;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const {left, top, width, height} = svg.getBoundingClientRect();
+        const dx = pointer.clientX - (left + width / 2);
+        const dy = pointer.clientY - (top + height * .47);
+        const distance = Math.max(88, Math.hypot(dx, dy));
+        const x = dx / distance, y = dy / distance;
+        svg.style.setProperty('--gaze-x', `${x * 6}px`);
+        svg.style.setProperty('--gaze-y', `${y * 4}px`);
+        svg.style.setProperty('--lean', `${x * 3}deg`);
+        svg.style.setProperty('--stretch-x', String(1 + Math.abs(x) * .055 - Math.abs(y) * .025));
+        svg.style.setProperty('--stretch-y', String(1 + Math.abs(y) * .06 - Math.abs(x) * .02));
+      });
+    };
+    const outside = (event) => { if (!event.relatedTarget) reset(); };
+    window.addEventListener('pointermove', move, { passive: true });
+    window.addEventListener('pointerout', outside);
+    window.addEventListener('blur', reset);
+    preference.addEventListener('change', reset);
+    return () => {
+      reset();
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerout', outside);
+      window.removeEventListener('blur', reset);
+      preference.removeEventListener('change', reset);
+    };
+  }, [follow, motion, gesture, state]);
 
   const shellColors = outfit === 'amber' ? ['#fff3d9', '#e6ae62', '#a66638'] : outfit === 'mint' ? ['#edfdf4', '#8fcfbd', '#498c80'] : ['#fcfeff', '#bed0d9', '#7d99aa'];
   return <svg ref={root} className="ai-robot" data-state={state} data-gesture={gesture} data-gear={gear} data-outfit={outfit} width={size} height={size} viewBox="0 0 120 112" role="img" aria-label={`巡检机器人：${robotStates[state]}`}>
@@ -91,6 +170,7 @@ function AssistantRobot({ state = 'idle', size = 32, motion = true, idle = true,
       <clipPath id={`${id}-scan`}><rect x="28" y="36" width="64" height="30" rx="9"/></clipPath>
     </defs>
     <ellipse cx="60" cy="105" rx="35" ry="4" fill="#345264" opacity=".18"/>
+    <g data-part="shiver"><g data-part="posture">
     <path d="M35 80h50l14 13-4 10H25l-4-10z" fill="#344a58" stroke="#263c49" strokeWidth="2.5"/>
     <path d="M38 81h44l11 12-7 5H34l-7-5z" fill={`url(#${id}-shell)`}/>
     <path d="M48 89h24l4 5H44z" fill="#536a78"/>
@@ -103,10 +183,16 @@ function AssistantRobot({ state = 'idle', size = 32, motion = true, idle = true,
       <path d="M34 31h31m-36 4-4 4v25" stroke="#fff" strokeOpacity=".76" strokeWidth="2" strokeLinecap="round" fill="none"/>
       <rect x="28" y="36" width="64" height="30" rx="9" fill={`url(#${id}-visor)`} stroke="#526e7d" strokeWidth="1.25"/>
       <path d="M36 40h47" stroke="#8ab3bd" strokeOpacity=".48" strokeLinecap="round"/>
-      <g data-part="look"><g data-part="eyes" fill="currentColor">
+      <g data-part="gaze"><g data-part="look"><g data-part="eyes" fill="currentColor">
         <rect x="40" y="45" width="12" height="12" rx="4"/>
         <rect x="68" y="45" width="12" height="12" rx="4"/>
-      </g></g>
+      </g></g></g>
+      {state === 'alarm' && <g fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M37 43l12-3m34 3-12-3" />
+        <ellipse cx="44" cy="51" rx="3.7" ry="5.5" fill="currentColor" stroke="none" />
+        <ellipse cx="76" cy="51" rx="3.7" ry="5.5" fill="currentColor" stroke="none" />
+        <path d="M55 60q5-5 10 0" />
+      </g>}
       <g clipPath={`url(#${id}-scan)`}><path data-part="scan" d="M63 39l-8 25" stroke="currentColor" strokeWidth="5" strokeLinecap="round"/></g>
       <g data-part="mouth" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round">
         <path d="M54 73v3m6-5v7m6-5v3"/>
@@ -114,7 +200,11 @@ function AssistantRobot({ state = 'idle', size = 32, motion = true, idle = true,
       <path d="M34 72h6m40 0h6" stroke="#536d7c" strokeWidth="2.5" strokeLinecap="round"/>
       {gear === 'beacon' && <><path d="M43 27v-6h24v6z" fill="#263c49"/><rect x="44" y="17" width="10" height="7" rx="2" fill="#ffad51"/><rect x="56" y="17" width="10" height="7" rx="2" fill="#6af1dc"/></>}
       {gear === 'headset' && <><rect x="9" y="44" width="13" height="24" rx="4" fill="#347790" stroke="#263c49" strokeWidth="2"/><rect x="98" y="44" width="13" height="24" rx="4" fill="#347790" stroke="#263c49" strokeWidth="2"/><path d="M104 65v9H86" fill="none" stroke="#26465b" strokeWidth="3" strokeLinecap="round"/></>}
-    </g>
+    </g></g></g>
+    {state === 'alarm' && <g fill="#75d9ff" stroke="#2f83a6" strokeWidth="1">
+      <path data-part="sweat-left" d="M25 8c-2 5-6 8-6 12a6 6 0 0 0 12 0c0-4-4-7-6-12z" />
+      <path data-part="sweat-right" d="M105 14c-2 4-5 7-5 10a5 5 0 0 0 10 0c0-3-3-6-5-10z" />
+    </g>}
   </svg>;
 }
 
@@ -152,13 +242,22 @@ function ScenarioRows({ title, name, result, rows, onChange }) {
   </details>;
 }
 
-export default function DigitalAssistant({ route }) {
+export default function DigitalAssistant({ route, alarmPulse }) {
   const { dataMode } = useTwin();
   const [open, setOpen] = useState(false);
+  const [alarmed, setAlarmed] = useState(false);
+  useEffect(() => {
+    if (!alarmPulse || alarmPulse.mode !== dataMode) { setAlarmed(false); return; }
+    const remaining = 6800 - (Date.now() - alarmPulse.at);
+    if (remaining <= 0) { setAlarmed(false); return; }
+    setAlarmed(true);
+    const timer = window.setTimeout(() => setAlarmed(false), remaining);
+    return () => window.clearTimeout(timer);
+  }, [alarmPulse, dataMode]);
   const [robotMenuOpen, setRobotMenuOpen] = useState(false);
   const [pet, setPet] = useState(readPet);
   const [petGesture, setPetGesture] = useState(null);
-  const { size: robotSize, mini, idle: robotIdle, locked: robotLocked } = pet.display;
+  const { size: robotSize, mini, idle: robotIdle, follow: robotFollow, locked: robotLocked } = pet.display;
   const petRobot = { idle: robotIdle, gear: pet.gear, outfit: pet.outfit };
   const dispatchPet = (action) => setPet((current) => updatePet(current, action));
   const setPetDisplay = (value) => dispatchPet({ type: 'display', value });
@@ -184,6 +283,26 @@ export default function DigitalAssistant({ route }) {
   const [autoSpeak, setAutoSpeak] = useState(() => {
     try { return localStorage.getItem(autoSpeakKey) === 'true'; } catch { return false; }
   });
+  const speechSupported = !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
+  const speechVoiceLabel = useId();
+  const [speechRate, setSpeechRate] = useState(() => savedNumber(speechRateKey, .6, 1.8, 1.1));
+  const [speechVolume, setSpeechVolume] = useState(() => savedNumber(speechVolumeKey, 0, 1, 1));
+  const speechSettings = useRef({});
+  speechSettings.current = { rate: speechRate, volume: speechVolume };
+  const [speechVoices, setSpeechVoices] = useState([]);
+  const [speechVoice, setSpeechVoice] = useState(() => {
+    try { return localStorage.getItem(speechVoiceKey) || ''; } catch { return ''; }
+  });
+  const activeVoice = localVoices.some(({ id }) => id === speechVoice) || speechVoices.some((voice) => voiceId(voice) === speechVoice)
+    ? speechVoice : '';
+  useEffect(() => {
+    if (!speechSupported) return;
+    const synth = window.speechSynthesis;
+    const loadVoices = () => setSpeechVoices(availableSpeechVoices(synth));
+    synth.addEventListener('voiceschanged', loadVoices);
+    loadVoices();
+    return () => synth.removeEventListener('voiceschanged', loadVoices);
+  }, [speechSupported]);
   const [fontSize, setFontSize] = useState(() => {
     try {
       const saved = Number(localStorage.getItem(fontSizeKey));
@@ -220,12 +339,12 @@ export default function DigitalAssistant({ route }) {
   const hoveredRef = useRef(null);
   const selectedElementRef = useRef(null);
   const recognitionRef = useRef(null);
-  const utteranceRef = useRef(null);
+  const nativeSpeechPending = useRef(false);
+  const playbackRef = useRef(null);
   const lastReplyId = useRef(runs[0]?.id);
   const voiceActionRef = useRef(null);
   const noticeTimerRef = useRef(null);
   const busyTimerRef = useRef(null);
-  const voiceFallbackTimerRef = useRef(null);
 
   useEffect(() => {
     try { localStorage.setItem(petStorageKey, JSON.stringify(pet)); } catch {}
@@ -300,9 +419,10 @@ export default function DigitalAssistant({ route }) {
   };
 
   const cancelSpeech = () => {
-    if (!utteranceRef.current) return;
-    utteranceRef.current = null;
-    window.speechSynthesis.cancel();
+    const playback = playbackRef.current;
+    if (!playback) return;
+    playbackRef.current = null;
+    playback.dispose();
   };
 
   const stopSpeech = () => {
@@ -311,39 +431,154 @@ export default function DigitalAssistant({ route }) {
   };
 
   const toggleSpeechPause = () => {
-    if (!speech || !utteranceRef.current) return;
-    if (speech.paused) window.speechSynthesis.resume();
-    else window.speechSynthesis.pause();
-    setSpeech({ ...speech, paused: !speech.paused });
+    const playback = playbackRef.current;
+    if (!speech || !playback) return;
+    playback.paused = !playback.paused;
+    playback.syncPause();
+    if (playbackRef.current === playback) setSpeech({ ...speech, paused: playback.paused });
   };
 
-  const speakReply = (run) => {
-    if (speech?.id === run.id && utteranceRef.current) { toggleSpeechPause(); return; }
+  const speakReply = (run, preferredVoice = activeVoice, restart = false) => {
+    if (!restart && speech?.id === run.id && playbackRef.current) { toggleSpeechPause(); return; }
+    const chunks = speechChunks(run.answer);
+    if (!chunks.length) return;
+    cancelSpeech();
     const synth = window.speechSynthesis;
-    if (!synth || !window.SpeechSynthesisUtterance) {
-      showNotice('当前浏览器不支持语音播报。');
+    const voices = availableSpeechVoices(synth);
+    const voice = voices.find((item) => voiceId(item) === preferredVoice || item.name === preferredVoice) || voices[0];
+    const localVoice = localVoices.find(({ id }) => id === preferredVoice) || (!speechSupported || !voice ? localVoices[0] : null);
+    if (localVoice) {
+      const audio = new Audio();
+      const controller = new AbortController();
+      const playback = { paused: false };
+      let objectUrl;
+      const live = () => playbackRef.current === playback;
+      const finish = (message) => {
+        if (!live()) return;
+        stopSpeech();
+        if (message) showNotice(message);
+      };
+      playback.scheduleSettings = () => {
+        audio.playbackRate = speechSettings.current.rate;
+        audio.volume = speechSettings.current.volume;
+      };
+      const playAudio = () => {
+        playback.scheduleSettings();
+        audio.play().catch((error) => {
+          if (!live() || error.name === 'AbortError') return;
+          if (error.name === 'NotAllowedError') {
+            playback.paused = true;
+            setSpeech({ id: run.id, paused: true });
+            showNotice('浏览器暂停了自动播报，请点继续播报。');
+          } else finish('音频无法播放，请重试。');
+        });
+      };
+      playback.syncPause = () => {
+        if (playback.paused) audio.pause();
+        else if (audio.hasAttribute('src')) playAudio();
+      };
+      playback.dispose = () => {
+        controller.abort();
+        audio.onended = audio.onerror = null;
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      };
+      const playChunk = async (index) => {
+        if (index >= chunks.length) { finish(); return; }
+        try {
+          const response = await fetch('/api/ai/assistant-voice', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ voice: localVoice.id, text: chunks[index] }), signal: controller.signal,
+          });
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw Error(error.error || '平台语音服务暂不可用，请重试。');
+          }
+          const blob = await response.blob();
+          if (!live()) return;
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          objectUrl = URL.createObjectURL(blob);
+          audio.src = objectUrl;
+          audio.onended = () => {
+            audio.removeAttribute('src');
+            playChunk(index + 1);
+          };
+          if (!playback.paused) playAudio();
+        } catch (error) { finish(error.message); }
+      };
+      audio.onerror = () => finish('音频无法播放，请重试。');
+      playbackRef.current = playback;
+      setSpeech({ id: run.id, paused: false });
+      if (run.id === voicePreview.id) {
+        audio.src = `/assistant-voices/${localVoice.sample}`;
+        audio.onended = () => finish();
+        playAudio();
+      } else playChunk(0);
       return;
     }
-    cancelSpeech();
-    const utterance = new window.SpeechSynthesisUtterance(run.answer);
-    utterance.lang = 'zh-CN';
-    utterance.rate = 1.08;
-    utterance.pitch = 1.12;
-    const localVoices = synth.getVoices().filter((voice) => voice.localService && /^zh[-_]CN$/i.test(voice.lang));
-    const chineseVoice = localVoices.find((voice) => /xiaoxiao|晓晓|xiaoyi|晓伊|tingting|ting-ting|婷婷|huihui|慧慧/i.test(voice.name)) || localVoices[0];
-    if (chineseVoice) utterance.voice = chineseVoice;
-    const finish = (event) => {
-      if (utteranceRef.current !== utterance) return;
-      utteranceRef.current = null;
-      setSpeech(null);
-      if (event.type === 'error') showNotice('语音播报失败，请检查浏览器或系统的中文语音设置。');
+    const playback = { utterance: null, index: 0, paused: false, settingsTimer: null };
+    const live = () => playbackRef.current === playback;
+    const cancelUtterance = () => {
+      if (!playback.utterance) return;
+      playback.utterance.onend = playback.utterance.onerror = null;
+      playback.utterance = null;
+      synth.cancel();
     };
-    utterance.onend = finish;
-    utterance.onerror = finish;
-    utteranceRef.current = utterance;
+    playback.dispose = () => {
+      clearTimeout(playback.settingsTimer);
+      cancelUtterance();
+    };
+    const finish = (message) => {
+      if (!live()) return;
+      stopSpeech();
+      if (message) showNotice(message);
+    };
+    const playChunk = (index) => {
+      if (!live()) return;
+      if (index >= chunks.length) { finish(); return; }
+      const utterance = new window.SpeechSynthesisUtterance(run.id === voicePreview.id ? '你好，这里是这个音色的试听。' : chunks[index]);
+      utterance.lang = voice?.lang || 'zh-CN';
+      utterance.rate = speechSettings.current.rate;
+      utterance.pitch = 1.08;
+      utterance.volume = speechSettings.current.volume;
+      if (voice) utterance.voice = voice;
+      utterance.onend = () => {
+        if (playback.utterance !== utterance) return;
+        playback.utterance = null;
+        playChunk(index + 1);
+      };
+      utterance.onerror = () => {
+        if (live()) speakReply(run, localVoices[0].id, true);
+      };
+      playback.index = index;
+      playback.utterance = utterance;
+      try {
+        if (synth.paused) synth.resume();
+        synth.speak(utterance);
+      } catch { if (live()) speakReply(run, localVoices[0].id, true); }
+    };
+    const applySettings = () => {
+      const { utterance, index } = playback;
+      const { rate, volume } = speechSettings.current;
+      if (!live() || playback.paused || !utterance || (utterance.rate === rate && utterance.volume === volume)) return false;
+      cancelUtterance();
+      playChunk(index);
+      return true;
+    };
+    playback.scheduleSettings = () => {
+      clearTimeout(playback.settingsTimer);
+      // Restart just the current chunk after the slider stops moving.
+      playback.settingsTimer = setTimeout(applySettings, 220);
+    };
+    playback.syncPause = () => {
+      if (playback.paused) synth.pause();
+      else if (!applySettings()) synth.resume();
+    };
+    playbackRef.current = playback;
     setSpeech({ id: run.id, paused: false });
-    if (synth.paused) synth.resume();
-    synth.speak(utterance);
+    playChunk(0);
   };
 
   const persistRuns = (update) => {
@@ -463,54 +698,90 @@ export default function DigitalAssistant({ route }) {
     setOpen(true);
   };
 
-  const startVoiceFallback = () => {
-    const fallback = questions[(Date.now() % Math.max(questions.length, 1))] || { number: 1 };
-    setQuestion(String(fallback.number));
-    setListening(true);
-    showNotice('语音服务不可用，已启用固定问答语音演示；可直接发送当前问题。');
-    window.clearTimeout(voiceFallbackTimerRef.current);
-    voiceFallbackTimerRef.current = window.setTimeout(() => setListening(false), 900);
-    inputRef.current?.focus();
+  const stopRecognition = () => {
+    const session = recognitionRef.current;
+    recognitionRef.current = null;
+    nativeSpeechPending.current = false;
+    if (!session) return;
+    clearTimeout(session.timeout);
+    session.stream?.getTracks().forEach((track) => track.stop());
+    if (session.recognition) {
+      const rec = session.recognition;
+      rec.onresult = rec.onend = rec.onerror = null;
+      try { rec.abort(); } catch {}
+    }
   };
 
-  const toggleVoice = () => {
-    if (listening) {
-      recognitionRef.current?.stop();
-      window.clearTimeout(voiceFallbackTimerRef.current);
+  useEffect(() => {
+    if (!navigator.userAgent.includes('HongmouTerminal/')) return;
+    window.HongmouSpeechResult = (transcript, error) => {
+      if (!nativeSpeechPending.current) return;
+      nativeSpeechPending.current = false;
+      setListening(false);
+      if (error) showNotice(error);
+      if (transcript) setQuestion((current) => [current.trimEnd(), transcript].filter(Boolean).join(' '));
+      inputRef.current?.focus();
+    };
+    return () => { delete window.HongmouSpeechResult; };
+  }, []);
+
+  const toggleVoice = async () => {
+    if (recognitionRef.current || nativeSpeechPending.current) {
+      stopRecognition();
       setListening(false);
       return;
     }
     setOpen(true);
     setView('chat');
-    setCompact(false);
+    setConversationView('chat');
     stopSpeech();
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition) { startVoiceFallback(); return; }
-    try {
-      const recognition = new Recognition();
-      recognitionRef.current = recognition;
-      recognition.lang = 'zh-CN';
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-      recognition.onresult = (event) => {
-        const transcript = event.results?.[0]?.[0]?.transcript?.trim();
-        if (transcript) setQuestion((current) => {
-          const leadingSpaces = current.match(/^ +/)?.[0] || '';
-          const body = current.slice(leadingSpaces.length).trimEnd();
-          return body ? `${leadingSpaces}${body} ${transcript}` : `${leadingSpaces}${transcript}`;
-        });
-        setView('chat');
-        setOpen(true);
-        inputRef.current?.focus();
-      };
-      recognition.onerror = (event) => {
-        if (['network', 'not-allowed', 'service-not-allowed', 'audio-capture'].includes(event.error)) startVoiceFallback();
-        else showNotice('语音输入未完成，请重试。');
-      };
-      recognition.onend = () => setListening(false);
-      recognition.start();
+    if (navigator.userAgent.includes('HongmouTerminal/')) {
+      nativeSpeechPending.current = true;
       setListening(true);
-    } catch { startVoiceFallback(); }
+      window.location.href = 'hongmou-terminal://speech';
+      return;
+    }
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) { showNotice('当前浏览器不支持语音输入，可使用键盘听写。'); return; }
+
+    const session = { heard: false };
+    const prefix = question.match(/^ +/)?.[0] || '';
+    recognitionRef.current = session;
+    setListening(true);
+    const finish = (message) => {
+      if (recognitionRef.current !== session) return;
+      stopRecognition();
+      setListening(false);
+      if (message) showNotice(message);
+      inputRef.current?.focus();
+    };
+    session.timeout = setTimeout(() => finish(session.heard ? '' : '没听到声音，请重试。'), 12000);
+    try {
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (recognitionRef.current !== session) { stream.getTracks().forEach((track) => track.stop()); return; }
+        session.stream = stream;
+      }
+      const rec = new Recognition();
+      session.recognition = rec;
+      rec.lang = 'zh-CN';
+      rec.interimResults = true;
+      rec.continuous = false;
+      rec.onresult = (event) => {
+        if (recognitionRef.current !== session) return;
+        const transcript = Array.from(event.results, (result) => result[0]?.transcript || '').join('').trim();
+        if (transcript) { session.heard = true; setQuestion(prefix + transcript); }
+      };
+      rec.onerror = (event) => {
+        const permission = window.isSecureContext ? '没有麦克风权限，请检查浏览器设置。' : '当前局域网 HTTP 地址的麦克风被浏览器拒绝，可使用键盘听写。';
+        finish({ 'not-allowed': permission, 'service-not-allowed': permission, 'audio-capture': '没有可用的麦克风。',
+          'no-speech': '没听到声音，请重试。', network: '浏览器的语音识别服务连不上。' }[event.error] || '语音输入没能启动。');
+      };
+      rec.onend = () => finish(session.heard ? '' : '没听到声音，请重试。');
+      rec.start();
+    } catch (error) {
+      finish(error.name === 'NotAllowedError' ? '没有麦克风权限，请检查浏览器设置。' : error.name === 'NotFoundError' ? '没有可用的麦克风。' : '语音输入没能启动。');
+    }
   };
   voiceActionRef.current = toggleVoice;
 
@@ -580,7 +851,7 @@ export default function DigitalAssistant({ route }) {
 
   useEffect(() => () => {
     cancelSpeech();
-    recognitionRef.current?.stop();
+    stopRecognition();
     window.clearTimeout(noticeTimerRef.current);
     window.clearTimeout(busyTimerRef.current);
     hoveredRef.current?.removeAttribute('data-ai-highlight');
@@ -724,13 +995,7 @@ export default function DigitalAssistant({ route }) {
     if (id !== conversationId) {
       stopRun();
       stopSpeech();
-      if (recognitionRef.current) {
-        recognitionRef.current.onresult = null;
-        recognitionRef.current.onerror = null;
-        recognitionRef.current.abort();
-        recognitionRef.current = null;
-      }
-      window.clearTimeout(voiceFallbackTimerRef.current);
+      stopRecognition();
       window.clearTimeout(noticeTimerRef.current);
       setListening(false);
       setNotice('');
@@ -962,8 +1227,21 @@ export default function DigitalAssistant({ route }) {
   const chatTitle = conversations.get(conversationId)?.title || '新对话';
   const showSidebar = !compact && (narrow ? sidebarOverlay : !sidebarCollapsed);
   const emptyChat = !compact && !activeRun && !displayedRuns.length;
-  const robotState = listening ? 'listening' : speech ? (speech.paused ? 'paused' : 'speaking') : busy ? 'thinking' : 'idle';
+  const robotState = alarmed ? 'alarm' : listening ? 'listening' : speech ? (speech.paused ? 'paused' : 'speaking') : busy ? 'thinking' : 'idle';
   const previewSpeaking = speech?.id === voicePreview.id;
+  const changeSpeechSetting = (key, value) => {
+    const rate = key === speechRateKey;
+    (rate ? setSpeechRate : setSpeechVolume)(value);
+    speechSettings.current[rate ? 'rate' : 'volume'] = value;
+    playbackRef.current?.scheduleSettings();
+    try { localStorage.setItem(key, String(value)); } catch {}
+  };
+  const changeSpeechVoice = (value) => {
+    setNotice('');
+    setSpeechVoice(value);
+    try { localStorage.setItem(speechVoiceKey, value); } catch {}
+    speakReply(voicePreview, value, true);
+  };
   const showView = (next) => {
     if (view === 'settings' && next !== 'settings' && previewSpeaking) stopSpeech();
     setView(next);
@@ -1004,7 +1282,7 @@ export default function DigitalAssistant({ route }) {
         <button type="button" className="ai-robot-launch" aria-label="鸿眸助手" aria-controls={robotMenuOpen ? robotMenuId : undefined} aria-expanded={robotMenuOpen} title="单击设置，双击打开对话" {...dragHandlers} onClick={(event) => {
           if (suppressClick.current) { suppressClick.current = false; return; }
           if (event.detail < 2) setRobotMenuOpen((current) => !current);
-        }} onDoubleClick={() => openFromRobot('chat')}><AssistantRobot {...petRobot} gesture={petGesture} size={robotSize} /></button>
+        }} onDoubleClick={() => openFromRobot('chat')}><AssistantRobot {...petRobot} follow={robotFollow} state={alarmed ? 'alarm' : 'idle'} gesture={petGesture} size={robotSize} /></button>
         {robotMenuOpen && <section id={robotMenuId} className="ai-robot-menu" aria-label="机器人快捷设置" style={robotMenuStyle}>
           {renderRobotSize()}
           <div className="ai-robot-menu-actions ai-robot-menu-toggles">
@@ -1034,7 +1312,7 @@ export default function DigitalAssistant({ route }) {
             showView(view === 'settings' ? 'chat' : 'settings');
           }}><Settings2 size={19} /></button>
           <button className="ai-header-action" aria-label="关闭助手" title="关闭助手" onClick={() => {
-            stopSpeech(); unlock(); setInspect(false); setCompact(false); setSidebarOverlay(false); setOpen(false);
+            stopSpeech(); stopRecognition(); setListening(false); unlock(); setInspect(false); setCompact(false); setSidebarOverlay(false); setOpen(false);
           }}><X size={20} /></button>
         </header>
         {!compact && <button type="button" className="ai-resize-handle" aria-label="调整对话框大小" title="拖动调整对话框大小" {...resizeHandlers}><MoveDiagonal size={14} /></button>}
@@ -1064,19 +1342,45 @@ export default function DigitalAssistant({ route }) {
           <button type="button" aria-pressed={conversationView === 'chat'} onClick={() => setConversationView('chat')}>对话</button>
           <button type="button" aria-pressed={conversationView === 'trace'} onClick={() => setConversationView('trace')}>轨迹</button>
         </nav>}
-        {view === 'pet' || view === 'pet-shop' ? <AssistantPetPanel view={view} pet={pet} preview={<AssistantRobot {...petRobot} gesture={petGesture} size={112} />} onAction={playPetAction} dispatch={dispatchPet} showView={showView} /> : view === 'settings' ? <section className="ai-qa-settings" aria-label="助手设置">
+        {view === 'pet' || view === 'pet-shop' ? <AssistantPetPanel view={view} pet={pet} preview={<AssistantRobot {...petRobot} follow={robotFollow} state={alarmed ? 'alarm' : 'idle'} gesture={petGesture} size={112} />} onAction={playPetAction} dispatch={dispatchPet} showView={showView} /> : view === 'settings' ? <section className="ai-qa-settings" aria-label="助手设置">
           <div className="ai-settings-scroll">
           <div className="ai-qa-settings-heading"><strong>桌面机器人</strong><button type="button" onClick={resetPetDisplay}><RotateCcw size={15} />恢复默认</button></div>
           {renderRobotSize()}
           <label className="ai-speech-setting">迷你模式<input type="checkbox" role="switch" checked={mini} onChange={(event) => setPetDisplay({ mini: event.target.checked })} /></label>
           <label className="ai-speech-setting">待机动画<input type="checkbox" role="switch" checked={robotIdle} onChange={(event) => setPetDisplay({ idle: event.target.checked })} /></label>
+          <label className="ai-speech-setting">鼠标跟随<input type="checkbox" role="switch" checked={robotFollow} onChange={(event) => setPetDisplay({ follow: event.target.checked })} /></label>
           <label className="ai-speech-setting">锁定机器人位置<input type="checkbox" role="switch" checked={robotLocked} onChange={(event) => setPetDisplay({ locked: event.target.checked })} /></label>
           <div className="ai-qa-settings-heading"><strong>对话与播报</strong></div>
           <label className="ai-speech-setting"><Volume2 size={16} />自动播报回复<input type="checkbox" role="switch" checked={autoSpeak} onChange={(event) => changeAutoSpeak(event.target.checked)} /></label>
+          <label className="ai-font-setting ai-speech-range">
+            <span>播报语速</span><input type="range" min="0.6" max="1.8" step="0.05" value={speechRate} onChange={(event) => changeSpeechSetting(speechRateKey, event.target.valueAsNumber)} />
+            <span className="ai-font-value">{speechRate.toFixed(2)}×</span>
+          </label>
+          <label className="ai-font-setting ai-speech-range">
+            <span>播报音量</span><input type="range" min="0" max="1" step="0.05" value={speechVolume} onChange={(event) => changeSpeechSetting(speechVolumeKey, event.target.valueAsNumber)} />
+            <span className="ai-font-value">{Math.round(speechVolume * 100)}%</span>
+          </label>
           <div className="ai-voice-preview">
-            <button type="button" onClick={() => previewSpeaking ? stopSpeech() : speakReply(voicePreview)}>
-              {previewSpeaking ? <Square size={14} /> : <Play size={14} />}{previewSpeaking ? '停止试听' : '试听播报声音'}
+            <label>
+              <span id={speechVoiceLabel}>播报音色</span>
+              <select aria-labelledby={speechVoiceLabel} value={activeVoice} onChange={(event) => changeSpeechVoice(event.target.value)}>
+                <option value="">自动（优先自然音色）</option>
+                {speechVoices.length > 0 && <optgroup label="本机系统音色">
+                  {speechVoices.map((voice) => <option key={voiceId(voice)} value={voiceId(voice)}>{voiceLabel(voice)}</option>)}
+                </optgroup>}
+                <optgroup label="平台音色">
+                  {localVoices.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}
+                </optgroup>
+              </select>
+            </label>
+            <button type="button" onClick={() => {
+              setNotice('');
+              if (previewSpeaking && !speech.paused) stopSpeech();
+              else speakReply(voicePreview);
+            }}>
+              {previewSpeaking && !speech.paused ? <Square size={16} /> : <Play size={16} />}{previewSpeaking ? speech.paused ? '继续试听' : '停止试听' : '试听音色'}
             </button>
+            <small>自动模式优先使用系统音色。系统音色不可用时，使用平台音色。</small>
             {notice && <p role="status">{notice}</p>}
           </div>
           <label className="ai-font-setting">
@@ -1123,7 +1427,7 @@ export default function DigitalAssistant({ route }) {
           </section>}
 
           {view === 'chat' && (compact || conversationView === 'chat') && <div className={`ai-chat-stage${emptyChat ? ' is-empty' : ''}`}>
-            {emptyChat && <div className="ai-chat-welcome"><AssistantRobot {...petRobot} state={robotState} size={92} /><h2>鸿眸助手</h2></div>}
+            {emptyChat && <div className="ai-chat-welcome"><AssistantRobot {...petRobot} follow={robotFollow} state={robotState} size={92} /><h2>鸿眸助手</h2></div>}
             {!emptyChat && !compact && <div className="ai-messages" ref={logRef} aria-live="polite">
               {conversationRuns.map((run) => renderRun(run, run.id === activeRun?.run.id ? activeRun : null))}
               {!activeRun && displayedRuns.at(-1)?.id === pet.lastRun && <p className="ai-pet-reward"><Coins size={14} />+{petReward.xp} XP · +{petReward.tokens} Token 币</p>}

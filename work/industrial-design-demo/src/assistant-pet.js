@@ -18,7 +18,7 @@ export const petShop = {
   amber: { name: '琥珀工装', kind: 'outfit', price: 30, detail: '暖橙机壳' },
   mint: { name: '薄荷工装', kind: 'outfit', price: 40, detail: '薄荷绿机壳' },
 };
-export const petDisplayDefaults = { size: petSizeRange.default, mini: false, idle: true, locked: false };
+export const petDisplayDefaults = { size: petSizeRange.default, mini: false, idle: true, follow: true, locked: false };
 const initialPet = {
   xp: 0, tokens: 0, rounds: 0, lastRun: '', energy: 70, bond: 20, condition: 80,
   bag: {}, gear: null, outfit: null, display: petDisplayDefaults,

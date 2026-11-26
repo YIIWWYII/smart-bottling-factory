@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import net from 'node:net';
 import nodePath from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {validateMotionConfig} from './handoff-examples/mg400-motion-config.mjs';
 
 export const mg400Files={communication:'mg400-communication.json',protocol:'mg400-protocol.json',acquisition:'mg400-acquisition.json',trajectories:'mg400-trajectories.json',motion:'mg400-motion.json'};
@@ -98,6 +99,25 @@ export function createMG400ConfigStore(directory=new URL('./config/',import.meta
    return save('trajectories',trajectories,expected);
   }catch(error){if(nodePath.dirname(destination)===nodePath.resolve(base))fs.rmSync(destination,{recursive:true,force:true});throw error;}
  }
+ function deleteProject({projectName,expected}){
+  const current=read(),trajectories=current.values.trajectories,controller=trajectories.controller;
+  if(current.raw.trajectories!==expected)throw Error('轨迹列表已更新，请重新打开轨迹工程');
+  const preset=controller.presets?.find(item=>item.projectName===projectName);
+  if(!preset)throw Error('未找到轨迹工程');
+  if(preset.packagePath!=='mg400-projects/'+projectName||controller.presets.some(item=>item!==preset&&item.packagePath.toLowerCase()===preset.packagePath.toLowerCase()))throw Error('工程目录不是该预设独占的目录，无法删除');
+  const parent=fs.realpathSync(fileURLToPath(directory)),base=nodePath.join(parent,'mg400-projects'),folder=nodePath.join(base,projectName);
+  const baseStat=fs.lstatSync(base,{throwIfNoEntry:false}),folderStat=fs.lstatSync(folder,{throwIfNoEntry:false});
+  if((baseStat&&(!baseStat.isDirectory()||fs.realpathSync(base)!==base))||(folderStat&&(!folderStat.isDirectory()||fs.realpathSync(folder)!==folder)))throw Error('工程目录指向配置目录之外，无法删除');
+  const removed=nodePath.join(base,'.removed-'+randomUUID());
+  if(folderStat)fs.renameSync(folder,removed);
+  let saved;
+  try{
+   saved=save('trajectories',{...trajectories,controller:{...controller,defaultProject:controller.defaultProject===projectName?'':controller.defaultProject,presets:controller.presets.filter(item=>item!==preset)}},expected);
+  }catch(error){if(folderStat)fs.renameSync(removed,folder);throw error;}
+  let cleanupPending=false;
+  if(folderStat)try{fs.rmSync(removed,{recursive:true,force:true});}catch{cleanupPending=true;}
+  return {...saved,cleanupPending};
+ }
  function projectFolder(projectName){const preset=read().values.trajectories.controller.presets?.find(p=>p.projectName===projectName);if(!preset)throw Error('未找到轨迹工程');return fileURLToPath(new URL(preset.packagePath+'/',directory));}
- return {read,save,importProject,projectFolder,path:key=>fileURLToPath(path(key))};
+ return {read,save,importProject,deleteProject,projectFolder,path:key=>fileURLToPath(path(key))};
 }

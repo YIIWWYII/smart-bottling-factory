@@ -1,0 +1,5 @@
+/.gradle/
+/local.properties
+!/gradle/wrapper/gradle-wrapper.jar
+*.apk
+*.jks
