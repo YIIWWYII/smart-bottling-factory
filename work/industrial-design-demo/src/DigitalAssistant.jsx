@@ -683,8 +683,11 @@ export default function DigitalAssistant({ route, alarmPulse }) {
       return;
     }
     setOpen(true);
-    setView('chat');
-    setConversationView('chat');
+    // 点选模式下不要把面板切回完整对话：保持在当前浮层里录入语音。
+    if (!inspect) {
+      setView('chat');
+      setConversationView('chat');
+    }
     stopSpeech();
     if (navigator.userAgent.includes('HongmouTerminal/')) {
       nativeSpeechPending.current = true;
@@ -1240,6 +1243,9 @@ export default function DigitalAssistant({ route, alarmPulse }) {
             <button type="button" aria-pressed={mini} onClick={() => setPetDisplay({ mini: !mini })}>{mini ? '恢复大小' : '迷你模式'}</button>
             <button type="button" onClick={() => playPetAction('greet')}>打招呼</button>
           </div>
+          <div className="ai-robot-menu-actions ai-robot-menu-pick">
+            <button type="button" onClick={() => { setRobotMenuOpen(false); unlock(); setCompact(false); setInspect(true); }}><MousePointer2 size={15} />点选模式</button>
+          </div>
           <div className="ai-robot-menu-actions">
             <button type="button" onClick={() => openFromRobot('chat')}><MessageSquare size={15} />对话</button>
             <button type="button" onClick={() => openFromRobot('pet')}><Sparkles size={15} />养成</button>
@@ -1293,7 +1299,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
           <button type="button" aria-pressed={conversationView === 'chat'} onClick={() => setConversationView('chat')}>对话</button>
           <button type="button" aria-pressed={conversationView === 'trace'} onClick={() => setConversationView('trace')}>轨迹</button>
         </nav>}
-        {view === 'pet' || view === 'pet-shop' ? <AssistantPetPanel view={view} pet={pet} preview={<AssistantRobot {...petRobot} follow={robotFollow} state={alarmed ? 'alarm' : 'idle'} gesture={petGesture} size={112} />} onAction={playPetAction} dispatch={dispatchPet} showView={showView} /> : view === 'settings' ? <section className="ai-settings" aria-label="助手设置">
+        {view === 'pet' || view === 'pet-shop' ? <AssistantPetPanel view={view} pet={pet} preview={<AssistantRobot {...petRobot} follow={robotFollow} state={alarmed ? 'alarm' : 'idle'} gesture={petGesture} size={112} />} onAction={playPetAction} dispatch={dispatchPet} showView={showView} /> : view === 'settings' ? <section className="ai-assistant-settings" aria-label="助手设置">
           <nav className="ai-settings-tabs" aria-label="设置分类">
             {assistantSettingsSections.map(({ id, title, Icon }) => <button key={id} type="button" aria-pressed={settingsSection === id} onClick={() => setSettingsSection(id)}><Icon size={16} aria-hidden="true" /><span>{title}</span></button>)}
           </nav>
@@ -1406,9 +1412,9 @@ export default function DigitalAssistant({ route, alarmPulse }) {
                 }}
               />
               <div className="ai-composer-tools">
-                <button type="button" className="ai-pick-device" title="点选设备" aria-pressed={inspect} onClick={() => {
+                <button type="button" className="ai-pick-device" title="点选模式：选中页面上的对象后提问" aria-pressed={inspect} onClick={() => {
                   unlock(); setCompact(false); setInspect(!inspect);
-                }}><MousePointer2 size={16} />点选设备</button>
+                }}><MousePointer2 size={16} />点选模式</button>
                 {questionPreview?.number != null && <span className="ai-question-route" title={questionPreview.entry?.prompt} aria-live="polite">{questionPreview.number} · {questionPreview.entry?.prompt || '未设置回复'}</span>}
                 <button type="button" className={`ai-voice-button ${listening ? 'is-listening' : ''}`} aria-label={listening ? '停止语音输入' : '开始语音输入'} aria-pressed={listening} title={listening ? '停止语音输入' : '语音输入'} onClick={toggleVoice}><Mic size={18} /></button>
                 {busy ? <button type="button" className="ai-stop-run" aria-label="停止生成" title="停止生成" onClick={stopRun}><Square size={15} /></button>

@@ -53,10 +53,11 @@ export default function MG400ConfigFiles({canConfigure,connected=false,robotStat
   <p>选择从 DobotStudio 导出的完整工程文件夹，根目录应包含 prj.json、Lua 程序和示教点。平台保存副本并登记工程名，控制器中的工程需另行通过 DobotStudio 导入。</p>
   <form onSubmit={importProject}>
    <label className="mg400-upload">选择工程文件夹<input type="file" aria-label="选择轨迹工程文件夹" webkitdirectory="" directory="" multiple disabled={uploadDisabled||!file} onChange={chooseProject}/></label>
-   <div className="mg400-fields"><label>显示名称<input value={displayName} maxLength={100} required disabled={uploadDisabled} onChange={e=>setDisplayName(e.target.value)}/></label><label>控制器工程名<input value={projectName} maxLength={80} pattern="[A-Za-z][A-Za-z0-9_.-]{0,79}" required disabled={uploadDisabled} onChange={e=>setProjectName(e.target.value)}/></label></div>
-   <p>工程名必须与控制器里保存的名称一致。保存目录：<code>config/mg400-projects/{projectName||'工程名'}/</code>，相对于平台项目目录。</p>
+   <div className="mg400-fields"><label>显示名称<input value={displayName} maxLength={100} required disabled={uploadDisabled} onChange={e=>setDisplayName(e.target.value)}/></label><label>控制器工程名<input value={projectName} maxLength={80} pattern="blockly_[A-Za-z0-9_.-]{1,71}" required disabled={uploadDisabled} onChange={e=>setProjectName(e.target.value)}/></label></div>
+   <p>控制器工程名必须以 <code>blockly_</code> 开头，并与控制器里保存的名称逐字一致。保存目录：<code>config/mg400-projects/{projectName||'工程名'}/</code>，相对于平台项目目录。</p>
+   {projectName&&!/^blockly_[A-Za-z0-9_.-]{1,71}$/.test(projectName)&&<p role="status" className="mg400-warn">工程名需以 blockly_ 开头（当前：{projectName}），否则控制器 RunScript 找不到工程。</p>}
    {projectFiles.length>0&&<p>已选择 {projectFiles.length} 个文件，共 {(projectFiles.reduce((sum,f)=>sum+f.size,0)/1024).toFixed(1)} KB。</p>}
-   <button type="submit" disabled={uploadDisabled||!file||!projectFiles.length}>{busy?'正在保存…':'添加轨迹工程'}</button>
+   <button type="submit" disabled={uploadDisabled||!file||!projectFiles.length||!/^blockly_[A-Za-z0-9_.-]{1,71}$/.test(projectName)}>{busy?'正在保存…':'添加轨迹工程'}</button>
   </form>
   <h4>已登记工程</h4>
   {presets.length===0&&<p>{file?'暂无轨迹工程':'正在读取轨迹工程…'}</p>}

@@ -57,7 +57,16 @@ export class MG400 {
    let buffer=Buffer.alloc(0);this.feedback.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);while(buffer.length>=frameBytes){if(buffer.readUInt16LE(lengthOffset)!==frameBytes||buffer.readBigUInt64LE(magicOffset)!==BigInt(magic)){buffer=buffer.subarray(1);continue;}const frame=buffer.subarray(0,frameBytes);buffer=buffer.subarray(frameBytes);try{this.accept(parseMG400(frame));}catch(e){this.error=e.message;}}});
    this.dashboard.on('close',()=>{if(epoch===this.epoch){this.error='控制通道已断开，请检查网络并重新连接';this.pending.clear();}});
    this.feedback.on('error',e=>{this.error=e.message;});this.feedback.on('close',()=>{if(epoch===this.epoch){this.event('机械臂反馈连接断开','失败');this.error='反馈通道已断开，请检查网络并重新连接';this.receivedAt=0;this.pending.clear();}});this.event('已建立 MG400 TCP 连接，等待有效反馈');
-  }catch(e){this.close();this.error=e.message;throw e;}return this.status();
+  }catch(e){this.close();this.error=e.message;throw e;}
+  // TCP 建连不等于可用：等第一帧有效反馈，收不到就按失败处理，避免界面显示"操作完成"。
+  const deadline=Date.now()+3000;
+  while(Date.now()<deadline&&!this.receivedAt)await new Promise(resolve=>setTimeout(resolve,100));
+  if(!this.receivedAt){
+   const reason=this.error?'反馈通道错误：'+this.error:'反馈端口没有推送数据';
+   this.close();
+   throw Error('控制通道已建立，但 3 秒内没有收到有效反馈（'+reason+'）。请核对反馈端口、机器人上电与使能状态后重试。');
+  }
+  return this.status();
  }
  accept(data){
   const old=this.last?.robot_mode;this.last=data;this.receivedAt=Date.now();this.phase=({1:'初始化',2:'抱闸松开',3:'未上电',4:'未使能',5:'已使能 · 空闲',6:'拖拽',7:'运行中',8:'轨迹录制',9:'报警',10:'暂停',11:'点动'})[data.robot_mode]||'未知状态';

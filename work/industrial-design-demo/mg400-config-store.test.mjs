@@ -86,11 +86,12 @@ test('folder import preserves complete controller projects, registers relative p
  for(const file of files)assert.deepEqual(fs.readFileSync(path.join(store.projectFolder('blockly_new'),file.path)),Buffer.from(file.data,'base64'));
  const next=saved.raw.trajectories;
  assert.throws(()=>store.importProject({projectName:'blockly_new',name:'重复',files,expected:next}),/已存在/);
- assert.throws(()=>store.importProject({projectName:'bad',name:'测试',files:[...files,{path:'../escape.lua',data:''}],expected:next}),/路径/);
- assert.throws(()=>store.importProject({projectName:'bad',name:'测试',files:[...files,{path:'NUL',data:''}],expected:next}),/路径/);
- assert.throws(()=>store.importProject({projectName:'bad',name:'测试',files:files.filter(f=>f.path!=='point.json'),expected:next}),/缺少引用文件/);
- assert.throws(()=>store.importProject({projectName:'bad',name:'测试',files,expected}),/已更新/);
- assert.equal(fs.existsSync(path.join(dir,'mg400-projects','bad')),false);
+  assert.throws(()=>store.importProject({projectName:'no_prefix',name:'测试',files,expected:next}),/blockly_/);
+ assert.throws(()=>store.importProject({projectName:'blockly_bad',name:'测试',files:[...files,{path:'../escape.lua',data:''}],expected:next}),/路径/);
+ assert.throws(()=>store.importProject({projectName:'blockly_bad',name:'测试',files:[...files,{path:'NUL',data:''}],expected:next}),/路径/);
+ assert.throws(()=>store.importProject({projectName:'blockly_bad',name:'测试',files:files.filter(f=>f.path!=='point.json'),expected:next}),/缺少引用文件/);
+ assert.throws(()=>store.importProject({projectName:'blockly_bad',name:'测试',files,expected}),/已更新/);
+ assert.equal(fs.existsSync(path.join(dir,'mg400-projects','blockly_bad')),false);
 });
 
 test('deleting a platform project clears its selection, leaves other presets, and allows reimport',t=>{
@@ -100,7 +101,7 @@ test('deleting a platform project clears its selection, leaves other presets, an
  const store=createMG400ConfigStore(pathToFileURL(dir+path.sep)),initial=store.read();
  const source=new URL('./config/mg400-projects/blockly_kkkl/',import.meta.url);
  const files=fs.readdirSync(source).map(name=>({path:name,data:fs.readFileSync(new URL(name,source)).toString('base64')}));
- const input={projectName:'demo_delete',name:'待删除工程',files};
+ const input={projectName:'blockly_demo_delete',name:'待删除工程',files};
  const imported=store.importProject({...input,expected:initial.raw.trajectories});
  const selected=store.save('trajectories',selectTrajectoryPreset(imported.values.trajectories,input.projectName),imported.raw.trajectories);
  const folder=store.projectFolder(input.projectName);

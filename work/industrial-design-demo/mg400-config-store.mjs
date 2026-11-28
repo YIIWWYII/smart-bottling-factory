@@ -76,7 +76,7 @@ export function createMG400ConfigStore(directory=new URL('./config/',import.meta
   return read();
  }
  function importProject({projectName,name,files,expected}){
-  if(typeof projectName!=='string'||!/^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(projectName))throw Error('工程名须以英文字母开头，仅含字母、数字、下划线、点或短横线，最多80字');
+  if(typeof projectName!=='string'||!/^blockly_[A-Za-z0-9_.-]{1,71}$/.test(projectName))throw Error('控制器工程名必须以 blockly_ 开头，后面只能跟字母、数字、下划线、点或短横线，总长不超过80字');
   if(typeof name!=='string'||!name.trim()||name.length>100)throw Error('请输入100字以内的显示名称');
   const current=read();if(current.raw.trajectories!==expected)throw Error('轨迹列表已更新，请重新打开轨迹工程选项卡');
   if(current.values.trajectories.controller.presets?.some(p=>p.projectName===projectName))throw Error('该工程名已存在，请使用新工程名；控制器中的工程名须一致');
