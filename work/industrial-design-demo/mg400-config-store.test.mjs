@@ -80,17 +80,21 @@ test('folder import preserves complete controller projects, registers relative p
  const source=new URL('./config/mg400-projects/blockly_kkkl/',import.meta.url);
  const files=fs.readdirSync(source).map(name=>({path:name,data:fs.readFileSync(new URL(name,source)).toString('base64')}));
  const expected=store.read().raw.trajectories;
- const saved=store.importProject({projectName:'blockly_new',name:'新轨迹',files,expected});
+ const saved=store.importProject({projectName:'new',name:'新轨迹',files,expected});
+ assert.equal(saved.projectName,'blockly_new');
  const preset=saved.values.trajectories.controller.presets.find(p=>p.projectName==='blockly_new');assert.equal(preset.packagePath,'mg400-projects/blockly_new');
  assert.equal(saved.values.trajectories.controller.defaultProject,'');assert.equal(store.projectFolder('blockly_new'),path.join(dir,'mg400-projects','blockly_new')+path.sep);
  for(const file of files)assert.deepEqual(fs.readFileSync(path.join(store.projectFolder('blockly_new'),file.path)),Buffer.from(file.data,'base64'));
  const next=saved.raw.trajectories;
  assert.throws(()=>store.importProject({projectName:'blockly_new',name:'重复',files,expected:next}),/已存在/);
- assert.throws(()=>store.importProject({projectName:'bad',name:'测试',files:[...files,{path:'../escape.lua',data:''}],expected:next}),/路径/);
- assert.throws(()=>store.importProject({projectName:'bad',name:'测试',files:[...files,{path:'NUL',data:''}],expected:next}),/路径/);
- assert.throws(()=>store.importProject({projectName:'bad',name:'测试',files:files.filter(f=>f.path!=='point.json'),expected:next}),/缺少引用文件/);
- assert.throws(()=>store.importProject({projectName:'bad',name:'测试',files,expected}),/已更新/);
- assert.equal(fs.existsSync(path.join(dir,'mg400-projects','bad')),false);
+ assert.throws(()=>store.importProject({projectName:'new',name:'重复',files,expected:next}),/已存在/);
+ assert.throws(()=>store.importProject({projectName:'../bad',name:'测试',files,expected:next}),/工程名/);
+ assert.throws(()=>store.importProject({projectName:'a'.repeat(73),name:'测试',files,expected:next}),/80字/);
+ assert.throws(()=>store.importProject({projectName:'blockly_bad',name:'测试',files:[...files,{path:'../escape.lua',data:''}],expected:next}),/路径/);
+ assert.throws(()=>store.importProject({projectName:'blockly_bad',name:'测试',files:[...files,{path:'NUL',data:''}],expected:next}),/路径/);
+ assert.throws(()=>store.importProject({projectName:'blockly_bad',name:'测试',files:files.filter(f=>f.path!=='point.json'),expected:next}),/缺少引用文件/);
+ assert.throws(()=>store.importProject({projectName:'blockly_bad',name:'测试',files,expected}),/已更新/);
+ assert.equal(fs.existsSync(path.join(dir,'mg400-projects','blockly_bad')),false);
 });
 
 test('deleting a platform project clears its selection, leaves other presets, and allows reimport',t=>{
@@ -100,7 +104,7 @@ test('deleting a platform project clears its selection, leaves other presets, an
  const store=createMG400ConfigStore(pathToFileURL(dir+path.sep)),initial=store.read();
  const source=new URL('./config/mg400-projects/blockly_kkkl/',import.meta.url);
  const files=fs.readdirSync(source).map(name=>({path:name,data:fs.readFileSync(new URL(name,source)).toString('base64')}));
- const input={projectName:'demo_delete',name:'待删除工程',files};
+ const input={projectName:'blockly_demo_delete',name:'待删除工程',files};
  const imported=store.importProject({...input,expected:initial.raw.trajectories});
  const selected=store.save('trajectories',selectTrajectoryPreset(imported.values.trajectories,input.projectName),imported.raw.trajectories);
  const folder=store.projectFolder(input.projectName);
@@ -111,4 +115,17 @@ test('deleting a platform project clears its selection, leaves other presets, an
  assert.equal(deleted.cleanupPending,false);
  assert.equal(fs.existsSync(folder),false);
  assert.doesNotThrow(()=>store.importProject({...input,expected:deleted.raw.trajectories}));
+});
+
+test('a bundled controller project can be reimported under its exact legacy name',t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mg400-reimport-'));
+ t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ for(const name of Object.values(mg400Files))fs.copyFileSync(new URL('./config/'+name,import.meta.url),path.join(dir,name));
+ const store=createMG400ConfigStore(pathToFileURL(dir+path.sep));
+ const source=new URL('./config/mg400-projects/kkkk1123/',import.meta.url);
+ const files=fs.readdirSync(source).map(name=>({path:name,data:fs.readFileSync(new URL(name,source)).toString('base64')}));
+ const deleted=store.deleteProject({projectName:'kkkk1123',expected:store.read().raw.trajectories});
+ const saved=store.importProject({projectName:'kkkk1123',preserveName:true,name:'原工程',files,expected:deleted.raw.trajectories});
+ assert.equal(saved.projectName,'kkkk1123');
+ assert.equal(store.projectFolder('kkkk1123'),path.join(dir,'mg400-projects','kkkk1123')+path.sep);
 });

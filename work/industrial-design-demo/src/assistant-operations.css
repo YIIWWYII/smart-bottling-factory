@@ -210,6 +210,9 @@
 .digital-assistant .ai-robot-menu-actions{display:flex;justify-content:space-between;gap:4px;padding:5px}
 .digital-assistant .ai-robot-menu-actions button{display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:4px 7px;border:0;border-radius:5px;background:none;color:#2e5172;font-size:13px;white-space:nowrap}
 .digital-assistant .ai-robot-menu-actions button:hover{background:#edf4fa}
+.digital-assistant .ai-robot-menu-pick{border-top:1px solid #e8eef5;border-bottom:1px solid #e8eef5}
+.digital-assistant .ai-robot-menu-pick button{color:#1f4d7d;font-weight:650;background:#f2f7fd}
+.digital-assistant .ai-robot-menu-pick button:hover{background:#e3eefb}
 .digital-assistant .ai-robot-menu-toggles{justify-content:flex-start;border-bottom:1px solid #e1e7ee}
 .digital-assistant .ai-robot-menu-toggles button[aria-pressed=true]{background:#e5f1ed;color:#195c4b}
 .digital-assistant.is-open>header .ai-robot-settings{display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;border-radius:7px;background:transparent}
@@ -362,7 +365,7 @@
 }
 
 /* Assistant settings: tabbed sections, one job per screen. */
-.digital-assistant .ai-settings{flex:1;min-height:0;display:flex;flex-direction:column;background:#f4f7fb}
+.digital-assistant .ai-assistant-settings{flex:1;min-height:0;display:flex;flex-direction:column;background:#f4f7fb}
 .digital-assistant .ai-settings-tabs{flex:none;display:flex;flex-wrap:nowrap;gap:4px;padding:8px 10px;background:#fff;border-bottom:1px solid #e1e7ee;overflow-x:auto;scrollbar-width:none}
 .digital-assistant .ai-settings-tabs button{flex:1 1 0;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:6px 8px;border:1px solid transparent;border-radius:9px;background:transparent;color:#4a657d;font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .digital-assistant .ai-settings-tabs button:hover{background:#eef4fa}
@@ -404,6 +407,7 @@
 .digital-assistant .ai-settings-note{margin:0;font-size:12px;line-height:1.55;color:#6d8296}
 .digital-assistant .ai-settings-note.is-error{color:#94391b}
 .digital-assistant .ai-settings-note.is-warning{color:#8a5b12}
+.mg400-file-editor .mg400-warn{color:#8a5b12;font-weight:600}
 .digital-assistant .ai-settings-actions{display:flex;justify-content:flex-end}
 .digital-assistant .ai-settings-ghost{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 12px;border:1px solid #c8d7e4;border-radius:8px;background:#fff;color:#2f5c86;font-size:13px;font-weight:600;cursor:pointer}
 .digital-assistant .ai-settings-ghost:hover{background:#eef5fb}
@@ -411,7 +415,7 @@
 .digital-assistant .ai-settings-save span{font-size:12px;color:#657c91}
 .digital-assistant .ai-settings-save button{min-height:40px;padding:8px 14px;border:1px solid #2863ba;border-radius:8px;background:#2863ba;color:#fff;font-size:14px;font-weight:600;white-space:nowrap;cursor:pointer}
 .digital-assistant .ai-settings-save button:disabled{opacity:.45;cursor:not-allowed}
-.digital-assistant .ai-settings .ai-qa-settings-list{padding:0}
+.digital-assistant .ai-assistant-settings .ai-qa-settings-list{padding:0}
 .digital-assistant .ai-qa-item .ai-scenario-fields{margin-top:8px}
 .digital-assistant .ai-qa-item .ai-scenario-fields>summary{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:7px 9px;margin-bottom:8px;border:1px solid #d7e3ef;border-radius:8px;background:#eef4fa;color:#33587a;font-size:13px;font-weight:600;cursor:pointer}
 .digital-assistant .ai-qa-item .ai-scenario-fields>summary::before{content:'▸';flex:none;color:#5c7b96;font-size:11px}

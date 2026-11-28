@@ -3,6 +3,7 @@ import {fileURLToPath} from 'node:url';
 import net from 'node:net';
 import nodePath from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {normalizeMG400ProjectName} from './src/mg400ProjectName.js';
 import {validateMotionConfig} from './handoff-examples/mg400-motion-config.mjs';
 
 export const mg400Files={communication:'mg400-communication.json',protocol:'mg400-protocol.json',acquisition:'mg400-acquisition.json',trajectories:'mg400-trajectories.json',motion:'mg400-motion.json'};
@@ -75,8 +76,9 @@ export function createMG400ConfigStore(directory=new URL('./config/',import.meta
   try{fs.writeFileSync(temporary,JSON.stringify(value,null,2)+'\n','utf8');fs.renameSync(temporary,file);}finally{if(fs.existsSync(temporary))fs.unlinkSync(temporary);}
   return read();
  }
- function importProject({projectName,name,files,expected}){
-  if(typeof projectName!=='string'||!/^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(projectName))throw Error('工程名须以英文字母开头，仅含字母、数字、下划线、点或短横线，最多80字');
+ function importProject({projectName:rawName,preserveName,name,files,expected}){
+  const projectName=normalizeMG400ProjectName(rawName,preserveName===true);
+  if(!projectName)throw Error('工程名可使用字母、数字、下划线、点或短横线，不能以点结尾；补齐前缀后最多80字。保留原名时须以字母开头。');
   if(typeof name!=='string'||!name.trim()||name.length>100)throw Error('请输入100字以内的显示名称');
   const current=read();if(current.raw.trajectories!==expected)throw Error('轨迹列表已更新，请重新打开轨迹工程选项卡');
   if(current.values.trajectories.controller.presets?.some(p=>p.projectName===projectName))throw Error('该工程名已存在，请使用新工程名；控制器中的工程名须一致');
@@ -96,7 +98,7 @@ export function createMG400ConfigStore(directory=new URL('./config/',import.meta
   try{
    for(const [name,bytes]of entries){const output=nodePath.join(destination,...name.split('/'));fs.mkdirSync(nodePath.dirname(output),{recursive:true});fs.writeFileSync(output,bytes,{flag:'wx'});}
    const trajectories={...current.values.trajectories,controller:{...current.values.trajectories.controller,presets:[...current.values.trajectories.controller.presets||[],{name:name.trim(),projectName,packagePath:'mg400-projects/'+projectName}]}};
-   return save('trajectories',trajectories,expected);
+   return {...save('trajectories',trajectories,expected),projectName};
   }catch(error){if(nodePath.dirname(destination)===nodePath.resolve(base))fs.rmSync(destination,{recursive:true,force:true});throw error;}
  }
  function deleteProject({projectName,expected}){

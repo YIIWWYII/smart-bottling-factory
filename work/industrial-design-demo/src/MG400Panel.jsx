@@ -159,7 +159,7 @@ export default function MG400Panel({asset=null,onStatus,showVisual=true,stationM
     {canConfigure&&<button type="button" onClick={()=>setStationSettings('config')}>通信与协议</button>}
    </div>
   </div></section>
-  {error&&<p role="alert">{error}</p>}{message&&<p role="status">{message}</p>}{recognitionResult&&<Modal title="瓶型识别演示" onClose={()=>setRecognitionResult(null)}>
+  {error&&<p role="alert">{error}</p>}{!error&&status?.error&&<p role="alert">{status.error}</p>}{message&&<p role="status">{message}</p>}{recognitionResult&&<Modal title="瓶型识别演示" onClose={()=>setRecognitionResult(null)}>
    {recognitionResult.image&&<img className="robot-recognition-preview" src={recognitionResult.image} alt="瓶型相机画面"/>}
    <p>{recognitionResult.mode==='match'?'瓶型与当前轨迹匹配，可以继续。':'瓶型与当前轨迹不匹配，是否换品？'}</p>
    {recognitionResult.mode==='mismatch'&&(recognitionResult.confirmed?<p role="status">已确认换品（模拟）。</p>:<div className="robot-recognition-confirm"><button onClick={()=>setRecognitionResult(null)}>暂不换品</button><button onClick={()=>setRecognitionResult(result=>({...result,confirmed:true}))}>确认换品</button></div>)}

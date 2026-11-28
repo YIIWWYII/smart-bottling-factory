@@ -221,9 +221,9 @@ const defaults=[
     if(readTestFeedback()||manualMG400.active)fail('请先停止机械臂测试或手动动作',409);
     const status=mg400.status(),pending=activePendingCount();
     if(status.connected||pending){const block=trajectoryReplacementBlock(status,pending);if(block)fail(block,409);}
-    try{mg400Store.importProject(body);}catch(error){fail(error.message,400);}
-    log(user,'导入 MG400 轨迹工程',body.projectName,'成功',{stageIndex:0});
-    return {...mg400FileView(),message:'已保存工程文件并加入预设。请在 DobotStudio 中将同名工程导入控制器，再选择运行。'};
+    let saved;try{saved=mg400Store.importProject(body);}catch(error){fail(error.message,400);}
+    log(user,'导入 MG400 轨迹工程',saved.projectName,'成功',{stageIndex:0});
+    return {...mg400FileView(),message:`已登记工程 ${saved.projectName}。请确认 DobotStudio 中的控制器工程使用同名，再选择运行。`};
    }
    if(p==='/api/ops/mg400/trajectory'&&write){
     requireRole(user,['admin','engineer']);
@@ -243,7 +243,7 @@ const defaults=[
     return {...mg400FileView(),message:body.projectName!==undefined?'已保存后续运行工程；运行前请确认工程已导入控制器。':'平台轨迹配置已替换。更改轨迹点后，仍需将对应 Lua 工程导入控制器。'};
    }
    if(p==='/api/ops/mg400/config'&&write)fail('MG400 已改为文件配置，请在配置文件页面保存');
-   if(p==='/api/ops/mg400/connect'&&write){requireRole(user,['admin','engineer']);if(mg400.status().connected)fail('请先断开现有连接',409);const files=mg400Store.read().values;if(!mg400CommunicationConfigured(files.communication))fail('机械臂通讯尚未配置，请现场填写 IP 和 Dashboard、反馈、运动端口后再连接',409);const config=applyMG400Files(files),status=await mg400.connect(config);log(user,'连接 MG400','已建立通信','已连接',{stageIndex:0,operationLabel:'连接实机'});return status;}
+   if(p==='/api/ops/mg400/connect'&&write){requireRole(user,['admin','engineer']);if(mg400.status().connected)fail('请先断开现有连接',409);const files=mg400Store.read().values;if(!mg400CommunicationConfigured(files.communication))fail('机械臂通讯尚未配置，请现场填写 IP 和 Dashboard、反馈、运动端口后再连接',409);const config=applyMG400Files(files);let status;try{status=await mg400.connect(config);}catch(error){fail(error.message||'连接机械臂失败',502);}log(user,'连接 MG400','已建立通信','已连接',{stageIndex:0,operationLabel:'连接实机'});return status;}
    if(p==='/api/ops/mg400/disconnect'&&write){requireRole(user,['admin','engineer']);mg400.close();log(user,'断开 MG400','仅断开通信，不停止或断电机械臂','成功',{stageIndex:0,operationLabel:'断开实机'});return mg400.status();}
    if(p==='/api/ops/mg400/prepare'&&write){if(db.dataMode==='simulation')fail('请切换真实或混合数据模式后控制实机',409);if(db.interlock&&!['stop','pause','disable'].includes(body.action))fail('平台联锁尚未解除',409);try{return mg400.prepare(body.action,body.value,user.id);}catch(error){fail(error.message,409);}}
    if(p==='/api/ops/mg400/execute'&&write){if(db.dataMode==='simulation'||(db.interlock&&!['stop','pause','disable'].includes(mg400.pending.get(body.token)?.action)))fail('当前模式或联锁不允许下发',409);if(body.confirmed!==true)fail('请人工确认');const pending=mg400.pending.get(body.token),operationLabel=mg400ActionLabels[pending?.action]||'下发指令';try{const result=await mg400.execute(body.token,user.id);if(pending?.action==='speed')saveMG400Speed(pending.value);log(user,'人工 MG400 控制',result.raw,'已受理',{category:'control',stageIndex:0,device:'MG400-TEACH-01',operationLabel,after:result});return result;}catch(e){log(user,'人工 MG400 控制',e.message,'失败或结果未知',{category:'control',stageIndex:0,device:'MG400-TEACH-01',operationLabel});return {error:e.message,ok:false};}}
