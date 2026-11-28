@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react';
 import {FolderOpen,Trash2} from 'lucide-react';
 import {api} from './TwinState';
+import {normalizeMG400ProjectName} from './mg400ProjectName.js';
 const labels={communication:'通信',protocol:'协议'};
 export default function MG400ConfigFiles({canConfigure,connected=false,robotStatus=null,onSaved,scope='connection'}){
  const trajectoryMode=scope==='trajectory';
@@ -11,6 +12,8 @@ export default function MG400ConfigFiles({canConfigure,connected=false,robotStat
   return()=>{active=false;};
  },[canConfigure]);
  const file=files.find(f=>f.key===key);
+ const [preserveName,setPreserveName]=useState(false);
+ const savedProjectName=normalizeMG400ProjectName(projectName,preserveName);
  const presets=trajectoryMode&&file?(JSON.parse(file.content).controller?.presets||[]):[];
  const feedback=robotStatus?.feedback,execution=robotStatus?.execution?.state;
  const executionSettled=!execution||['已停止（反馈空闲）','运行结束（未核验取放结果）','报警中断','启动被拒绝'].includes(execution);
@@ -26,7 +29,7 @@ export default function MG400ConfigFiles({canConfigure,connected=false,robotStat
   setBusy(true);setMessage('');try{const content=await selected.text();JSON.parse(content);const result=await api('/api/ops/mg400/files',{key,content,expected:file.content});setFiles(result.files);onSaved(result.config,result.files);setMessage(result.message);}catch(error){setMessage(error.message);}finally{setBusy(false);}
  };
  const chooseProject=event=>{
-  const selected=Array.from(event.target.files||[]);setProjectFiles(selected);setMessage('');
+  const selected=Array.from(event.target.files||[]);setProjectFiles(selected);setPreserveName(false);setMessage('');
   if(selected.length){const folder=selected[0].webkitRelativePath.split('/')[0];setProjectName(folder);setDisplayName(folder);}
  };
  const importProject=async event=>{
@@ -35,7 +38,7 @@ export default function MG400ConfigFiles({canConfigure,connected=false,robotStat
    if(!projectFiles.length)throw Error('请先选择包含 prj.json 的工程文件夹');
    if(projectFiles.length>100||projectFiles.reduce((sum,f)=>sum+f.size,0)>2*1024*1024)throw Error('最多100个文件，总大小不能超过2 MB');
    const files=await Promise.all(projectFiles.map(async f=>{const bytes=new Uint8Array(await f.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));return {path:f.webkitRelativePath.split('/').slice(1).join('/'),data:btoa(binary)};}));
-   const result=await api('/api/ops/mg400/projects',{projectName,name:displayName,files,expected:file.content});
+   const result=await api('/api/ops/mg400/projects',{projectName,preserveName,name:displayName,files,expected:file.content});
    setFiles(result.files);onSaved(result.config,result.files);setProjectFiles([]);setMessage(result.message);
   }catch(error){setMessage(error.message);}finally{setBusy(false);}
  };
@@ -53,11 +56,12 @@ export default function MG400ConfigFiles({canConfigure,connected=false,robotStat
   <p>选择从 DobotStudio 导出的完整工程文件夹，根目录应包含 prj.json、Lua 程序和示教点。平台保存副本并登记工程名，控制器中的工程需另行通过 DobotStudio 导入。</p>
   <form onSubmit={importProject}>
    <label className="mg400-upload">选择工程文件夹<input type="file" aria-label="选择轨迹工程文件夹" webkitdirectory="" directory="" multiple disabled={uploadDisabled||!file} onChange={chooseProject}/></label>
-   <div className="mg400-fields"><label>显示名称<input value={displayName} maxLength={100} required disabled={uploadDisabled} onChange={e=>setDisplayName(e.target.value)}/></label><label>控制器工程名<input value={projectName} maxLength={80} pattern="blockly_[A-Za-z0-9_.-]{1,71}" required disabled={uploadDisabled} onChange={e=>setProjectName(e.target.value)}/></label></div>
-   <p>控制器工程名必须以 <code>blockly_</code> 开头，并与控制器里保存的名称逐字一致。保存目录：<code>config/mg400-projects/{projectName||'工程名'}/</code>，相对于平台项目目录。</p>
-   {projectName&&!/^blockly_[A-Za-z0-9_.-]{1,71}$/.test(projectName)&&<p role="status" className="mg400-warn">工程名需以 blockly_ 开头（当前：{projectName}），否则控制器 RunScript 找不到工程。</p>}
+   <div className="mg400-fields"><label>显示名称<input value={displayName} maxLength={100} required disabled={uploadDisabled} onChange={e=>setDisplayName(e.target.value)}/></label><label>控制器工程名<input value={projectName} maxLength={80} required disabled={uploadDisabled} onChange={e=>setProjectName(e.target.value)}/></label></div>
+   <label><input type="checkbox" checked={preserveName} disabled={uploadDisabled} onChange={e=>setPreserveName(e.target.checked)}/> 保留原名（控制器已按原名登记）</label>
+   <p>{savedProjectName?<>保存后的工程名：<code>{savedProjectName}</code>。请与控制器中的工程名保持一致。</>:'缺少 blockly_ 时会自动补齐。'}</p>
+   {projectName&&!savedProjectName&&<p role="status" className="mg400-warn">工程名可用字母、数字、下划线、点或短横线，不能以点结尾；加前缀后最多80字。保留原名时须以字母开头。</p>}
    {projectFiles.length>0&&<p>已选择 {projectFiles.length} 个文件，共 {(projectFiles.reduce((sum,f)=>sum+f.size,0)/1024).toFixed(1)} KB。</p>}
-   <button type="submit" disabled={uploadDisabled||!file||!projectFiles.length||!/^blockly_[A-Za-z0-9_.-]{1,71}$/.test(projectName)}>{busy?'正在保存…':'添加轨迹工程'}</button>
+   <button type="submit" disabled={uploadDisabled||!file||!projectFiles.length||!savedProjectName}>{busy?'正在保存…':'添加轨迹工程'}</button>
   </form>
   <h4>已登记工程</h4>
   {presets.length===0&&<p>{file?'暂无轨迹工程':'正在读取轨迹工程…'}</p>}

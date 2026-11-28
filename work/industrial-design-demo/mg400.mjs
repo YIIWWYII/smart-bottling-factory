@@ -53,20 +53,23 @@ export class MG400 {
  async connect(config){
   this.close();if(!net.isIP(config.host)||![config.dashboardPort,config.feedbackPort,config.motionPort].every(port=>Number.isInteger(port)&&port>=1&&port<=65535))throw Error('机械臂通讯尚未配置，请现场填写 IP 和 Dashboard、反馈、运动端口后再连接');this.config=validateMG400(config);this.error='';const epoch=this.epoch;
   const open=port=>new Promise((resolve,reject)=>{const s=net.createConnection({host:this.config.host,port});const timer=setTimeout(()=>s.destroy(Error('连接超时')),communication.connectTimeoutMs);s.once('error',reject);s.once('connect',()=>{clearTimeout(timer);if(epoch!==this.epoch){s.destroy();reject(Error('连接已取消'));}else resolve(s);});s.once('close',()=>clearTimeout(timer));});
-  try{this.dashboard=await open(this.config.dashboardPort);this.dashboard.on('error',e=>{this.error=e.message;});this.feedback=await open(this.config.feedbackPort);
-   let buffer=Buffer.alloc(0);this.feedback.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);while(buffer.length>=frameBytes){if(buffer.readUInt16LE(lengthOffset)!==frameBytes||buffer.readBigUInt64LE(magicOffset)!==BigInt(magic)){buffer=buffer.subarray(1);continue;}const frame=buffer.subarray(0,frameBytes);buffer=buffer.subarray(frameBytes);try{this.accept(parseMG400(frame));}catch(e){this.error=e.message;}}});
+  try{this.dashboard=await open(this.config.dashboardPort);this.dashboard.on('error',e=>{if(epoch===this.epoch)this.error=e.message;});this.feedback=await open(this.config.feedbackPort);
+   let buffer=Buffer.alloc(0);this.feedback.on('data',chunk=>{if(epoch!==this.epoch)return;buffer=Buffer.concat([buffer,chunk]);while(buffer.length>=frameBytes){if(buffer.readUInt16LE(lengthOffset)!==frameBytes||buffer.readBigUInt64LE(magicOffset)!==BigInt(magic)){buffer=buffer.subarray(1);continue;}const frame=buffer.subarray(0,frameBytes);buffer=buffer.subarray(frameBytes);try{this.accept(parseMG400(frame));}catch(e){this.error=e.message;}}});
    this.dashboard.on('close',()=>{if(epoch===this.epoch){this.error='控制通道已断开，请检查网络并重新连接';this.pending.clear();}});
-   this.feedback.on('error',e=>{this.error=e.message;});this.feedback.on('close',()=>{if(epoch===this.epoch){this.event('机械臂反馈连接断开','失败');this.error='反馈通道已断开，请检查网络并重新连接';this.receivedAt=0;this.pending.clear();}});this.event('已建立 MG400 TCP 连接，等待有效反馈');
-  }catch(e){this.close();this.error=e.message;throw e;}
-  // TCP 建连不等于可用：等第一帧有效反馈，收不到就按失败处理，避免界面显示"操作完成"。
-  const deadline=Date.now()+3000;
-  while(Date.now()<deadline&&!this.receivedAt)await new Promise(resolve=>setTimeout(resolve,100));
-  if(!this.receivedAt){
-   const reason=this.error?'反馈通道错误：'+this.error:'反馈端口没有推送数据';
-   this.close();
-   throw Error('控制通道已建立，但 3 秒内没有收到有效反馈（'+reason+'）。请核对反馈端口、机器人上电与使能状态后重试。');
+   this.feedback.on('error',e=>{if(epoch===this.epoch)this.error=e.message;});this.feedback.on('close',()=>{if(epoch===this.epoch){this.event('机械臂反馈连接断开','失败');this.error='反馈通道已断开，请检查网络并重新连接';this.receivedAt=0;this.pending.clear();}});this.event('已建立 MG400 TCP 连接，等待有效反馈');
+   const deadline=Date.now()+3000;
+   while(epoch===this.epoch){
+    const status=this.status();
+    if(!status.connected||this.feedback.destroyed)throw Error(this.error||'控制或反馈通道已断开，请检查网络后重试');
+    if(status.online)return status;
+    if(Date.now()>=deadline)throw Error('3 秒内没有收到有效反馈。'+(this.error?`（${this.error}）`:'')+'请核对反馈端口和控制器状态后重试。');
+    await new Promise(resolve=>setTimeout(resolve,100));
+   }
+   throw Error('连接已取消');
+  }catch(error){
+   if(epoch===this.epoch){this.close();this.error=error.message;}
+   throw error;
   }
-  return this.status();
  }
  accept(data){
   const old=this.last?.robot_mode;this.last=data;this.receivedAt=Date.now();this.phase=({1:'初始化',2:'抱闸松开',3:'未上电',4:'未使能',5:'已使能 · 空闲',6:'拖拽',7:'运行中',8:'轨迹录制',9:'报警',10:'暂停',11:'点动'})[data.robot_mode]||'未知状态';

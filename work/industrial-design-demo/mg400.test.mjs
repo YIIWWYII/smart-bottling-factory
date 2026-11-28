@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
+import {once} from 'node:events';
 import {readFileSync} from 'node:fs';
 import {MG400,parseMG400,validateMG400} from './mg400.mjs';
 import {createMG400Model} from './src/mg400Model.js';
@@ -41,6 +42,21 @@ test('local TCP controller: split/coalesced frames, confirmations, unquoted RunS
   assert.equal((await robot.command('Sync()',{timeoutMs:30000})).raw,'0,{},Sync();');
   await assert.rejects(robot.execute(ready.token,'admin'));await assert.rejects(robot.command('ClearError()'),/拒绝/);robot.receivedAt=Date.now()-2000;assert.equal(robot.status().feedback,null);assert.throws(()=>robot.prepare('run',null,'admin'),/反馈/);
  }finally{robot.close();for(const s of sockets)s.destroy();await Promise.all([new Promise(r=>dashboard.close(r)),new Promise(r=>feedback.close(r))]);}
+});
+
+test('a feedback frame cannot turn a closed control connection into a successful connect',async(t)=>{
+ const servers=[net.createServer(),net.createServer()],sockets=[];
+ const robot=new MG400();
+ t.after(async()=>{robot.close();for(const s of sockets)s.destroy();await Promise.all(servers.map(s=>new Promise(r=>s.close(r))));});
+ for(const s of servers){s.on('connection',socket=>sockets.push(socket));await new Promise(r=>s.listen(0,'127.0.0.1',r));}
+ const [dashboard,feedback]=servers,controlSocket=once(dashboard,'connection'),feedSocket=once(feedback,'connection');
+ const connecting=robot.connect({host:'127.0.0.1',dashboardPort:dashboard.address().port,feedbackPort:feedback.address().port,motionPort:dashboard.address().port});
+ const rejected=assert.rejects(connecting,/通道已断开/);
+ const [[control],[feed]]=await Promise.all([controlSocket,feedSocket]);
+ const disconnected=once(robot.dashboard,'close');control.destroy();await disconnected;
+ if(!feed.destroyed)feed.write(frame());
+ await rejected;
+ assert.equal(robot.status().connected,false);assert.equal(robot.status().online,false);assert.match(robot.status().error,/通道已断开/);
 });
 
 test('invalid state rejects preparation before queuing any controller command',()=>{

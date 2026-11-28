@@ -221,9 +221,9 @@ const defaults=[
     if(readTestFeedback()||manualMG400.active)fail('请先停止机械臂测试或手动动作',409);
     const status=mg400.status(),pending=activePendingCount();
     if(status.connected||pending){const block=trajectoryReplacementBlock(status,pending);if(block)fail(block,409);}
-    try{mg400Store.importProject(body);}catch(error){fail(error.message,400);}
-    log(user,'导入 MG400 轨迹工程',body.projectName,'成功',{stageIndex:0});
-    return {...mg400FileView(),message:'已保存工程文件并加入预设。请在 DobotStudio 中将同名工程导入控制器，再选择运行。'};
+    let saved;try{saved=mg400Store.importProject(body);}catch(error){fail(error.message,400);}
+    log(user,'导入 MG400 轨迹工程',saved.projectName,'成功',{stageIndex:0});
+    return {...mg400FileView(),message:`已登记工程 ${saved.projectName}。请确认 DobotStudio 中的控制器工程使用同名，再选择运行。`};
    }
    if(p==='/api/ops/mg400/trajectory'&&write){
     requireRole(user,['admin','engineer']);
