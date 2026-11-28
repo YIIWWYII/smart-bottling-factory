@@ -20,19 +20,8 @@
 .digital-assistant.is-open .ai-image-upload{position:relative;display:grid;place-items:center;width:40px;height:44px;flex:none;color:#426b9e;cursor:pointer}.digital-assistant.is-open .ai-image-upload input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}.digital-assistant.is-open .ai-attachment{display:flex;align-items:center;gap:8px;margin:8px 16px 0;font-size:12px;flex:none;min-width:0}.digital-assistant.is-open .ai-attachment img{width:44px;height:44px;object-fit:contain}.digital-assistant.is-open .ai-attachment span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.digital-assistant.is-open .ai-attachment button{border:0;background:transparent;min-width:40px;min-height:40px}.digital-assistant.is-open .ai-chat-image{display:block;max-width:100%;max-height:220px;object-fit:contain;margin-bottom:8px}
 .digital-assistant.is-open>header>div{display:grid;grid-template-columns:22px minmax(0,1fr);gap:3px 8px;min-width:0;flex:1}.digital-assistant.is-open>header>div>small{grid-column:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.digital-assistant.is-open>header>div>strong{white-space:nowrap}.digital-assistant.is-open>header>button{flex:none}
 
-.digital-assistant .ai-speech-setting{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 14px;flex:none;background:#fff;border-bottom:1px solid #e1e7ee;font-size:14px;font-weight:600;color:#385873;cursor:pointer}
-.digital-assistant .ai-speech-setting input{margin-left:auto;accent-color:#2863ba}
-.digital-assistant .ai-voice-preview{display:flex;align-items:flex-end;gap:8px 12px;flex-wrap:wrap;padding:12px 14px;background:#fff;border-bottom:1px solid #e1e7ee;color:#243d56}
-.digital-assistant .ai-voice-preview label{display:grid;gap:5px;flex:1 1 180px;min-width:0;font-size:14px;font-weight:650}
-.digital-assistant .ai-voice-preview select{width:100%;min-width:0;min-height:40px;padding:5px 8px;border:1px solid #a1b7cc;border-radius:7px;background:#f4f8fc;color:#19354e;font:inherit}
-.digital-assistant .ai-voice-preview button{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:5px 12px;border:1px solid #a1b7cc;border-radius:7px;background:#eff5fb;color:#234d74;font-size:14px;font-weight:650}
-.digital-assistant .ai-voice-preview button:not(:disabled):hover{background:#deedfb}
-.digital-assistant .ai-voice-preview :is(button,select):focus-visible{outline:2px solid #2863ba;outline-offset:2px}
-.digital-assistant .ai-voice-preview :is(small,p){flex-basis:100%;margin:0;font-size:13px;line-height:1.5}
-.digital-assistant .ai-voice-preview p{color:#94391b}
 .digital-assistant .ai-font-setting{display:flex;align-items:center;gap:12px;min-height:44px;padding:4px 14px;flex:none;background:#fff;border-bottom:1px solid #e1e7ee;color:#385873;font-size:14px;font-weight:600}
 .digital-assistant .ai-font-setting input{flex:1;min-width:0;max-width:200px;height:28px;margin:0 0 0 auto;accent-color:#2863ba;cursor:pointer}
-.digital-assistant .ai-speech-range .ai-font-value{min-width:4.2em;text-align:right;font-variant-numeric:tabular-nums}
 .digital-assistant .ai-font-setting input:focus-visible{outline:2px solid #3977d5;outline-offset:2px}
 .digital-assistant .ai-font-value{min-width:5ch;text-align:right;font-variant-numeric:tabular-nums}
 .digital-assistant .ai-reply-speech{display:flex;gap:5px;margin-left:auto}
@@ -123,12 +112,6 @@
 .digital-assistant .ai-confirmation-actions button{min-height:38px;padding:7px 11px;border-radius:8px;font-size:calc(13px * var(--ai-text-scale,1))}
 .digital-assistant .ai-confirmation-actions .primary{border:1px solid #2863ba;background:#2863ba;color:#fff}
 .digital-assistant .ai-confirmation-actions .secondary{border:1px solid #c6d3df;background:#fff;color:#3d5870}
-.digital-assistant.is-open .ai-qa-settings{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:#f7f9fc}
-.digital-assistant .ai-qa-settings-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;background:#fff;border-bottom:1px solid #e1e7ee}
-.digital-assistant .ai-qa-settings-heading strong{color:#2d4c67;font-size:16px}
-.digital-assistant .ai-qa-settings-heading p{margin:4px 0 0;color:#61788d;font-size:12px;line-height:1.45}
-.digital-assistant .ai-qa-settings-heading button{display:flex;align-items:center;gap:5px;min-height:38px;padding:7px 10px;border:1px solid #c8d7e4;border-radius:8px;background:#fff;color:#355b7c;font-size:13px;white-space:nowrap}
-.digital-assistant .ai-settings-scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
 .digital-assistant .ai-qa-settings-list{padding:10px 12px}
 .digital-assistant .ai-qa-item{margin-bottom:10px;padding:12px;border:1px solid #d9e3ed;border-radius:12px;background:#fff;box-shadow:0 4px 14px #2845600b}
 .digital-assistant .ai-qa-item>header{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;padding:0;background:transparent;border:0}
@@ -155,10 +138,6 @@
 .digital-assistant .ai-scenario-add{display:flex;align-items:center;gap:5px;margin-top:8px;padding:5px 8px;border:1px solid #d3dfeb;border-radius:7px;background:#fff;color:#355b78;font-size:12px}
 .digital-assistant .ai-scenario-group>label{display:block;margin:9px 0;color:#405c74;font-size:12px;font-weight:600}
 .digital-assistant .ai-scenario-group>label input{display:block;box-sizing:border-box;width:100%;margin-top:5px;padding:8px;border:1px solid #d3dfeb;border-radius:7px;background:#fff;color:#263e54;font:inherit;font-size:12px}
-.digital-assistant .ai-qa-settings-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:#fff;border-top:1px solid #e1e7ee}
-.digital-assistant .ai-qa-settings-actions span{color:#657c91;font-size:12px}
-.digital-assistant .ai-qa-settings-actions button{min-height:40px;padding:8px 14px;border:1px solid #2863ba;border-radius:8px;background:#2863ba;color:#fff;font-size:14px}
-.digital-assistant .ai-qa-settings-actions button:disabled{opacity:.48;cursor:not-allowed}
 .digital-assistant .ai-qa-error{margin:4px 14px 8px;color:#9a392e;font-size:13px}
 @keyframes assistant-voice-pulse{50%{box-shadow:0 0 0 5px #d94c321c}}
 .digital-assistant .ai-local-notice{display:flex;align-items:center;gap:7px;padding:8px 12px;margin:4px 12px;border:1px solid #d9e3ed;border-radius:8px;background:#fff;color:#516b82;font-size:13px}
@@ -381,3 +360,63 @@
   .digital-assistant .ai-conversation-tabs{padding-inline:18px}
   .digital-assistant.is-open .ai-messages,.digital-assistant .ai-trace{padding-inline:16px}
 }
+
+/* Assistant settings: tabbed sections, one job per screen. */
+.digital-assistant .ai-settings{flex:1;min-height:0;display:flex;flex-direction:column;background:#f4f7fb}
+.digital-assistant .ai-settings-tabs{flex:none;display:flex;flex-wrap:nowrap;gap:4px;padding:8px 10px;background:#fff;border-bottom:1px solid #e1e7ee;overflow-x:auto;scrollbar-width:none}
+.digital-assistant .ai-settings-tabs button{flex:1 1 0;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:6px 8px;border:1px solid transparent;border-radius:9px;background:transparent;color:#4a657d;font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.digital-assistant .ai-settings-tabs button:hover{background:#eef4fa}
+.digital-assistant .ai-settings-tabs button[aria-pressed=true]{background:#e7f0fc;border-color:#c2d6ee;color:#1f4d7d;box-shadow:inset 0 -2px 0 #2863ba}
+.digital-assistant .ai-settings-tabs button:focus-visible{outline:2px solid #3977d5;outline-offset:2px}
+.digital-assistant .ai-settings-body{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:14px 14px 18px;scrollbar-width:thin}
+.digital-assistant .ai-settings-body>*{flex:0 0 auto;min-width:0;max-width:100%}
+.digital-assistant .ai-settings-body{overflow-x:hidden}
+.digital-assistant .ai-settings-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.digital-assistant .ai-settings-head>div{display:flex;flex-direction:column;align-items:flex-start;gap:0;flex:1;min-width:0}
+.digital-assistant .ai-settings-head h2{margin:0;font-size:16px;color:#25445f}
+.digital-assistant .ai-settings-head p{margin:4px 0 0;font-size:12px;line-height:1.55;color:#61788d}
+.digital-assistant .ai-settings-reset{display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:6px 10px;border:1px solid #c8d7e4;border-radius:8px;background:#fff;color:#355b7c;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer}
+.digital-assistant .ai-settings-reset:hover{background:#eef5fb}
+.digital-assistant .ai-settings-card{display:flex;flex-direction:column;background:#fff;border:1px solid #dde7f0;border-radius:12px;overflow:hidden}
+.digital-assistant .ai-setting-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 14px;border-top:1px solid #eef3f8;cursor:pointer}
+.digital-assistant .ai-setting-row:first-child{border-top:0}
+.digital-assistant .ai-setting-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.digital-assistant .ai-setting-copy strong{font-size:14px;font-weight:650;color:#2c4b66}
+.digital-assistant .ai-setting-copy small{font-size:12px;line-height:1.45;color:#6d8296;font-weight:400}
+.digital-assistant .ai-setting-toggle input[role=switch]{-webkit-appearance:none;appearance:none;flex:none;position:relative;width:44px;height:26px;margin:0;border:0;border-radius:13px;background:#c7d5e2;cursor:pointer;transition:background .16s}
+.digital-assistant .ai-setting-toggle input[role=switch]::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #1b35502e;transition:transform .16s}
+.digital-assistant .ai-setting-toggle input[role=switch]:checked{background:#2863ba}
+.digital-assistant .ai-setting-toggle input[role=switch]:checked::after{transform:translateX(18px)}
+.digital-assistant .ai-setting-toggle input[role=switch]:focus-visible{outline:2px solid #3977d5;outline-offset:2px}
+.digital-assistant .ai-setting-slider{grid-template-columns:minmax(0,1fr) minmax(90px,140px) auto}
+.digital-assistant .ai-setting-slider input[type=range]{width:100%;min-width:0;height:24px;margin:0;accent-color:#2863ba;cursor:pointer}
+.digital-assistant .ai-setting-value{min-width:52px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums;font-weight:650;color:#315674}
+.digital-assistant .ai-settings-block{display:flex;flex-direction:column;gap:9px;padding:12px 14px;background:#fff;border:1px solid #dde7f0;border-radius:12px}
+.digital-assistant .ai-settings-block>header{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.digital-assistant .ai-settings-block>header strong{font-size:14px;font-weight:650;color:#2c4b66}
+.digital-assistant .ai-settings-block>header span{font-size:12px;color:#6d8296}
+.digital-assistant .ai-voice-list{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.digital-assistant .ai-voice-list button{display:grid;grid-template-columns:minmax(0,1fr) 18px;align-items:center;gap:8px;width:100%;min-height:40px;padding:7px 10px;border:1px solid #e4ecf4;border-radius:9px;background:#fbfdff;color:#2c4b66;text-align:left;font-size:13px;cursor:pointer}
+.digital-assistant .ai-voice-list button:hover{background:#f0f6fc;border-color:#c9dbeb}
+.digital-assistant .ai-voice-list button[aria-checked=true]{background:#e8f1fd;border-color:#8fb3dc;color:#1d4a78}
+.digital-assistant .ai-voice-list button:focus-visible{outline:2px solid #3977d5;outline-offset:1px}
+.digital-assistant .ai-voice-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.digital-assistant .ai-settings-note{margin:0;font-size:12px;line-height:1.55;color:#6d8296}
+.digital-assistant .ai-settings-note.is-error{color:#94391b}
+.digital-assistant .ai-settings-note.is-warning{color:#8a5b12}
+.digital-assistant .ai-settings-actions{display:flex;justify-content:flex-end}
+.digital-assistant .ai-settings-ghost{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 12px;border:1px solid #c8d7e4;border-radius:8px;background:#fff;color:#2f5c86;font-size:13px;font-weight:600;cursor:pointer}
+.digital-assistant .ai-settings-ghost:hover{background:#eef5fb}
+.digital-assistant .ai-settings-save{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:#fff;border-top:1px solid #e1e7ee;box-shadow:0 -6px 16px #22364a12}
+.digital-assistant .ai-settings-save span{font-size:12px;color:#657c91}
+.digital-assistant .ai-settings-save button{min-height:40px;padding:8px 14px;border:1px solid #2863ba;border-radius:8px;background:#2863ba;color:#fff;font-size:14px;font-weight:600;white-space:nowrap;cursor:pointer}
+.digital-assistant .ai-settings-save button:disabled{opacity:.45;cursor:not-allowed}
+.digital-assistant .ai-settings .ai-qa-settings-list{padding:0}
+.digital-assistant .ai-qa-item .ai-scenario-fields{margin-top:8px}
+.digital-assistant .ai-qa-item .ai-scenario-fields>summary{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:7px 9px;margin-bottom:8px;border:1px solid #d7e3ef;border-radius:8px;background:#eef4fa;color:#33587a;font-size:13px;font-weight:600;cursor:pointer}
+.digital-assistant .ai-qa-item .ai-scenario-fields>summary::before{content:'▸';flex:none;color:#5c7b96;font-size:11px}
+.digital-assistant .ai-qa-item .ai-scenario-fields[open]>summary::before{content:'▾'}
+.digital-assistant .ai-qa-item .ai-scenario-fields>summary span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.digital-assistant .ai-qa-item .ai-scenario-fields>summary small{flex:none;color:#6d8296;font-weight:400}
+@media(max-width:520px){.digital-assistant .ai-settings-head{flex-direction:column;align-items:stretch}.digital-assistant .ai-settings-reset{align-self:flex-start}}
+@media(max-width:460px){.digital-assistant .ai-setting-slider{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'copy value' 'range range'}.digital-assistant .ai-setting-slider .ai-setting-copy{grid-area:copy}.digital-assistant .ai-setting-slider .ai-setting-value{grid-area:value}.digital-assistant .ai-setting-slider input[type=range]{grid-area:range}}

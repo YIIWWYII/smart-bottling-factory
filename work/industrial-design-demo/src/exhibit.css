@@ -316,8 +316,3 @@
 .campaign-cola.product-ad-scene .campaign-copy h3{align-items:flex-start;text-shadow:0 2px 18px #fff9}
 .campaign-cola.product-ad-scene .campaign-copy h3>span:last-child{color:#9a3445}
 .campaign-cola.product-ad-scene .campaign-seal{left:auto;right:24px;transform:none;color:#7a2939;border:1px solid #d6b2ac;background:#fff4e6b0}
-
-.ex-robot-operation{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;min-height:38px;margin-bottom:18px;padding:8px 0;border-block:1px solid var(--ex-line);color:var(--ex-muted);font-size:14px}
-.ex-robot-operation>span:first-child{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
-.ex-robot-operation>strong{color:var(--glass-ink);overflow-wrap:anywhere}
-.ex-robot-operation>time{font-variant-numeric:tabular-nums;white-space:nowrap}

@@ -5,12 +5,12 @@ import { animate } from 'animejs';
 import { api, recordEvent, useTwin } from './TwinState';
 import { ReportText } from './ui';
 import AssistantPetPanel from './AssistantPetPanel';
-import { speechChunks, voicePreviewText } from './assistant-voices.js';
+import { voicePreviewText } from './assistant-voices.js';
 import { petActions, petDisplayDefaults, petLevel, petReward, petSizeRange, petStorageKey, readPet, updatePet } from './assistant-pet';
 import {
   ArrowLeft, ArrowUp, Bell, Bot, Check, ChevronDown, ChevronRight, ChevronUp, Clock3, ListChecks, MessageSquare,
   Coins, Mic, MousePointer2, MoveDiagonal, PanelLeft, Pause, Play, Plus, RotateCcw, Settings2, ShoppingBag, Sparkles, Square,
-  SquarePen, Trash2, Volume2, Wrench, X,
+  SquarePen, Trash2, Type, Volume2, Wrench, X,
 } from 'lucide-react';
 import {
   assistantQuestionsKey, assistantRunsKey, assistantScenarioOptions, assistantScenarioTemplate, assistantWorkflowStages, createAssistantWorkflowRun,
@@ -31,18 +31,21 @@ const savedNumber = (key, min, max, fallback) => {
 };
 const voiceId = (voice) => voice.voiceURI || voice.name;
 const isChineseVoice = (voice) => /zh|cmn|chinese|中文|普通话/i.test(`${voice.lang} ${voice.name}`);
+// 排序照搬 LLM 自测台：自然音色优先，其次常见中文音色，其余保持浏览器原始顺序。
 const voiceRank = (voice) => {
-  if (/natural|neural|online|xiaoxiao|xiaoyi|yunxi|yunjian|晓晓|晓伊|云希|云健/i.test(voice.name)) return 0;
-  if (/huihui|yaoyao|kangkang|tingting|慧慧|瑶瑶|康康|婷婷/i.test(voice.name)) return 1;
+  const name = voice.name || '';
+  if (/natural|neural|online|xiaoxiao|xiaoyi|yunxi|yunjian|晓晓|晓伊|云希|云健/i.test(name)) return 0;
+  if (/huihui|yaoyao|kangkang|tingting|慧慧|瑶瑶|康康|婷婷/i.test(name)) return 1;
   return 2;
 };
-const voiceLabel = (voice) => voice.name
+const voiceLabel = (voice) => String(voice.name)
   .replace(/^Microsoft\s+/i, '')
   .replace(/\s*-\s*Chinese.*$/i, '')
   .replace(/\s+Online\b/i, '')
   .replace(/\s*\(Natural\)/i, ' · 自然')
   .replace(/\s*\(.*?\)\s*$/, '')
   .trim() || voice.name;
+const speechText = (input) => String(input ?? '').replace(/[#*_>]/g, '').trim();
 const availableSpeechVoices = (synth) => {
   let voices;
   try { voices = Array.from(synth?.getVoices() ?? []); } catch { voices = []; }
@@ -50,6 +53,26 @@ const availableSpeechVoices = (synth) => {
   return chinese.length ? chinese.sort((a, b) => voiceRank(a) - voiceRank(b)) : voices;
 };
 const voicePreview = { id: 'voice-preview', answer: voicePreviewText };
+
+const assistantSettingsSections = [
+  { id: 'robot', title: '外观', Icon: Bot },
+  { id: 'speech', title: '播报', Icon: Volume2 },
+  { id: 'text', title: '文字', Icon: Type },
+  { id: 'scenarios', title: '场景', Icon: ListChecks },
+];
+function SettingsSwitch({ label, hint, checked, onChange }) {
+  return <label className="ai-setting-row ai-setting-toggle">
+    <span className="ai-setting-copy"><strong>{label}</strong>{hint && <small>{hint}</small>}</span>
+    <input type="checkbox" role="switch" checked={checked} onChange={onChange} aria-label={label} />
+  </label>;
+}
+function SettingsSlider({ label, hint, value, display, valueText, min, max, step, onChange }) {
+  return <label className="ai-setting-row ai-setting-slider">
+    <span className="ai-setting-copy"><strong>{label}</strong>{hint && <small>{hint}</small>}</span>
+    <input type="range" min={min} max={max} step={step} value={value} aria-valuetext={valueText || display} onChange={onChange} />
+    <output className="ai-setting-value">{display}</output>
+  </label>;
+}
 const fontSizeKey = 'hongmou-assistant-font-size';
 const interfaceScaleKey = 'hongmou-assistant-interface-scale';
 const minFontSize = 12;
@@ -294,6 +317,8 @@ export default function DigitalAssistant({ route, alarmPulse }) {
     try { return localStorage.getItem(speechVoiceKey) || ''; } catch { return ''; }
   });
   const activeVoice = speechVoices.some((voice) => voiceId(voice) === speechVoice) ? speechVoice : '';
+  const chineseVoiceMissing = speechSupported && speechVoices.length > 0 && !speechVoices.some(isChineseVoice);
+  const autoVoiceLabel = speechVoices.length ? voiceLabel(speechVoices[0]) : '';
   useEffect(() => {
     if (!speechSupported) return;
     const synth = window.speechSynthesis;
@@ -302,6 +327,20 @@ export default function DigitalAssistant({ route, alarmPulse }) {
     loadVoices();
     return () => synth.removeEventListener('voiceschanged', loadVoices);
   }, [speechSupported]);
+  // 朗读中按 Esc 停止；关闭页面或组件卸载时也把队列清掉。
+  useEffect(() => {
+    if (!speech) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      if (document.querySelector('.modal')) return;
+      stopSpeech();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [speech]);
+  useEffect(() => () => {
+    try { window.speechSynthesis?.cancel(); } catch {}
+  }, []);
   const [fontSize, setFontSize] = useState(() => {
     try {
       const saved = Number(localStorage.getItem(fontSizeKey));
@@ -319,6 +358,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
   const [selectedAlarmId, setSelectedAlarmId] = useState(null);
   const [alarmRetry, setAlarmRetry] = useState({});
   const [compact, setCompact] = useState(false);
+ const [settingsSection, setSettingsSection] = useState('robot');
   const [positions, setPositions] = useState({});
   const [panelSize, setPanelSize] = useState(null);
   const [narrow, setNarrow] = useState(false);
@@ -339,7 +379,8 @@ export default function DigitalAssistant({ route, alarmPulse }) {
   const selectedElementRef = useRef(null);
   const recognitionRef = useRef(null);
   const nativeSpeechPending = useRef(false);
-  const playbackRef = useRef(null);
+  const speechSeqRef = useRef(0);
+  const speechTimerRef = useRef(null);
   const lastReplyId = useRef(runs[0]?.id);
   const voiceActionRef = useRef(null);
   const noticeTimerRef = useRef(null);
@@ -417,97 +458,78 @@ export default function DigitalAssistant({ route, alarmPulse }) {
     noticeTimerRef.current = window.setTimeout(() => setNotice(''), 3200);
   };
 
+  // 朗读：与 LLM 自测台一致——整段一条 utterance；取消后稍等一下再开口，避免 Chrome 吞掉开头。
   const cancelSpeech = () => {
-    const playback = playbackRef.current;
-    if (!playback) return;
-    playbackRef.current = null;
-    playback.dispose();
-  };
-
-  const stopSpeech = () => {
-    cancelSpeech();
+    speechSeqRef.current += 1;
+    window.clearTimeout(speechTimerRef.current);
+    const synth = window.speechSynthesis;
+    if (!synth) { setSpeech(null); return; }
+    const busy = synth.speaking || synth.pending;
+    try { synth.resume(); } catch {}
+    try { synth.cancel(); } catch {}
+    if (busy) {
+      speechTimerRef.current = window.setTimeout(() => {
+        try { if (synth.speaking || synth.pending) synth.cancel(); } catch {}
+      }, 90);
+    }
     setSpeech(null);
   };
 
+  const stopSpeech = () => cancelSpeech();
+
   const toggleSpeechPause = () => {
-    const playback = playbackRef.current;
-    if (!speech || !playback) return;
-    playback.paused = !playback.paused;
-    playback.syncPause();
-    if (playbackRef.current === playback) setSpeech({ ...speech, paused: playback.paused });
+    const synth = window.speechSynthesis;
+    if (!speech || !synth) return;
+    if (speech.paused) {
+      try { synth.resume(); } catch {}
+      setSpeech({ ...speech, paused: false });
+    } else {
+      try { synth.pause(); } catch {}
+      setSpeech({ ...speech, paused: true });
+    }
+  };
+
+  const resolveSpeechVoice = (preferred) => {
+    const list = availableSpeechVoices(window.speechSynthesis);
+    if (preferred) {
+      const found = list.find((voice) => voiceId(voice) === preferred || voice.name === preferred);
+      if (found) return found;
+    }
+    return list[0] || null;
   };
 
   const speakReply = (run, preferredVoice = activeVoice, restart = false) => {
     if (!speechSupported) { showNotice('当前浏览器不支持系统语音播报。'); return; }
-    if (!restart && speech?.id === run.id && playbackRef.current) { toggleSpeechPause(); return; }
-    const chunks = speechChunks(run.answer);
-    if (!chunks.length) return;
-    cancelSpeech();
+    if (!restart && speech?.id === run.id) { toggleSpeechPause(); return; }
+    const text = speechText(run.answer);
+    if (!text) return;
     const synth = window.speechSynthesis;
-    const voices = availableSpeechVoices(synth);
-    const voice = voices.find((item) => voiceId(item) === preferredVoice || item.name === preferredVoice) || voices[0];
-    const playback = { utterance: null, index: 0, paused: false, settingsTimer: null };
-    const live = () => playbackRef.current === playback;
-    const cancelUtterance = () => {
-      if (!playback.utterance) return;
-      playback.utterance.onend = playback.utterance.onerror = null;
-      playback.utterance = null;
-      synth.cancel();
-    };
-    playback.dispose = () => {
-      clearTimeout(playback.settingsTimer);
-      cancelUtterance();
-    };
-    const finish = (message) => {
-      if (!live()) return;
-      stopSpeech();
-      if (message) showNotice(message);
-    };
-    const playChunk = (index) => {
-      if (!live()) return;
-      if (index >= chunks.length) { finish(); return; }
-      const utterance = new window.SpeechSynthesisUtterance(chunks[index]);
-      utterance.lang = voice?.lang || 'zh-CN';
-      utterance.rate = Math.min(1.8, Math.max(0.6, speechSettings.current.rate));
+    const wasSpeaking = Boolean(synth && (synth.speaking || synth.pending));
+    cancelSpeech();
+    const mySeq = speechSeqRef.current;
+    setSpeech({ id: run.id, paused: false });
+    const start = () => {
+      if (mySeq !== speechSeqRef.current) return;
+      const voice = resolveSpeechVoice(preferredVoice);
+      const utterance = new window.SpeechSynthesisUtterance(text);
+      if (voice) { utterance.voice = voice; utterance.lang = voice.lang || 'zh-CN'; } else { utterance.lang = 'zh-CN'; }
+      utterance.rate = Math.min(1.8, Math.max(0.6, Number(speechSettings.current.rate) || 1.1));
       utterance.pitch = 1.08;
-      utterance.volume = speechSettings.current.volume;
-      if (voice) utterance.voice = voice;
-      utterance.onend = () => {
-        if (playback.utterance !== utterance) return;
-        playback.utterance = null;
-        playChunk(index + 1);
+      utterance.volume = Math.min(1, Math.max(0, Number(speechSettings.current.volume)));
+      utterance.onend = utterance.onerror = () => {
+        if (mySeq !== speechSeqRef.current) return;
+        setSpeech(null);
       };
-      utterance.onerror = (event) => {
-        if (playback.utterance !== utterance) return;
-        playback.utterance = null;
-        finish(['canceled', 'interrupted'].includes(event.error) ? '' : '系统语音播报失败，请检查本机语音服务。');
-      };
-      playback.index = index;
-      playback.utterance = utterance;
       try {
         if (synth.paused) synth.resume();
         synth.speak(utterance);
-      } catch { finish('系统语音播报没能启动。'); }
+      } catch {
+        if (mySeq !== speechSeqRef.current) return;
+        setSpeech(null);
+        showNotice('系统语音播报没能启动。');
+      }
     };
-    const applySettings = () => {
-      const { utterance, index } = playback;
-      const { rate, volume } = speechSettings.current;
-      if (!live() || playback.paused || !utterance || (utterance.rate === rate && utterance.volume === volume)) return false;
-      cancelUtterance();
-      playChunk(index);
-      return true;
-    };
-    playback.scheduleSettings = () => {
-      clearTimeout(playback.settingsTimer);
-      playback.settingsTimer = setTimeout(applySettings, 220);
-    };
-    playback.syncPause = () => {
-      if (playback.paused) synth.pause();
-      else if (!applySettings()) synth.resume();
-    };
-    playbackRef.current = playback;
-    setSpeech({ id: run.id, paused: false });
-    playChunk(0);
+    if (wasSpeaking) speechTimerRef.current = window.setTimeout(start, 130); else start();
   };
 
   const persistRuns = (update) => {
@@ -1046,11 +1068,11 @@ export default function DigitalAssistant({ route, alarmPulse }) {
     setInterfaceScale(scale);
     try { localStorage.setItem(interfaceScaleKey, String(scale)); } catch {}
   };
-  const renderRobotSize = () => <label className="ai-font-setting">
+  const renderRobotSize = (compactVariant = false) => compactVariant ? <label className="ai-font-setting">
     <span>机器人大小</span>
     <input type="range" min={petSizeRange.min} max={petSizeRange.max} step={1} value={robotSize} aria-valuetext={`${robotSize} 像素`} onChange={(event) => setPetDisplay({ size: event.target.valueAsNumber, mini: false })} />
     <span className="ai-font-value" aria-hidden="true">{robotSize} px</span>
-  </label>;
+  </label> : <SettingsSlider label="机器人大小" hint="浮动机器人的显示边长" min={petSizeRange.min} max={petSizeRange.max} step={1} value={robotSize} valueText={`${robotSize} 像素`} display={`${robotSize} px`} onChange={(event) => setPetDisplay({ size: event.target.valueAsNumber, mini: false })} />;
   const resetPetDisplay = () => {
     setPetDisplay(petDisplayDefaults);
     setPositions(({ launcher, ...otherPositions }) => otherPositions);
@@ -1162,7 +1184,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
     const rate = key === speechRateKey;
     (rate ? setSpeechRate : setSpeechVolume)(value);
     speechSettings.current[rate ? 'rate' : 'volume'] = value;
-    playbackRef.current?.scheduleSettings();
+    // 语速与音量在下一次播报生效（SpeechSynthesis 不支持运行中改参数）
     try { localStorage.setItem(key, String(value)); } catch {}
   };
   const changeSpeechVoice = (value) => {
@@ -1213,7 +1235,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
           if (event.detail < 2) setRobotMenuOpen((current) => !current);
         }} onDoubleClick={() => openFromRobot('chat')}><AssistantRobot {...petRobot} follow={robotFollow} state={alarmed ? 'alarm' : 'idle'} gesture={petGesture} size={robotSize} /></button>
         {robotMenuOpen && <section id={robotMenuId} className="ai-robot-menu" aria-label="机器人快捷设置" style={robotMenuStyle}>
-          {renderRobotSize()}
+          {renderRobotSize(true)}
           <div className="ai-robot-menu-actions ai-robot-menu-toggles">
             <button type="button" aria-pressed={mini} onClick={() => setPetDisplay({ mini: !mini })}>{mini ? '恢复大小' : '迷你模式'}</button>
             <button type="button" onClick={() => playPetAction('greet')}>打招呼</button>
@@ -1246,7 +1268,7 @@ export default function DigitalAssistant({ route, alarmPulse }) {
         </header>
         {!compact && <button type="button" className="ai-resize-handle" aria-label="调整对话框大小" title="拖动调整对话框大小" {...resizeHandlers}><MoveDiagonal size={14} /></button>}
         <div className="ai-workspace">
-        {showSidebar && <nav className="ai-sidebar" aria-label="对话侧栏">
+        {showSidebar && <nav className="ai-sidebar" aria-label="对话侧栏" hidden={view === 'settings'}>
           <div className="ai-sidebar-brand"><AssistantRobot size={27} motion={false} /><strong>鸿眸助手</strong></div>
           <button type="button" className="ai-new-chat" onClick={startConversation}><SquarePen size={16} />新对话</button>
           <div className="ai-sidebar-sections" role="group" aria-label="记录分类">
@@ -1271,60 +1293,70 @@ export default function DigitalAssistant({ route, alarmPulse }) {
           <button type="button" aria-pressed={conversationView === 'chat'} onClick={() => setConversationView('chat')}>对话</button>
           <button type="button" aria-pressed={conversationView === 'trace'} onClick={() => setConversationView('trace')}>轨迹</button>
         </nav>}
-        {view === 'pet' || view === 'pet-shop' ? <AssistantPetPanel view={view} pet={pet} preview={<AssistantRobot {...petRobot} follow={robotFollow} state={alarmed ? 'alarm' : 'idle'} gesture={petGesture} size={112} />} onAction={playPetAction} dispatch={dispatchPet} showView={showView} /> : view === 'settings' ? <section className="ai-qa-settings" aria-label="助手设置">
-          <div className="ai-settings-scroll">
-          <div className="ai-qa-settings-heading"><strong>桌面机器人</strong><button type="button" onClick={resetPetDisplay}><RotateCcw size={15} />恢复默认</button></div>
-          {renderRobotSize()}
-          <label className="ai-speech-setting">迷你模式<input type="checkbox" role="switch" checked={mini} onChange={(event) => setPetDisplay({ mini: event.target.checked })} /></label>
-          <label className="ai-speech-setting">待机动画<input type="checkbox" role="switch" checked={robotIdle} onChange={(event) => setPetDisplay({ idle: event.target.checked })} /></label>
-          <label className="ai-speech-setting">鼠标跟随<input type="checkbox" role="switch" checked={robotFollow} onChange={(event) => setPetDisplay({ follow: event.target.checked })} /></label>
-          <label className="ai-speech-setting">锁定机器人位置<input type="checkbox" role="switch" checked={robotLocked} onChange={(event) => setPetDisplay({ locked: event.target.checked })} /></label>
-          <div className="ai-qa-settings-heading"><strong>对话与播报</strong></div>
-          <label className="ai-speech-setting"><Volume2 size={16} />自动播报回复<input type="checkbox" role="switch" checked={autoSpeak} onChange={(event) => changeAutoSpeak(event.target.checked)} /></label>
-          <label className="ai-font-setting ai-speech-range">
-            <span>播报语速</span><input type="range" min="0.6" max="1.8" step="0.05" value={speechRate} onChange={(event) => changeSpeechSetting(speechRateKey, event.target.valueAsNumber)} />
-            <span className="ai-font-value">{speechRate.toFixed(2)}×</span>
-          </label>
-          <label className="ai-font-setting ai-speech-range">
-            <span>播报音量</span><input type="range" min="0" max="1" step="0.05" value={speechVolume} onChange={(event) => changeSpeechSetting(speechVolumeKey, event.target.valueAsNumber)} />
-            <span className="ai-font-value">{Math.round(speechVolume * 100)}%</span>
-          </label>
-          <div className="ai-voice-preview">
-            <label>
-              <span id={speechVoiceLabel}>播报音色</span>
-              <select aria-labelledby={speechVoiceLabel} value={activeVoice} onChange={(event) => changeSpeechVoice(event.target.value)}>
-                <option value="">自动（优先自然音色）</option>
-                {speechVoices.map((voice) => <option key={voiceId(voice)} value={voiceId(voice)}>{voiceLabel(voice)}</option>)}
-              </select>
-            </label>
-            <button type="button" onClick={() => {
-              setNotice('');
-              if (previewSpeaking && !speech.paused) stopSpeech();
-              else speakReply(voicePreview);
-            }}>
-              {previewSpeaking && !speech.paused ? <Square size={16} /> : <Play size={16} />}{previewSpeaking ? speech.paused ? '继续试听' : '停止试听' : '试听音色'}
-            </button>
-            {!speechVoices.length && <small>{speechSupported ? '浏览器未提供可选音色，将尝试用系统默认音色。' : '当前浏览器不支持语音播报。'}</small>}
-            {notice && <p role="status">{notice}</p>}
-          </div>
-          <label className="ai-font-setting">
-            <span>对话字号</span>
-            <input type="range" aria-valuetext={fontSize + ' 像素'} min={minFontSize} max={maxFontSize} value={fontSize} onChange={(event) => changeFontSize(event.target.valueAsNumber)} />
-            <span className="ai-font-value" aria-hidden="true">{fontSize} px</span>
-          </label>
-          <label className="ai-font-setting">
-            <span>界面缩放</span>
-            <input type="range" min={interfaceScaleRange.min} max={interfaceScaleRange.max} step={5} value={interfaceScale} aria-valuetext={interfaceScale + '%'} onChange={(event) => changeInterfaceScale(event.target.valueAsNumber)} />
-            <span className="ai-font-value" aria-hidden="true">{interfaceScale}%</span>
-          </label>
-          <div className="ai-qa-settings-heading"><strong>模拟场景</strong><button type="button" className="secondary" onClick={addQuestion}><Plus size={16} />添加场景</button></div>
-          <div className="ai-qa-settings-list">
-            {questionDraft.map((item, index) => <article className="ai-qa-item" key={item.id || index}>
+        {view === 'pet' || view === 'pet-shop' ? <AssistantPetPanel view={view} pet={pet} preview={<AssistantRobot {...petRobot} follow={robotFollow} state={alarmed ? 'alarm' : 'idle'} gesture={petGesture} size={112} />} onAction={playPetAction} dispatch={dispatchPet} showView={showView} /> : view === 'settings' ? <section className="ai-settings" aria-label="助手设置">
+          <nav className="ai-settings-tabs" aria-label="设置分类">
+            {assistantSettingsSections.map(({ id, title, Icon }) => <button key={id} type="button" aria-pressed={settingsSection === id} onClick={() => setSettingsSection(id)}><Icon size={16} aria-hidden="true" /><span>{title}</span></button>)}
+          </nav>
+          <div className="ai-settings-body">
+            {settingsSection === 'robot' && <>
+              <header className="ai-settings-head">
+                <div><h2>外观与机器人</h2><p>浮动机器人的大小与动效，展板、工位和管理中心共用这份设置。</p></div>
+                <button type="button" className="ai-settings-reset" onClick={resetPetDisplay}><RotateCcw size={15} />恢复默认</button>
+              </header>
+              <div className="ai-settings-card">
+                {renderRobotSize()}
+                <SettingsSwitch label="迷你模式" hint="收起对话，只保留一个小机器人" checked={mini} onChange={(event) => setPetDisplay({ mini: event.target.checked })} />
+                <SettingsSwitch label="待机动画" hint="空闲时轻微摆动和眨眼" checked={robotIdle} onChange={(event) => setPetDisplay({ idle: event.target.checked })} />
+                <SettingsSwitch label="鼠标跟随" hint="机器人视线跟随指针移动" checked={robotFollow} onChange={(event) => setPetDisplay({ follow: event.target.checked })} />
+                <SettingsSwitch label="锁定机器人位置" hint="拖动后不再改变停靠点" checked={robotLocked} onChange={(event) => setPetDisplay({ locked: event.target.checked })} />
+              </div>
+            </>}
+            {settingsSection === 'speech' && <>
+              <header className="ai-settings-head"><div><h2>播报与音色</h2><p>音色由本机浏览器和系统提供，点一下音色就会用它读一句。</p></div></header>
+              <div className="ai-settings-block">
+                <header><strong>播报音色</strong><span>{speechVoices.length ? `${speechVoices.length} 个可选` : '浏览器未提供'}</span></header>
+                <ul className="ai-voice-list" role="radiogroup" aria-label="播报音色">
+                  <li><button type="button" role="radio" aria-checked={activeVoice === ''} onClick={() => changeSpeechVoice('')}><span className="ai-voice-name">自动选择</span>{activeVoice === '' && <Check size={16} aria-hidden="true" />}</button></li>
+                  {speechVoices.map((voice) => { const id = voiceId(voice); return <li key={id}><button type="button" role="radio" aria-checked={activeVoice === id} onClick={() => changeSpeechVoice(id)}><span className="ai-voice-name">{voiceLabel(voice)}</span>{activeVoice === id && <Check size={16} aria-hidden="true" />}</button></li>; })}
+                </ul>
+                <div className="ai-settings-actions">
+                  <button type="button" className="ai-settings-ghost" onClick={() => { setNotice(''); if (previewSpeaking && !speech.paused) stopSpeech(); else speakReply(voicePreview); }}>
+                    {previewSpeaking && !speech.paused ? <><Square size={15} aria-hidden="true" />停止试听</> : <><Play size={15} aria-hidden="true" />试听当前音色</>}
+                  </button>
+                </div>
+                {!speechSupported && <p className="ai-settings-note is-warning" role="status">当前浏览器不支持语音播报。</p>}
+                {speechSupported && !speechVoices.length && <p className="ai-settings-note is-warning" role="status">浏览器没有提供可选音色，将使用系统默认音色；如果仍然没有声音，请检查本机语音服务。</p>}
+                {chineseVoiceMissing && <p className="ai-settings-note is-warning" role="status">浏览器没有提供中文音色，下面列出的是其他语言音色。</p>}
+                {speechSupported && autoVoiceLabel && activeVoice === '' && <p className="ai-settings-note">自动选择当前使用：<strong>{autoVoiceLabel}</strong></p>}
+                {notice && <p className="ai-settings-note is-error" role="status">{notice}</p>}
+              </div>
+              <div className="ai-settings-card">
+                <SettingsSwitch label="自动播报回复" hint="回答生成后直接朗读" checked={autoSpeak} onChange={(event) => changeAutoSpeak(event.target.checked)} />
+                <SettingsSlider label="播报语速" hint="慢一点更容易听清" min={0.6} max={1.8} step={0.05} value={speechRate} display={`${speechRate.toFixed(2)}×`} onChange={(event) => changeSpeechSetting(speechRateKey, event.target.valueAsNumber)} />
+                <SettingsSlider label="播报音量" min={0} max={1} step={0.05} value={speechVolume} display={`${Math.round(speechVolume * 100)}%`} onChange={(event) => changeSpeechSetting(speechVolumeKey, event.target.valueAsNumber)} />
+              </div>
+            </>}
+            {settingsSection === 'text' && <>
+              <header className="ai-settings-head"><div><h2>文字与缩放</h2><p>只影响助手面板，不改变页面其他部分。</p></div></header>
+              <div className="ai-settings-card">
+                <SettingsSlider label="对话字号" hint={`${minFontSize}–${maxFontSize} px`} min={minFontSize} max={maxFontSize} step={1} value={fontSize} display={`${fontSize} px`} valueText={`${fontSize} 像素`} onChange={(event) => changeFontSize(event.target.valueAsNumber)} />
+                <SettingsSlider label="界面缩放" hint={`${interfaceScaleRange.min}–${interfaceScaleRange.max}%`} min={interfaceScaleRange.min} max={interfaceScaleRange.max} step={5} value={interfaceScale} display={`${interfaceScale}%`} onChange={(event) => changeInterfaceScale(event.target.valueAsNumber)} />
+              </div>
+            </>}
+            {settingsSection === 'scenarios' && <>
+              <header className="ai-settings-head">
+                <div><h2>模拟场景</h2><p>没有接入模型时，助手按这里的固定问答回复；改动需要保存。</p></div>
+                <button type="button" className="ai-settings-reset" onClick={addQuestion}><Plus size={15} aria-hidden="true" />添加场景</button>
+              </header>
+              <div className="ai-qa-settings-list">
+{questionDraft.map((item, index) => <article className="ai-qa-item" key={item.id || index}>
               <header><strong>场景 {index + 1}</strong><div>
                 <button type="button" aria-label={`场景${index + 1}上移`} title="上移" disabled={index === 0} onClick={() => moveQuestion(index, -1)}><ChevronUp size={17} /></button>
                 <button type="button" aria-label={`场景${index + 1}下移`} title="下移" disabled={index === questionDraft.length - 1} onClick={() => moveQuestion(index, 1)}><ChevronDown size={17} /></button>
                 <button type="button" aria-label={`删除场景${index + 1}`} title="删除" onClick={() => removeQuestion(index)}><Trash2 size={16} /></button>
               </div></header>
+              <details className="ai-scenario-fields" {...(index === 0 ? { open: true } : {})}>
+                <summary><span>{item.prompt || `场景 ${index + 1}`}</span><small>{(assistantScenarioOptions.find(([kind]) => kind === (item.kind || 'general')) || [])[1] || '通用问题'}</small></summary>
               <label>场景名称<input value={item.prompt} maxLength={80} placeholder={`场景${index + 1}`} onChange={(event) => updateQuestionDraft(index, { prompt: event.target.value })} /></label>
               <label>模拟回复<textarea value={item.answer} maxLength={1200} rows={4} placeholder="输入场景回复内容" onChange={(event) => updateQuestionDraft(index, { answer: event.target.value })} /></label>
               <label>场景分类<select value={item.kind || 'general'} onChange={(event) => updateQuestionDraft(index, { kind: event.target.value })}>{assistantScenarioOptions.map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}</select></label>
@@ -1338,12 +1370,14 @@ export default function DigitalAssistant({ route, alarmPulse }) {
                   <input value={item.workflow.confirmation[key]} maxLength={300} onChange={(event) => editWorkflow(index, { confirmation: { ...item.workflow.confirmation, [key]: event.target.value } })} />
                 </label>)}
               </details>}
+              </details>
             </article>)}
+              </div>
+              {qaError && <p className="ai-qa-error" role="alert">{qaError}</p>}
+            </>}
           </div>
-          </div>
-          {qaError && <p className="ai-qa-error" role="alert">{qaError}</p>}
-          <div className="ai-qa-settings-actions"><span>{questionsSaved ? '设置已保存到本机' : '有未保存的修改'}</span><button type="button" className="primary" disabled={questionsSaved} onClick={saveQuestions}>保存模拟场景</button></div>
-        </section> : <>
+          {settingsSection === 'scenarios' && <div className="ai-settings-save"><span>{questionsSaved ? '设置已保存到本机' : '有未保存的修改'}</span><button type="button" className="primary" disabled={questionsSaved} onClick={saveQuestions}>保存模拟场景</button></div>}
+          </section> : <>
           {target && <div className="ai-context-label" hidden={view !== 'chat' || conversationView === 'trace'}><span>已锁定：{target.slice(0, 130)}</span><button onClick={() => { unlock(); setCompact(false); setInspect(true); }}>重新选择</button></div>}
 
           {compact && (activeRun || nearbyRun) && <section className="ai-nearby-reply" aria-live="polite" aria-label="助手回复">
