@@ -1,6 +1,6 @@
 import {beverageCampaigns} from './product-resources';
 import {useEffect,useState} from 'react';
-import {Activity,ArrowUp,ArrowRight,ArrowLeft,Box,Layers,Workflow,GlassWater,Droplets,Wind,ScanEye,FlaskConical,PackageCheck,Package,Truck,Warehouse} from 'lucide-react';
+import {ArrowUp,ArrowRight,ArrowLeft,Box,Layers,Workflow,GlassWater,Droplets,Wind,ScanEye,FlaskConical,PackageCheck,Package,Truck,Warehouse} from 'lucide-react';
 import {useTwin,recordEvent,api} from './TwinState';
 import {stages,hourly as demoHourly} from './data';
 import {capabilities} from './controlCapabilities';
@@ -18,8 +18,6 @@ const num=n=>Number(n||0).toLocaleString('zh-CN');
 function Progress({done,plan}){const p=plan>0?Math.min(100,Math.max(0,done/plan*100)):0;return <div className="ex-progress" role="progressbar" aria-valuenow={Math.round(p)} aria-valuemin={0} aria-valuemax={100} aria-label="批次完成度"><i style={{width:p+'%'}}/></div>;}
 export default function Display({time,pageView,onViewChange}){
  const {ops,states,activeTask,dataMode,updated,daily}=useTwin();
- const robotOperation=ops?.audit?.find(event=>event.dataMode===dataMode&&event.operationLabel);
- const operationOrigin=robotOperation?.source==='station'?'工位页面发起':robotOperation?.source==='display'?'展板页面发起':robotOperation?'平台服务记录':'暂无记录';
  const demoDaily={day:daily?.day||'今日',produced:8426,completedTasks:[{id:'demo-1'},{id:'demo-2'}],hourly:demoHourly};
  const displayDaily=['simulation','mixed'].includes(dataMode)&&!(daily?.produced>0)?demoDaily:(daily||demoDaily);
  const {displayView:view,dimension}=pageView;
@@ -55,11 +53,6 @@ export default function Display({time,pageView,onViewChange}){
  return <main className={`dual-exhibit ${view==='process'?'process-cockpit':''}`}>
  <header className="ex-header"><div className="ex-title"><small>鸿眸瓶安 / 数字展板</small><h1>{view==='drink'?'饮品总览':'工艺驾驶舱'}</h1></div><div className="ex-navigation"><nav aria-label="展板视图"><button aria-pressed={view==='drink'} onClick={()=>switchView('drink')}><GlassWater size={22}/>饮品</button><button aria-pressed={view==='process'} onClick={()=>switchView('process')}><Workflow size={22}/>工艺</button></nav></div><div className="ex-header-meta"><LogLauncher label="产线日志"/><time>{time}</time></div></header>
 
- <div className="ex-robot-operation" role="status" aria-label="机械臂操作同步">
-  <span><Activity size={17} aria-hidden="true"/>上料机械臂</span>
-  <strong>{robotOperation?.operationLabel||'暂无操作记录'}</strong>
-  {robotOperation&&<><span>{robotOperation.result}</span><span>{operationOrigin}</span><time dateTime={robotOperation.time}>{new Date(robotOperation.time).toLocaleTimeString('zh-CN',{hour12:false})}</time></>}
- </div>
  {view==='drink'?<>
  <div className={detail?'drink-detail-layout':'drink-overview-layout'}>
  {detail&&<button className="ex-back" onClick={()=>setDetail(null)}><ArrowLeft size={17}/>全部饮品</button>}
